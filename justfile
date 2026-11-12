@@ -14,15 +14,15 @@ default:
 [group('build')]
 build:
     @mkdir -p bin
-    v -o bin/vjag-debug cmd/vjag
-    v -o bin/vjag_test-debug cmd/vjag_test
+    v -o bin/vjag-debug cmd/vjag/
+    v -o bin/vjag_test-debug cmd/vjag_test/
 
 # Optimized build of the desktop app and the headless runner.
 [group('build')]
 release:
     @mkdir -p bin
-    v -prod -o bin/vjag cmd/vjag
-    v -prod -o bin/vjag_test cmd/vjag_test
+    v -prod -o bin/vjag cmd/vjag/
+    v -prod -o bin/vjag_test cmd/vjag_test/
 
 [group('build')]
 clean:

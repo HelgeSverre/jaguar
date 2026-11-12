@@ -358,8 +358,8 @@ fn (mut b Blitter) execute(mut bus hwtypes.Bus) {
 	}
 
 	count := b.regs[b_count >> 2]
-	inner := if count & 0xffff == 0 { u32(0x1_0000) } else { count & 0xffff }
-	outer := if count >> 16 == 0 { u32(0x1_0000) } else { count >> 16 }
+	inner := count & 0xffff
+	outer := count >> 16
 	clip_x := b.regs[b_a1_clip >> 2] & 0x7fff
 	clip_y := (b.regs[b_a1_clip >> 2] >> 16) & 0x7fff
 	dst_is_a2 := cmd & cmd_dsta2 != 0
