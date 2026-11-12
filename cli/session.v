@@ -16,6 +16,12 @@ pub mut:
 	machine &machine.Machine = unsafe { nil }
 }
 
+// loaded reports whether the session holds a machine; a zero `Session` is
+// the desktop app's state before any image is opened.
+pub fn (s &Session) loaded() bool {
+	return s.machine != unsafe { nil }
+}
+
 // ImageOptions are the user's overrides for image detection and the machine.
 pub struct ImageOptions {
 pub:

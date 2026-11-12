@@ -65,7 +65,7 @@ just install             # copy vjag and vjag_test to ~/.local/bin
 just benchmark game.j64  # how fast it runs flat out
 ```
 
-Drop another image on the window to switch games. Saves land in your data directory, keyed by the content of the image, so renaming a file keeps its save.
+`just run` with no image opens an empty window; drop an image on it to start. Drop another one at any time to switch games. Saves land in your data directory, keyed by the content of the image, so renaming a file keeps its save.
 
 ### Controls
 

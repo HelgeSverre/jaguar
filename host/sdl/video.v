@@ -120,6 +120,31 @@ pub fn (mut v Video) present(pixels []u32, info hwtypes.FrameInfo, overlay []str
 	C.SDL_RenderPresent(v.renderer)
 }
 
+// present_message draws centred lines of text on an empty background: the
+// window's state while no image is running.
+pub fn (mut v Video) present_message(lines []string) ! {
+	mut output_width := 0
+	mut output_height := 0
+	C.SDL_GetRenderOutputSize(v.renderer, &output_width, &output_height)
+	// Debug text is 8 pixels per glyph; scale it with the window.
+	scale := f32(if output_width / 480 < 2 { 2 } else { output_width / 480 })
+	C.SDL_SetRenderDrawColor(v.renderer, 16, 16, 24, 255)
+	C.SDL_RenderClear(v.renderer)
+	C.SDL_SetRenderScale(v.renderer, scale, scale)
+	top := (f32(output_height) / scale - f32(lines.len * 14)) / 2
+	for i, line in lines {
+		shade := u8(if i == 0 { 255 } else { 150 })
+		C.SDL_SetRenderDrawColor(v.renderer, shade, shade, shade, 255)
+		left := (f32(output_width) / scale - f32(line.len * 8)) / 2
+		C.SDL_RenderDebugText(v.renderer, left, top + f32(i * 14), line.str)
+	}
+	C.SDL_SetRenderScale(v.renderer, 1, 1)
+	if v.capture_path != '' {
+		v.capture()!
+	}
+	C.SDL_RenderPresent(v.renderer)
+}
+
 // capture_next_frame saves what the renderer draws on the next `present`
 // as a BMP: the picture as the host shows it, after scaling and overlay.
 pub fn (mut v Video) capture_next_frame(path string) {

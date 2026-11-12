@@ -44,6 +44,7 @@ pub:
 
 pub struct C.SDL_DropEvent {
 pub:
+	type u32
 	data &char
 }
 

@@ -39,6 +39,24 @@ fn test_keys_reach_the_pad_through_the_event_queue() {
 	assert input.poll().kind == .none
 }
 
+fn test_a_dropped_file_reports_its_path() {
+	assert C.SDL_Init(u32(C.SDL_INIT_EVENTS))
+	defer {
+		C.SDL_Quit()
+	}
+	mut input := Input{}
+	for input.poll().kind != .none {}
+
+	drop := C.SDL_DropEvent{
+		type: u32(C.SDL_EVENT_DROP_FILE)
+		data: c'/games/some image (1994).j64'
+	}
+	assert C.SDL_PushEvent(unsafe { &C.SDL_Event(&drop) })
+	event := input.poll()
+	assert event.kind == .drop_file
+	assert event.path == '/games/some image (1994).j64'
+}
+
 fn test_face_buttons_read_c_b_a_from_left_to_right() {
 	assert decode_key(int(C.SDL_SCANCODE_Z), true)?.button == jerry.Button.c
 	assert decode_key(int(C.SDL_SCANCODE_X), true)?.button == jerry.Button.b
