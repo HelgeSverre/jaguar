@@ -7,6 +7,7 @@ import cli
 import host.sdl
 
 const usage = 'usage: vjag <image> [--region ntsc|pal] [--format kind] [--load-address addr] [--entry addr]
+                    [--exit-after frames] [--capture-window file.bmp]
        vjag <command> ...    headless commands, see `vjag help`
 
 keys: arrows = d-pad   Z X C = C B A   Enter = Pause   Tab = Option
@@ -42,10 +43,36 @@ mut:
 	running     bool = true
 	speed       f64  = 1.0 // measured guest time over host time
 	screenshots int
+	exit_after  int    // stop after this many frames; 0 runs until closed
+	capture     string // BMP of the window's last frame before `exit_after`
+	frames      int
 }
 
 fn play(args []string) ! {
-	path, options := cli.parse_image_args(args)!
+	// Two options only the windowed app takes: stop after a number of
+	// frames, and save the window's rendering of the last one. Together they
+	// let a script check the presentation path.
+	mut rest := []string{}
+	mut exit_after := 0
+	mut capture := ''
+	mut i := 0
+	for i < args.len {
+		match args[i] {
+			'--exit-after' {
+				exit_after = args[i + 1] or { '' }.int()
+				i += 2
+			}
+			'--capture-window' {
+				capture = args[i + 1] or { '' }
+				i += 2
+			}
+			else {
+				rest << args[i]
+				i++
+			}
+		}
+	}
+	path, options := cli.parse_image_args(rest)!
 	mut session := cli.open_session(path, options)!
 	cli.load_save(mut session) or { eprintln('vjag: save not loaded: ${err.msg()}') }
 	sdl.init()!
@@ -53,10 +80,12 @@ fn play(args []string) ! {
 		sdl.quit()
 	}
 	mut app := App{
-		session: session
-		options: options
-		video:   sdl.new_video('vjag', 960, 720)!
-		audio:   sdl.new_audio()!
+		session:    session
+		options:    options
+		video:      sdl.new_video('vjag', 960, 720)!
+		audio:      sdl.new_audio()!
+		exit_after: exit_after
+		capture:    capture
 	}
 	app.video.set_title('vjag - ${os.file_name(path)}')
 	app.run()
@@ -90,6 +119,13 @@ fn (mut app App) run() {
 				app.audio.push(pcm, frames, m.audio_rate())
 			}
 			deadline += u64(m.seconds(elapsed) * 1_000_000_000.0)
+		}
+		app.frames++
+		if app.exit_after > 0 && app.frames >= app.exit_after {
+			app.running = false
+			if app.capture != '' {
+				app.video.capture_next_frame(app.capture)
+			}
 		}
 		pixels, info := m.frame()
 		app.video.present(pixels, info, app.overlay_lines()) or {

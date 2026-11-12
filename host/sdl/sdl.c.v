@@ -80,6 +80,10 @@ fn C.SDL_DestroyTexture(texture voidptr)
 fn C.SDL_SetTextureScaleMode(texture voidptr, mode int) bool
 fn C.SDL_UpdateTexture(texture voidptr, rect voidptr, pixels voidptr, pitch int) bool
 
+fn C.SDL_RenderReadPixels(renderer voidptr, rect voidptr) voidptr
+fn C.SDL_SaveBMP(surface voidptr, file &char) bool
+fn C.SDL_DestroySurface(surface voidptr)
+
 fn C.SDL_PollEvent(event &C.SDL_Event) bool
 
 fn C.SDL_OpenAudioDeviceStream(device u32, spec &C.SDL_AudioSpec, callback voidptr, userdata voidptr) voidptr

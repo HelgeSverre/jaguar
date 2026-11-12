@@ -11,6 +11,7 @@ mut:
 	texture_width  int
 	texture_height int
 	fullscreen     bool
+	capture_path   string
 }
 
 // init starts the SDL subsystems the frontend needs.
@@ -113,7 +114,30 @@ pub fn (mut v Video) present(pixels []u32, info hwtypes.FrameInfo, overlay []str
 		}
 		C.SDL_SetRenderScale(v.renderer, 1, 1)
 	}
+	if v.capture_path != '' {
+		v.capture()!
+	}
 	C.SDL_RenderPresent(v.renderer)
+}
+
+// capture_next_frame saves what the renderer draws on the next `present`
+// as a BMP: the picture as the host shows it, after scaling and overlay.
+pub fn (mut v Video) capture_next_frame(path string) {
+	v.capture_path = path
+}
+
+fn (mut v Video) capture() ! {
+	path := v.capture_path
+	v.capture_path = ''
+	surface := C.SDL_RenderReadPixels(v.renderer, unsafe { nil })
+	if surface == unsafe { nil } {
+		return error('SDL_RenderReadPixels failed: ${last_error()}')
+	}
+	saved := C.SDL_SaveBMP(surface, path.str)
+	C.SDL_DestroySurface(surface)
+	if !saved {
+		return error('SDL_SaveBMP failed: ${last_error()}')
+	}
 }
 
 // ticks_ns returns a monotonic host time in nanoseconds.

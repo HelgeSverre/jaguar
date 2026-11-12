@@ -88,6 +88,10 @@ fn trace(path string, options ImageOptions, t TraceOptions) ! {
 		head = (head + 1) % t.tail
 		recorded++
 		if recorded < t.skip {
+			// The watch compares against the value at the end of the skip.
+			if addr := t.watch {
+				watched = m.peek32(addr) & t.watch_mask
+			}
 			continue
 		}
 		if stop := t.stop_pc {
