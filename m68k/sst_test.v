@@ -16,6 +16,8 @@
 //   at PC-4 and the final PC is compared as `cpu.pc + 4`.
 // - Tests run with the trace bit set do not include the trace exception that
 //   would follow; a single `step` stops before it as well.
+// - After STOP the corpus PC is not advanced by a prefetch, so it equals
+//   the address of the next instruction.
 // - RAM is listed as 16-bit words; byte accesses appear on the bus without
 //   A0 and are told apart by the UDS/LDS strobes.
 // - Transactions of kind "re"/"we" are the refused bus cycles of an address
@@ -214,7 +216,8 @@ fn actual_regs(cpu &Cpu) [19]u32 {
 	regs[reg_usp] = if cpu.supervisor() { cpu.usp } else { cpu.a[7] }
 	regs[reg_ssp] = if cpu.supervisor() { cpu.a[7] } else { cpu.ssp }
 	regs[reg_sr] = cpu.sr
-	regs[reg_pc] = cpu.pc + 4
+	// A stopped processor has not prefetched past the STOP operand.
+	regs[reg_pc] = if cpu.stopped { cpu.pc } else { cpu.pc + 4 }
 	return regs
 }
 

@@ -238,11 +238,13 @@ fn (mut c Cpu) op_address_arith(mut bus hwtypes.Bus, op Alu) {
 fn (mut c Cpu) op_cmpm(mut bus hwtypes.Bus) {
 	opcode := u32(c.ir)
 	size := size_field(opcode >> 6)
-	src := c.postinc_load(mut bus, opcode & 7, size)
+	// A refused source read leaves Ay advanced by two; a refused
+	// destination read leaves Ax untouched.
+	src := c.postinc_load(mut bus, opcode & 7, size, 2)
 	if c.aborted {
 		return
 	}
-	dst := c.postinc_load(mut bus, (opcode >> 9) & 7, size)
+	dst := c.postinc_load(mut bus, (opcode >> 9) & 7, size, 0)
 	if c.aborted {
 		return
 	}
@@ -250,11 +252,13 @@ fn (mut c Cpu) op_cmpm(mut bus hwtypes.Bus) {
 	c.cycles += 4
 }
 
-// postinc_load reads a CMPM operand through `(An)+`.
+// postinc_load reads a CMPM operand through `(An)+`. If the address is odd
+// the register is left `fault_step` past its original value.
 @[direct_array_access]
-fn (mut c Cpu) postinc_load(mut bus hwtypes.Bus, reg u32, size Size) u32 {
+fn (mut c Cpu) postinc_load(mut bus hwtypes.Bus, reg u32, size Size, fault_step u32) u32 {
 	addr := c.a[reg]
 	if size != .byte && addr & 1 != 0 {
+		c.a[reg] = addr + fault_step
 		c.address_error(mut bus, addr, .read, c.pc + 2)
 		return 0
 	}
@@ -319,7 +323,6 @@ fn (mut c Cpu) predec_load(mut bus hwtypes.Bus, reg u32, size Size) u32 {
 		return c.load(mut bus, addr, size)
 	}
 	low_addr := c.a[reg] - 2
-	c.a[reg] = low_addr
 	if low_addr & 1 != 0 {
 		c.address_error(mut bus, low_addr, .read, c.pc + 2)
 		return 0

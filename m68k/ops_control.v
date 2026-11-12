@@ -196,9 +196,9 @@ fn (mut c Cpu) op_link(mut bus hwtypes.Bus) {
 	if c.stack_fault(mut bus, .write) {
 		return
 	}
-	// LINK A7 stores the already decremented stack pointer.
+	frame := c.a[reg]
 	c.a[7] -= 4
-	c.store(mut bus, c.a[7], .long, c.a[reg])
+	c.store(mut bus, c.a[7], .long, frame)
 	c.a[reg] = c.a[7]
 	c.a[7] += disp
 	c.cycles += 4
@@ -237,16 +237,22 @@ fn (mut c Cpu) op_trapv(mut bus hwtypes.Bus) {
 @[direct_array_access]
 fn (mut c Cpu) op_chk(mut bus hwtypes.Bus) {
 	opcode := u32(c.ir)
-	bound := i16(c.read_ea(mut bus, (opcode >> 3) & 7, opcode & 7, .word))
+	bound := i32(i16(c.read_ea(mut bus, (opcode >> 3) & 7, opcode & 7, .word)))
 	if c.aborted {
 		return
 	}
-	value := i16(c.d[(opcode >> 9) & 7])
+	value := i32(i16(c.d[(opcode >> 9) & 7]))
 	c.sr &= ~(flag_n | flag_z | flag_v | flag_c)
 	if value < 0 {
 		c.sr |= flag_n
-		c.exception(mut bus, vector_chk, c.pc, 40)
-	} else if value > bound {
+	}
+	// The microcode first subtracts the bound. It takes the trap at once
+	// when that 16-bit difference is positive or overflows, and needs one
+	// more microcycle to notice a negative value otherwise.
+	difference := value - bound
+	if value > bound || difference < -0x8000 {
+		c.exception(mut bus, vector_chk, c.pc, 38)
+	} else if value < 0 {
 		c.exception(mut bus, vector_chk, c.pc, 40)
 	} else {
 		c.cycles += 10

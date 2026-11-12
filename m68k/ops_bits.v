@@ -87,6 +87,9 @@ fn (mut c Cpu) bit_instruction(mut bus hwtypes.Bus, number u32) {
 	bit := number & 7
 	if kind == 0 {
 		c.bit_op(kind, c.read_ea(mut bus, mode, reg, .byte), bit)
+		if mode == mode_other && reg == other_imm {
+			c.cycles += 2
+		}
 	} else {
 		addr := c.ea_read_addr(mut bus, mode, reg, .byte)
 		res := c.bit_op(kind, c.load(mut bus, addr, .byte), bit)
