@@ -24,6 +24,7 @@ common options:
   --frames <n>               frames to run
   --jobs <n>                 compat: parallel workers (default: all cores)
   --screenshot <png>         run: save the final frame
+  --wav <file>               run: save the generated audio
   --dump                     run: print machine state at the end
   --peek <addr[:len]>        run: print memory at the end (repeatable)
   --list <addr[:count]>      run: disassemble 68000 code at the end (repeatable)
@@ -93,6 +94,7 @@ fn run_command(command string, args []string) ! {
 	peeks := parser.string_multi('peek', 0, 'memory range to print')
 	listings := parser.string_multi('list', 0, '68000 code range to disassemble')
 	io_range := parser.string('watch-io', 0, '', 'log register writes in lo:hi')
+	wav := parser.string('wav', 0, '', 'write the generated audio as WAV')
 	processor := parser.string('cpu', 0, 'dsp', 'processor to trace')
 	tail := parser.int('tail', 0, 64, 'instructions to print')
 	stop_text := parser.string('stop-pc', 0, '', 'stop address')
@@ -108,8 +110,15 @@ fn run_command(command string, args []string) ! {
 			inspect(free[0], options, as_json)!
 		}
 		'run' {
-			run_headless(free[0], options, frames, screenshot, dump_state, peeks, listings,
-				io_range)!
+			run_headless(free[0], options, RunOptions{
+				frames:     frames
+				screenshot: screenshot
+				dump_state: dump_state
+				peeks:      peeks
+				listings:   listings
+				io_range:   io_range
+				wav:        wav
+			})!
 		}
 		'compat' {
 			run_compat(free[0], frames, report, screenshots, if jobs < 1 { 1 } else { jobs })!
@@ -160,22 +169,42 @@ fn inspect(path string, options ImageOptions, as_json bool) ! {
 	}
 }
 
-// run_headless runs an image for a fixed number of frames.
-fn run_headless(path string, options ImageOptions, frames int, screenshot string, dump_state bool, peeks []string, listings []string, io_range string) ! {
+// RunOptions are the outputs requested from a headless run.
+struct RunOptions {
+	frames     int
+	screenshot string   // PNG of the final frame
+	wav        string   // generated audio
+	dump_state bool     // processor, video and display-list state at the end
+	peeks      []string // memory ranges `addr[:len]` to print
+	listings   []string // 68000 code ranges `addr[:count]` to disassemble
+	io_range   string   // `lo:hi` register range whose writes are logged
+}
+
+// run_headless runs an image for a fixed number of frames and produces the
+// requested diagnostics.
+fn run_headless(path string, options ImageOptions, run RunOptions) ! {
 	mut session := open_session(path, options)!
 	mut m := session.machine
-	if io_range != '' {
-		m.watch_io(parse_address(io_range.all_before(':'))!,
-			parse_address(io_range.all_after(':'))!)
+	if run.io_range != '' {
+		m.watch_io(parse_address(run.io_range.all_before(':'))!,
+			parse_address(run.io_range.all_after(':'))!)
 	}
-	for _ in 0 .. frames {
+	mut pcm := []i16{len: 8192}
+	mut recording := WavWriter{}
+	for _ in 0 .. run.frames {
 		if m.run_frame() == .cpu_halted {
 			println('68000 halted: ${m.cpu.str_state()}')
 			break
 		}
+		if run.wav != '' {
+			recording.append(pcm, m.drain_audio(mut pcm), m.audio_rate())
+		}
+	}
+	if run.wav != '' {
+		recording.save(run.wav)!
 	}
 	print_counters(m)
-	if dump_state {
+	if run.dump_state {
 		print(debug.processors(m))
 		print(debug.m68k_listing(m, m.cpu.pc, 12))
 		if m.gpu.running {
@@ -192,19 +221,19 @@ fn run_headless(path string, options ImageOptions, frames int, screenshot string
 	for w in m.io_watch.writes {
 		println('tick ${w.tick:10} pc=${w.cpu_pc:06x} ${w.addr:06x} <- ${w.value:08x} (${w.bits} bits)')
 	}
-	for peek in peeks {
+	for peek in run.peeks {
 		addr := parse_address(peek.all_before(':'))!
 		length := if peek.contains(':') { parse_address(peek.all_after(':'))! } else { u32(64) }
 		print(debug.hex_dump(m, addr, length))
 	}
-	for listing in listings {
+	for listing in run.listings {
 		addr := parse_address(listing.all_before(':'))!
 		count := if listing.contains(':') { int(parse_address(listing.all_after(':'))!) } else { 24 }
 		print(debug.m68k_listing(m, addr, count))
 	}
-	if screenshot != '' {
-		os.mkdir_all(os.dir(screenshot))!
-		write_png(m, screenshot)!
+	if run.screenshot != '' {
+		os.mkdir_all(os.dir(run.screenshot))!
+		write_png(m, run.screenshot)!
 	}
 }
 
