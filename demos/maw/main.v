@@ -45,7 +45,7 @@ struct Built {
 fn build() !Built {
 	mut gpu := renderer()
 	gpu_code := whole_longs(gpu.assemble()!)
-	mut dsp := synthesizer()
+	mut dsp := jagkit.synth()
 	dsp_code := whole_longs(dsp.assemble()!)
 	if gpu_code.len > jagkit.gpu_ram_size || dsp_code.len > jagkit.dsp_ram_size {
 		return error('a RISC program does not fit its RAM')
@@ -73,7 +73,7 @@ fn build() !Built {
 	m.label('message')
 	m.text(message)
 	m.label('font')
-	m.bytes(font_bitmap())
+	m.bytes(jagkit.font_8x8())
 	m.label('bounce')
 	m.bytes(bounce(64, 10))
 	m.label('rainbow')
