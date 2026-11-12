@@ -89,31 +89,43 @@ fn build() !Built {
 	m.label('tunnel_table')
 	m.bytes(jagkit.big_endian32(tunnel_table()))
 
-	// The wall, a copy of the rings each gate covers, and the gate itself.
+	// The wall, a copy of the rings each gate and its lane cover, and the
+	// gate itself.
 	texture := wall_texture()
 	m.label('texture')
 	m.bytes(jagkit.big_endian16(texture))
 	for i, ring in gate_rows {
 		m.label('wall_${i}')
-		m.bytes(jagkit.big_endian16(texture[ring * 256..(ring + gate_rings) * 256]))
+		wall := texture[(ring - lane_rings) * 256..(ring + gate_rings) * 256]
+		m.bytes(jagkit.big_endian16(wall))
+		m.label('lane_${i}')
+		m.bytes(jagkit.big_endian16(lane_texture(wall)))
 	}
 	m.label('gate_texture')
 	m.bytes(jagkit.big_endian16(gate_texture()))
 
 	title := logo('MAW', 8)
-	player := ship()
+	// Sprites: the ship level and leaning both ways, then the explosion.
+	mut sprites := [ship(0), ship(1), ship(-1)]
+	for frame in 0 .. blast_frames {
+		sprites << blast(frame)
+	}
 	m.align(8)
 	m.label('logo')
 	m.bytes(jagkit.big_endian16(title.pixels))
-	m.align(8)
-	m.label('ship')
-	m.bytes(jagkit.big_endian16(player.pixels))
+	for i, sprite in sprites {
+		m.align(8)
+		m.label('sprite_${i}')
+		m.bytes(jagkit.big_endian16(sprite.pixels))
+	}
 
-	// One set of display lists for each television standard.
+	// One set of display lists for each television standard: a list for
+	// every scene, for each of the two tunnel buffers.
 	for video in [jagkit.ntsc, jagkit.pal] {
 		left := (video.width - 320) / 2
 		top := video.vdb + (video.height - 240) / 2 * 2
 		scroller_top := top + 2 * 196
+		ship_y := top + 2 * 208 // the middle of the ship
 		text := jagkit.Bitmap{
 			x:           left
 			y:           top
@@ -123,30 +135,51 @@ fn build() !Built {
 			depth:       .bpp1
 			transparent: true
 		}
+		// The same text one pixel down and right, in black.
+		shadow := jagkit.Bitmap{
+			...text
+			x:       left + 1
+			y:       top + 2
+			palette: 4
+		}
 		mut names := []string{}
-		for buffer in [buffer_a, buffer_b] {
-			tunnel := jagkit.Bitmap{
-				x:      left
-				y:      top
-				width:  tunnel_width
-				height: tunnel_height
-				data:   buffer
-				hscale: 2
-				vscale: 2
-			}
-			lists := {
-				'title': [
-					tunnel,
+		for scene in 0 .. scene_count {
+			for b, buffer in [buffer_a, buffer_b] {
+				mut bitmaps := [
 					jagkit.Bitmap{
+						x:      left
+						y:      top
+						width:  tunnel_width
+						height: tunnel_height
+						data:   buffer
+						hscale: 2
+						vscale: 2
+					},
+				]
+				if scene == scene_title / 8 {
+					bitmaps << jagkit.Bitmap{
 						x:           left + (320 - title.width) / 2
 						y:           top + 2 * 28
 						width:       title.width
 						height:      title.height
 						data:        m.address_of('logo')
 						transparent: true
-					},
-					text,
-					jagkit.Bitmap{
+					}
+				} else if scene < scene_wreck / 8 {
+					sprite := sprites[scene - scene_ship / 8]
+					bitmaps << jagkit.Bitmap{
+						x:           left + (320 - sprite.width) / 2
+						y:           ship_y - sprite.height
+						width:       sprite.width
+						height:      sprite.height
+						data:        m.address_of('sprite_${scene - scene_ship / 8}')
+						transparent: true
+					}
+				}
+				bitmaps << shadow
+				bitmaps << text
+				if scene == scene_title / 8 {
+					bitmaps << jagkit.Bitmap{
 						x:           left
 						y:           scroller_top
 						width:       (strip_bytes - 8) * 8
@@ -158,42 +191,28 @@ fn build() !Built {
 						transparent: true
 						hscale:      2.5
 						vscale:      2.5
-					},
-				]
-				'play':  [
-					tunnel,
-					jagkit.Bitmap{
-						x:           left + (320 - player.width) / 2
-						y:           top + 2 * 196
-						width:       player.width
-						height:      player.height
-						data:        m.address_of('ship')
-						transparent: true
-					},
-					text,
-				]
-			}
-			for state, bitmaps in lists {
-				name := 'list_${state}_${video.name}_${buffer:x}'
+					}
+				}
 				mut bytes := jagkit.object_list(list_address, video, bitmaps)!.bytes.clone()
 				for bytes.len < list_bytes {
 					bytes << 0
 				}
+				name := 'list_${video.name}_${scene}_${b}'
 				m.label(name)
 				m.bytes(bytes)
 				names << name
 			}
 		}
-		names.sort() // play A, play B, title A, title B
 		m.label('profile_${video.name.to_lower()}')
 		m.word(video.hdb)
 		m.word(video.hde)
 		m.word(video.vdb)
 		m.word(video.vde | 1)
-		for name in [names[2], names[3], names[0], names[1]] {
+		m.word(scroller_top)
+		m.word(0)
+		for name in names {
 			m.long_label(name)
 		}
-		m.word(scroller_top)
 	}
 
 	payload := m.assemble()!

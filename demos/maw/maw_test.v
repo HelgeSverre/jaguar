@@ -88,10 +88,13 @@ fn test_a_steered_ship_scores_and_an_unsteered_one_wrecks() {
 	p.frames(30)
 	p.tap(.b)
 	assert p.word('state') == state_play
+	started := p.word('frame')
 	for _ in 0 .. 1500 {
 		p.steer()
 		p.frames(1)
 	}
+	// Repainting a gate must never make the 68000 miss a frame.
+	assert p.word('frame') - started == 1500
 	score := p.word('score')
 	assert p.word('state') == state_play, 'a ship steered into every opening must survive'
 	assert score >= 15
@@ -110,9 +113,14 @@ fn test_a_steered_ship_scores_and_an_unsteered_one_wrecks() {
 	assert p.word('state') == state_dead
 	assert p.word('best') == p.word('score')
 
-	p.frames(60)
+	// The ship blows up, then a fire button starts the next attempt.
+	p.frames(10)
+	assert p.word('scene') in [scene_blast, scene_blast + 8]
+	p.frames(50)
+	assert p.word('scene') == scene_wreck
 	p.tap(.a)
-	assert p.word('state') == state_title
+	assert p.word('state') == state_play
+	assert p.word('score') == 0
 }
 
 fn test_sound_plays() {

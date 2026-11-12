@@ -35,9 +35,17 @@ const text_columns = 40
 const text_rows = 30
 const strip_bytes = 24 // per line; the last 8 are off screen
 const strip_lines = 8
-const list_objects = 4
+const list_objects = 5
 const list_bytes = 32 + list_objects * 32
-const scroller_object = 3 // its place in the title list
+const scroller_object = 4 // its place in the title list
+
+// Scenes: which display list is shown, as an offset into a video profile's
+// table of lists.
+const scene_title = 0
+const scene_ship = 8 // level; the next two bank left and right
+const scene_blast = 32 // four frames of explosion
+const scene_wreck = 64 // the tunnel without a ship
+const scene_count = 9
 
 // Game states.
 const state_title = 0
@@ -62,6 +70,7 @@ const top_speed = 0x0480
 const speed_gain = 0x000c
 const turn_gain = 0x0040
 const top_turn = 0x0380
+const bank_turn = 0x0100 // turning faster than this tilts the ship
 const widest_gap = 26 // half the opening, as an angle
 const tightest_gap = 14
 const grace_frames = 100
@@ -71,12 +80,13 @@ const blip_note = 96
 const gate_ring = 0 // its first texture ring
 const gate_gap = 2 // the angle of the middle of its opening
 const gate_depth = 4 // its depth on the previous frame
-const gate_painted = 6 // set once it has a new opening for the next pass
-const gate_wall = 8 // address of the wall texture it covers
+const gate_stage = 6 // how far its repainting for the next pass has come
+const gate_wall = 8 // address of a copy of the wall it and its lane cover
+const gate_lane = 12 // address of the same wall, lit green
 
 // Offsets into a video profile.
-const profile_lists = 8
-const profile_scroller_y = 24
+const profile_scroller_y = 8
+const profile_lists = 12
 
 struct Game {
 	mailbox u32 // the values shared with the GPU
@@ -164,10 +174,12 @@ fn (mut g Game) start_up(gpu_longs int, dsp_longs int, dsp_start u32) {
 	m.move(.w, imm(tunnel_pixels / 2 - 1), d0)
 	m.bsr('clear')
 
-	m.lea(lbl('gate_0'), a5)
-	m.bsr('paint_gate')
-	m.lea(lbl('gate_1'), a5)
-	m.bsr('paint_gate')
+	m.move(.w, imm(0), abs(jagkit.clut + 10)) // the shadow under the text
+	for gate in ['gate_0', 'gate_1'] {
+		m.lea(lbl(gate), a5)
+		m.bsr('paint_stripes')
+		m.bsr('paint_opening')
+	}
 	m.bsr('enter_title')
 
 	// The GPU: load it, tell it where its data is, start it.
@@ -233,22 +245,11 @@ fn (mut g Game) frame_interrupt() {
 	m.b(.eq, 'play')
 	m.bra('dead')
 
-	// Hand the view to the GPU. A fresh wreck shakes.
+	// Hand the view to the GPU.
 	m.label('frame_done')
-	m.moveq(0, d2)
-	m.cmp(.w, imm(state_dead), lbl('state'))
-	m.b(.ne, 'steady')
-	m.cmp(.w, imm(24), lbl('timer'))
-	m.b(.cc, 'steady')
-	m.bsr('random')
-	m.and(.w, imm(7), d0)
-	m.move(.w, d0, d2)
-	m.label('steady')
 	m.moveq(0, d0)
 	m.move(.w, lbl('rotation'), d0)
 	m.lsr(.w, imm(8), d0)
-	m.add(.w, d2, d0)
-	m.and(.w, imm(0xff), d0)
 	m.move(.l, d0, g.shared_at(shared_rotation))
 	m.moveq(0, d0)
 	m.move(.w, lbl('travel'), d0)
@@ -258,7 +259,7 @@ fn (mut g Game) frame_interrupt() {
 	m.rte()
 }
 
-// refresh_list copies the list for the current state and front buffer into
+// refresh_list copies the list for the current scene and front buffer into
 // place: the object processor consumed the last copy while drawing.
 fn (mut g Game) refresh_list() {
 	mut m := g.m
@@ -266,18 +267,15 @@ fn (mut g Game) refresh_list() {
 	m.label('refresh_list')
 	m.move(.l, lbl('profile'), a0)
 	m.moveq(0, d0)
-	m.move(.w, lbl('front'), d0)
-	m.tst(.w, lbl('state'))
-	m.b(.eq, 'list_chosen')
-	m.add(.w, imm(8), d0)
-	m.label('list_chosen')
+	m.move(.w, lbl('scene'), d0)
+	m.add(.w, lbl('front'), d0)
 	m.move(.l, idx(profile_lists, a0, d0), a1)
 	m.lea(abs(list_address), a2)
 	m.moveq(list_bytes / 4 - 1, d1)
 	m.label('copy_list')
 	m.move(.l, inc(a1), inc(a2))
 	m.dbra(d1, 'copy_list')
-	m.tst(.w, lbl('state'))
+	m.tst(.w, lbl('scene'))
 	m.b(.ne, 'list_done')
 	// On the title the scroller bobs: rewrite its YPOS field.
 	m.moveq(0, d0)
@@ -370,6 +368,7 @@ fn (mut g Game) read_pad() {
 
 fn (mut g Game) states() {
 	mut m := g.m
+	hint := 'FLY THROUGH THE GREEN GAPS'
 
 	// Title: drift down the tunnel until a fire button is pressed.
 	m.label('title')
@@ -414,30 +413,65 @@ fn (mut g Game) states() {
 	m.label('turn_known')
 	m.move(.w, d0, lbl('turn'))
 	m.add(.w, d0, lbl('rotation'))
+	// The ship leans into a fast turn.
+	m.move(.w, imm(scene_ship), d1)
+	m.cmp(.w, imm(bank_turn), d0)
+	m.b(.lt, 'not_leaning_left')
+	m.move(.w, imm(scene_ship + 8), d1)
+	m.label('not_leaning_left')
+	m.cmp(.w, imm(-bank_turn), d0)
+	m.b(.gt, 'not_leaning_right')
+	m.move(.w, imm(scene_ship + 16), d1)
+	m.label('not_leaning_right')
+	m.move(.w, d1, lbl('scene'))
 	m.move(.w, lbl('speed'), d0)
 	m.add(.w, d0, lbl('travel'))
 	m.tst(.w, lbl('grace'))
 	m.b(.eq, 'no_grace')
 	m.sub(.w, imm(1), lbl('grace'))
+	m.b(.ne, 'no_grace')
+	g.say(7, 22, ' '.repeat(hint.len)) // the hint has been read
 	m.label('no_grace')
 	m.bsr('gates')
 	m.bra('frame_done')
 
-	// Dead: coast to a stop, then wait for a fire button.
+	// Dead: the ship blows up while the tunnel spins and coasts to a stop.
 	m.label('dead')
+	m.move(.w, lbl('turn'), d0)
+	m.move(.w, d0, d1)
+	m.asr(.w, imm(4), d1)
+	m.b(.ne, 'still_spinning')
+	m.moveq(0, d0)
+	m.label('still_spinning')
+	m.sub(.w, d1, d0)
+	m.move(.w, d0, lbl('turn'))
+	m.add(.w, d0, lbl('rotation'))
 	m.move(.w, lbl('speed'), d0)
 	m.move(.w, d0, d1)
-	m.lsr(.w, imm(4), d1)
+	m.lsr(.w, imm(5), d1)
+	m.b(.ne, 'still_coasting')
+	m.moveq(0, d0)
+	m.label('still_coasting')
 	m.sub(.w, d1, d0)
 	m.move(.w, d0, lbl('speed'))
 	m.add(.w, d0, lbl('travel'))
 	m.add(.w, imm(1), lbl('timer'))
-	m.cmp(.w, imm(50), lbl('timer'))
+	m.move(.w, lbl('timer'), d0)
+	m.cmp(.w, imm(32), d0)
+	m.b(.cs, 'still_exploding')
+	m.move(.w, imm(scene_wreck), lbl('scene'))
+	m.bra('exploded')
+	m.label('still_exploding')
+	m.and(.w, imm(0x18), d0) // a new picture every eight frames
+	m.add(.w, imm(scene_blast), d0)
+	m.move(.w, d0, lbl('scene'))
+	m.label('exploded')
+	m.cmp(.w, imm(30), lbl('timer'))
 	m.b(.cs, 'frame_done')
 	m.move(.w, lbl('pressed'), d0)
 	m.btst(pad_fire, d0)
 	m.b(.eq, 'frame_done')
-	m.bsr('enter_title')
+	m.bsr('start_game')
 	m.bra('frame_done')
 
 	m.label('start_game')
@@ -447,16 +481,19 @@ fn (mut g Game) states() {
 	m.move(.w, imm(widest_gap), lbl('gap_half'))
 	m.move(.w, imm(grace_frames), lbl('grace'))
 	m.move(.w, imm(state_play), lbl('state'))
+	m.move(.w, imm(scene_ship), lbl('scene'))
 	m.bsr('clear_text')
+	g.say(7, 22, hint)
 	m.bra('show_status')
 
 	m.label('enter_title')
 	m.move(.w, imm(state_title), lbl('state'))
+	m.move(.w, imm(scene_title), lbl('scene'))
 	m.move(.w, imm(widest_gap), lbl('gap_half'))
 	m.bsr('clear_text')
 	g.say(12, 15, 'PRESS A, B OR C')
-	g.say(7, 18, 'LEFT AND RIGHT TURN THE WORLD')
-	g.say(10, 20, 'PUT THE GAP UNDER YOU')
+	g.say(10, 18, 'DODGE THE RED GATES')
+	g.say(3, 20, 'LEFT AND RIGHT STEER INTO THE GAP')
 	m.rts()
 
 	m.label('show_status')
@@ -492,18 +529,22 @@ fn (mut g Game) gates() {
 	m.and(.w, imm(0xff), d0) // depth of the gate's near edge
 	m.cmp(.w, imm(128), d0)
 	m.b(.ls, 'gate_near')
-	m.move(.w, imm(0), at(gate_painted, a5))
+	m.move(.w, imm(0), at(gate_stage, a5))
 	m.bra('gate_moved')
 	m.label('gate_near')
-	// Out of sight is where it gets its next opening.
+	// Out of sight it is repainted for its next pass, a part a frame.
 	m.cmp(.w, imm(hidden_depth), d0)
 	m.b(.hi, 'gate_reaches_ship')
 	m.cmp(.w, imm(2), d0)
 	m.b(.cs, 'gate_reaches_ship')
-	m.tst(.w, at(gate_painted, a5))
-	m.b(.ne, 'gate_reaches_ship')
-	m.move(.w, imm(1), at(gate_painted, a5))
+	m.move(.w, at(gate_stage, a5), d1)
+	m.cmp(.w, imm(3), d1)
+	m.b(.cc, 'gate_reaches_ship')
+	m.add(.w, imm(1), at(gate_stage, a5))
 	m.move(.w, d0, d7)
+	m.tst(.w, d1)
+	m.b(.ne, 'not_first_part')
+	m.bsr('erase_lane') // first the old lane goes, and a new opening is chosen
 	m.bsr('random')
 	m.and(.w, imm(127), d0)
 	m.sub(.w, imm(64), d0)
@@ -511,7 +552,15 @@ fn (mut g Game) gates() {
 	m.and(.w, imm(0xff), d0)
 	m.move(.w, d0, at(gate_gap, a5))
 	m.move(.w, d0, lbl('last_gap'))
-	m.bsr('paint_gate')
+	m.bra('part_done')
+	m.label('not_first_part')
+	m.cmp(.w, imm(1), d1)
+	m.b(.ne, 'last_part')
+	m.bsr('paint_stripes')
+	m.bra('part_done')
+	m.label('last_part')
+	m.bsr('paint_opening')
+	m.label('part_done')
 	m.move(.w, d7, d0)
 
 	m.label('gate_reaches_ship')
@@ -583,26 +632,73 @@ fn (mut g Game) gates() {
 	m.rts()
 }
 
-// paint_gate draws the gate at a5 into the wall texture: rings of
-// stripes, the wall restored where the opening is, a post on each side.
+// paint_gate holds the routines that draw the gate at a5 into the wall
+// texture. Ahead of the gate runs a lane: a green strip between two rails
+// that leads to the opening and through it.
 fn (mut g Game) paint_gate() {
 	mut m := g.m
 	ring_bytes := 512
-	m.label('paint_gate')
+	lane_bytes := lane_rings * ring_bytes
+	green := jagkit.cry(90, 255, 70)
+
+	// gate_base points a0 at the lane's first ring in the texture and a2
+	// at the copy of the wall it covers.
+	m.label('gate_base')
 	m.moveq(0, d0)
 	m.move(.w, at(gate_ring, a5), d0)
+	m.sub(.w, imm(lane_rings), d0)
 	m.lsl(.l, imm(8), d0)
 	m.add(.l, d0, d0)
 	m.lea(lbl('texture'), a0)
-	m.add(.l, d0, a0) // the gate's first ring in the texture
-	m.move(.l, a0, a3)
+	m.add(.l, d0, a0)
+	m.move(.l, at(gate_wall, a5), a2)
+	m.rts()
+
+	// gate_column points a3 at the texel of the first lane ring at angle
+	// d2 and a4 at the wall texel it covers.
+	m.label('gate_column')
+	m.moveq(0, d4)
+	m.move(.w, d2, d4)
+	m.and(.w, imm(0xff), d4)
+	m.add(.w, d4, d4)
+	m.lea(idx(0, a0, d4), a3)
+	m.lea(idx(0, a2, d4), a4)
+	m.rts()
+
+	// erase_lane restores the wall under the lane of the current opening.
+	m.label('erase_lane')
+	m.bsr('gate_base')
+	m.move(.w, at(gate_gap, a5), d2)
+	m.sub(.w, imm(widest_gap + 2), d2)
+	m.moveq(2 * (widest_gap + 2) - 1, d3)
+	m.label('erase_column')
+	m.bsr('gate_column')
+	m.moveq(lane_rings - 1, d5)
+	m.label('erase_texel')
+	m.move(.w, ind(a4), ind(a3))
+	m.lea(at(ring_bytes, a3), a3)
+	m.lea(at(ring_bytes, a4), a4)
+	m.dbra(d5, 'erase_texel')
+	m.add(.w, imm(1), d2)
+	m.dbra(d3, 'erase_column')
+	m.rts()
+
+	// paint_stripes covers the gate's rings with stripes, all the way round.
+	m.label('paint_stripes')
+	m.bsr('gate_base')
+	m.lea(at(lane_bytes, a0), a3)
 	m.lea(lbl('gate_texture'), a1)
 	m.move(.w, imm(gate_rings * 256 - 1), d1)
-	m.label('paint_stripes')
+	m.label('paint_stripe')
 	m.move(.w, inc(a1), inc(a3))
-	m.dbra(d1, 'paint_stripes')
+	m.dbra(d1, 'paint_stripe')
+	m.rts()
 
-	m.move(.l, at(gate_wall, a5), a2)
+	// paint_opening lays the lane: a green strip of wall that runs up to
+	// the gate and through it, between two rails.
+	m.label('paint_opening')
+	m.bsr('gate_base')
+	m.move(.l, at(gate_lane, a5), a2)
 	m.move(.w, at(gate_gap, a5), d2)
 	m.sub(.w, lbl('gap_half'), d2) // first angle of the opening
 	m.move(.w, lbl('gap_half'), d3)
@@ -610,7 +706,7 @@ fn (mut g Game) paint_gate() {
 	m.sub(.w, imm(1), d3)
 	m.label('open_column')
 	m.bsr('gate_column')
-	m.moveq(gate_rings - 1, d5)
+	m.moveq(lane_rings + gate_rings - 1, d5)
 	m.label('open_texel')
 	m.move(.w, ind(a4), ind(a3))
 	m.lea(at(ring_bytes, a3), a3)
@@ -619,32 +715,27 @@ fn (mut g Game) paint_gate() {
 	m.add(.w, imm(1), d2)
 	m.dbra(d3, 'open_column')
 
-	m.bsr('gate_post') // two columns right of the opening
+	m.bsr('rail') // two columns right of the opening
 	m.add(.w, imm(1), d2)
-	m.bsr('gate_post')
+	m.bsr('rail')
 	m.move(.w, at(gate_gap, a5), d2) // and two left of it
 	m.sub(.w, lbl('gap_half'), d2)
 	m.sub(.w, imm(1), d2)
-	m.bsr('gate_post')
+	m.bsr('rail')
 	m.sub(.w, imm(1), d2)
-	m.label('gate_post')
-	m.bsr('gate_column')
-	m.moveq(gate_rings - 1, d5)
-	m.label('post_texel')
-	m.move(.w, imm(gate_post()), ind(a3))
-	m.lea(at(ring_bytes, a3), a3)
-	m.dbra(d5, 'post_texel')
+	m.bsr('rail')
+
 	m.rts()
 
-	// gate_column points a3 at the gate's texel for angle d2 and a4 at the
-	// wall texel it covers.
-	m.label('gate_column')
-	m.moveq(0, d4)
-	m.move(.w, d2, d4)
-	m.and(.w, imm(0xff), d4)
-	m.add(.w, d4, d4)
-	m.lea(idx(0, a0, d4), a3)
-	m.lea(idx(0, a2, d4), a4)
+	// rail draws a green line along the lane and through the gate at
+	// angle d2.
+	m.label('rail')
+	m.bsr('gate_column')
+	m.moveq(lane_rings + gate_rings - 1, d5)
+	m.label('rail_texel')
+	m.move(.w, imm(green), ind(a3))
+	m.lea(at(ring_bytes, a3), a3)
+	m.dbra(d5, 'rail_texel')
 	m.rts()
 }
 
@@ -759,6 +850,7 @@ fn (mut g Game) text_routines() {
 fn (mut g Game) variables() {
 	mut m := g.m
 	g.variable('state', state_title)
+	g.variable('scene', scene_title)
 	g.variable('frame', 0)
 	g.variable('front', 0) // 0 while buffer A is shown, 4 for buffer B
 	g.variable('rotation', 0)
@@ -786,5 +878,6 @@ fn (mut g Game) variables() {
 		m.word(0)
 		m.word(0)
 		m.long_label('wall_${i}')
+		m.long_label('lane_${i}')
 	}
 }

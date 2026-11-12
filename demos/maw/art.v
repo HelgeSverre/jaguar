@@ -20,6 +20,9 @@ const depth_scale = 4080.0
 const gate_rings = 12
 const gate_rows = [64, 192]
 
+// The rings ahead of a gate that carry the lane to its opening.
+const lane_rings = 24
+
 // tunnel_table holds, for every screen pixel, where on the wall the eye
 // looks: brightness in bits 16..23, depth in 8..15, angle in 0..7.
 fn tunnel_table() []u32 {
@@ -58,12 +61,12 @@ fn wall_texture() []u16 {
 			cell_a := angle & 15
 			cell_r := ring & 15
 			panel := hash(angle >> 4, ring >> 4)
-			texture << if cell_a < 2 || cell_r < 2 {
+			texture << if cell_a < 1 || cell_r < 1 {
 				// Seam: brightest where two seams cross.
-				if cell_a < 2 && cell_r < 2 {
-					jagkit.cry(255, 255, 255)
+				if cell_a < 1 && cell_r < 1 {
+					jagkit.cry(200, 255, 255)
 				} else {
-					jagkit.cry(40, 220, 255)
+					jagkit.cry(20, 150, 190)
 				}
 			} else if panel < 40 {
 				// A lit panel, hot in the middle.
@@ -71,7 +74,7 @@ fn wall_texture() []u16 {
 				jagkit.cry(glow, glow * 5 / 9, glow / 8)
 			} else {
 				grain := hash(angle, ring) / 8
-				bevel := if cell_a == 2 || cell_r == 2 {
+				bevel := if cell_a == 1 || cell_r == 1 {
 					40
 				} else if cell_a == 15 || cell_r == 15 {
 					-30
@@ -91,6 +94,18 @@ fn wall_texture() []u16 {
 	return texture
 }
 
+// lane_texture is a stretch of wall lit green, with a brighter band every
+// eight rings: the safe way through a gate.
+fn lane_texture(wall []u16) []u16 {
+	mut lane := []u16{cap: wall.len}
+	for i, texel in wall {
+		band := if (i / 256) % 8 < 3 { 70 } else { 0 }
+		level := math.min(255, int(texel & 0xff) * 3 / 4 + 60 + band)
+		lane << jagkit.cry(level / 4, level, level / 3)
+	}
+	return lane
+}
+
 // gate_texture is the rings of a gate: hazard stripes between two
 // white-hot edges.
 fn gate_texture() []u16 {
@@ -107,11 +122,6 @@ fn gate_texture() []u16 {
 		}
 	}
 	return rings
-}
-
-// gate_post is the colour of the markers on both sides of a gap.
-fn gate_post() u16 {
-	return jagkit.cry(120, 255, 60)
 }
 
 // The font: 5x7 glyphs for ASCII 32..95, five bits a row, left pixel first.
@@ -240,15 +250,19 @@ fn logo(word string, block int) Picture {
 	return picture
 }
 
-// ship draws the player: a delta wing seen from behind, engines lit.
-fn ship() Picture {
+// ship draws the player: a delta wing seen from behind, engines lit. `lean`
+// is -1, 0 or 1 and tips the nose into a turn.
+fn ship(lean int) Picture {
 	mut picture := new_picture(32, 24)
 	for y in 0 .. 24 {
 		half := 1 + y * 14 / 23
-		for x in 16 - half .. 16 + half {
-			edge := x == 16 - half || x == 16 + half - 1 || y == 23
-			spine := math.abs(x - 16) < 2 && y > 4 && y < 16
-			level := 120 + y * 5 - math.abs(x - 16) * 4
+		middle := 16 + lean * (23 - y) / 5
+		for x in middle - half .. middle + half {
+			edge := x == middle - half || x == middle + half - 1 || y == 23
+			spine := math.abs(x - middle) < 2 && y > 4 && y < 16
+			// The wing on the inside of the turn is in shadow.
+			shade := if lean * (x - middle) < 0 { 45 } else { 0 }
+			level := 135 + y * 5 - math.abs(x - middle) * 4 - shade
 			picture.set(x, y, if edge {
 				jagkit.cry(30, 40, 70)
 			} else if spine {
@@ -261,6 +275,39 @@ fn ship() Picture {
 	for x in [9, 10, 11, 20, 21, 22] {
 		picture.set(x, 21, jagkit.cry(255, 200, 60))
 		picture.set(x, 22, jagkit.cry(255, 120, 20))
+	}
+	return picture
+}
+
+const blast_frames = 4
+
+// blast draws one frame of the ship's end: a white flash that opens into a
+// ring of cooling sparks.
+fn blast(frame int) Picture {
+	size := 48
+	mut picture := new_picture(size, size)
+	outer := 9 + frame * 5
+	inner := if frame == 0 { -1 } else { outer - 9 + frame }
+	for y in 0 .. size {
+		for x in 0 .. size {
+			dx := x - size / 2
+			dy := y - size / 2
+			distance := int(math.sqrt(f64(dx * dx + dy * dy)))
+			if distance > outer || distance < inner {
+				continue
+			}
+			// Later frames are ragged: more and more sparks have gone out.
+			if hash(x + frame * 64, y) < frame * 60 {
+				continue
+			}
+			heat := 255 - (distance - inner) * 12 - frame * 30
+			picture.set(x, y, match frame {
+				0 { jagkit.cry(255, 255, 200 + distance * 5) }
+				1 { jagkit.cry(255, heat, heat / 3) }
+				2 { jagkit.cry(heat + 40, heat / 2, 20) }
+				else { jagkit.cry(heat + 30, heat / 4, 30) }
+			})
+		}
 	}
 	return picture
 }

@@ -169,10 +169,10 @@ just demo                # rebuild the image from the V source first
 
 <p>
   <img src="docs/screenshots/maw-title.png" width="49%" alt="The title screen of MAW: a logo and a scroller over a textured tunnel">
-  <img src="docs/screenshots/maw-play.png" width="49%" alt="MAW in play: a ship at the bottom of the tunnel and a striped gate">
+  <img src="docs/screenshots/maw-play.png" width="49%" alt="MAW in play: a ship at the bottom of the tunnel, a red gate ahead and a green lane through it">
 </p>
 
-MAW is a tunnel flyer. Left and right turn the world; put the opening of each gate under the ship. The GPU draws the tunnel from a lookup table with depth fog, a gate is a few rings of the wall texture painted over, the DSP is a three-voice synthesizer and the 68000 runs the rules and the tune. Its test plays the game: it boots the image in the emulator, reads the game's variables through the assembler's symbol table and steers.
+MAW is a tunnel flyer. Left and right turn the world; follow the green lane through each red gate. The GPU draws the tunnel from a lookup table with depth fog, a gate is a few rings of the wall texture painted over, the DSP is a three-voice synthesizer and the 68000 runs the rules and the tune. Its test plays the game: it boots the image in the emulator, reads the game's variables through the assembler's symbol table and steers.
 
 It has only ever run in this emulator. Real hardware has not seen it.
 
