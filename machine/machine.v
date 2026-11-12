@@ -17,6 +17,10 @@ pub const cart_window = u32(0x60_0000)
 pub const bios_base = u32(0xe0_0000)
 pub const bios_size = u32(0x2_0000)
 
+// interrupt_vector is the 68000 vector number (address 0x100) for all
+// console interrupts, which arrive at level 2.
+pub const interrupt_vector = u8(64)
+
 // timing_profile names the accuracy contract of this build (see the
 // staged timing table in the specification).
 pub const timing_profile = 'functional_v1'
@@ -88,6 +92,8 @@ pub fn new(config Config) &Machine {
 		wavetable: jerry.synthesized_wavetable()
 	}
 	m.jerry.pads.region_ntsc = config.region == .ntsc
+	// TOM answers every interrupt acknowledge with one user vector.
+	m.cpu.irq_vector = interrupt_vector
 	return m
 }
 

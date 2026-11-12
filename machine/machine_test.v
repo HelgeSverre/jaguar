@@ -160,6 +160,7 @@ fn test_vertical_interrupt_reaches_the_68000() {
 	m.advance(m.tick + 200 * u64(m.tom.half_period()), false)
 	assert m.tom.int_pending & 1 == 1
 	assert m.cpu.irq_level == 2
+	assert m.cpu.irq_vector == 64
 	m.write16(0xf0_00e0, 0x0101) // acknowledge
 	assert m.cpu.irq_level == 0
 }
