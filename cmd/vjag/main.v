@@ -3,6 +3,7 @@
 module main
 
 import os
+import jerry
 import cli
 import host.sdl
 
@@ -46,6 +47,8 @@ mut:
 	exit_after  int    // stop after this many frames; 0 runs until closed
 	capture     string // BMP of the window's last frame before `exit_after`
 	frames      int
+	fresh       [2]u32 // buttons pressed in the current batch of host events
+	deferred    [2]u32 // releases held back so a short tap lasts one frame
 }
 
 fn play(args []string) ! {
@@ -148,7 +151,19 @@ fn (mut app App) run() {
 	}
 }
 
+// handle_events applies every pending host event. A key tapped faster than
+// one frame delivers its press and release together; the release then waits
+// for the next frame so the guest still sees the button down once.
 fn (mut app App) handle_events() {
+	for port in 0 .. 2 {
+		for button in 0 .. 32 {
+			if app.deferred[port] & (u32(1) << button) != 0 {
+				app.session.machine.set_button(port, unsafe { jerry.Button(button) }, false)
+			}
+		}
+		app.deferred[port] = 0
+		app.fresh[port] = 0
+	}
 	for {
 		event := app.input.poll()
 		match event.kind {
@@ -159,6 +174,14 @@ fn (mut app App) handle_events() {
 				app.running = false
 			}
 			.button {
+				bit := u32(1) << u32(event.button)
+				if event.pressed {
+					app.fresh[event.port] |= bit
+					app.deferred[event.port] &= ~bit
+				} else if app.fresh[event.port] & bit != 0 {
+					app.deferred[event.port] |= bit
+					continue
+				}
 				app.session.machine.set_button(event.port, event.button, event.pressed)
 			}
 			.focus_lost {

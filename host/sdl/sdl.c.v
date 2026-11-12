@@ -24,6 +24,7 @@ pub mut:
 
 pub struct C.SDL_KeyboardEvent {
 pub:
+	type     u32
 	scancode int
 	down     bool
 	repeat   bool
@@ -85,6 +86,7 @@ fn C.SDL_SaveBMP(surface voidptr, file &char) bool
 fn C.SDL_DestroySurface(surface voidptr)
 
 fn C.SDL_PollEvent(event &C.SDL_Event) bool
+fn C.SDL_PushEvent(event &C.SDL_Event) bool
 
 fn C.SDL_OpenAudioDeviceStream(device u32, spec &C.SDL_AudioSpec, callback voidptr, userdata voidptr) voidptr
 fn C.SDL_DestroyAudioStream(stream voidptr)

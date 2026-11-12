@@ -28,6 +28,7 @@ common options:
   --dump                     run: print machine state at the end
   --peek <addr[:len]>        run: print memory at the end (repeatable)
   --list <addr[:count]>      run: disassemble 68000 code at the end (repeatable)
+  --press <btn@frame[+n]>    run: hold a pad button for n frames (repeatable)
   --watch-io <lo:hi>         run: log writes to TOM/JERRY addresses in lo..hi
   --cpu m68k|gpu|dsp         trace: processor to follow (default dsp)
   --tail <n>                 trace: instructions to print (default 64)
@@ -93,6 +94,7 @@ fn run_command(command string, args []string) ! {
 		'print processor, video and display-list state at the end')
 	peeks := parser.string_multi('peek', 0, 'memory range to print')
 	listings := parser.string_multi('list', 0, '68000 code range to disassemble')
+	presses := parser.string_multi('press', 0, 'hold a pad button: button@frame[+frames]')
 	io_range := parser.string('watch-io', 0, '', 'log register writes in lo:hi')
 	wav := parser.string('wav', 0, '', 'write the generated audio as WAV')
 	processor := parser.string('cpu', 0, 'dsp', 'processor to trace')
@@ -118,6 +120,7 @@ fn run_command(command string, args []string) ! {
 				listings:   listings
 				io_range:   io_range
 				wav:        wav
+				presses:    presses.map(parse_press(it)!)
 			})!
 		}
 		'compat' {
@@ -178,6 +181,7 @@ struct RunOptions {
 	peeks      []string // memory ranges `addr[:len]` to print
 	listings   []string // 68000 code ranges `addr[:count]` to disassemble
 	io_range   string   // `lo:hi` register range whose writes are logged
+	presses    []Press  // scripted controller input
 }
 
 // run_headless runs an image for a fixed number of frames and produces the
@@ -191,7 +195,8 @@ fn run_headless(path string, options ImageOptions, run RunOptions) ! {
 	}
 	mut pcm := []i16{len: 8192}
 	mut recording := WavWriter{}
-	for _ in 0 .. run.frames {
+	for frame in 0 .. run.frames {
+		apply_presses(mut m, run.presses, frame)
 		if m.run_frame() == .cpu_halted {
 			println('68000 halted: ${m.cpu.str_state()}')
 			break

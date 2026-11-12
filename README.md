@@ -116,6 +116,7 @@ vjag_test trace game.j64 --cpu m68k --stop-range 0x0:0x400   # who jumped into t
 vjag_test trace game.j64 --cpu m68k --watch 0x4912           # who overwrote this?
 vjag_test run game.j64 --frames 300 --dump                   # processors, video registers, display list
 vjag_test run game.j64 --watch-io 0xf1a100:0xf1a120          # every write to the DSP control registers
+vjag_test run game.j64 --frames 900 --press b@600 --press left@700+30 --screenshot shot.png   # scripted pad input
 ```
 
 ## How it is put together
