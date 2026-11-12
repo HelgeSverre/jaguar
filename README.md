@@ -160,11 +160,12 @@ gpu.jr(.ne, 'next')
 gpu.addqt(2, target)           // delay slot
 ```
 
-`demos/maw` is a whole game built this way, and `demos/maw.jag` is its output, so there is something to run out of the box:
+`demos/maw` and `demos/wirewing` are whole games built this way, and the `.jag` files next to them are their output, so there is something to run out of the box:
 
 ```sh
-just run demos/maw.jag   # play it
-just demo                # rebuild the image from the V source first
+just run demos/maw.jag        # play one
+just run demos/wirewing.jag
+just demo maw                 # rebuild an image from its V source first, then play
 ```
 
 <p>
@@ -174,7 +175,14 @@ just demo                # rebuild the image from the V source first
 
 MAW is a tunnel flyer with a psytrance habit. Left and right turn the tunnel; follow the green lane through each gate, because the rest of the gate is live. The GPU draws the tunnel from a lookup table: a Julia set folded into a kaleidoscope for a wall, a palette that turns while you fly, fog, and a window on the table that wanders so the tunnel swerves. A gate is a few rings of the wall repainted with lightning every other frame. The DSP is a three-voice synthesizer and the 68000 runs the rules and the tune: 150 beats a minute, kick, rolling bass, acid line. Its test plays the game: it boots the image in the emulator, reads the game's variables through the assembler's symbol table and steers.
 
-It has only ever run in this emulator. Real hardware has not seen it.
+WIREWING (`demos/wirewing`, an 8 KB image) is a wireframe flying game. Bank with left and right, pull back to climb, fly through the spinning beacons before the tank is dry. The GPU projects the corners of a rolling landscape around the eye, with perspective, bank and distance shading, and joins them with lines it draws itself, sixty pictures a second. Fly into a hill and the onboard computer has a remark ready. Its test flies it: an autopilot collects beacons, a dive ends in the ground, an empty tank ends the flight.
+
+<p>
+  <img src="docs/screenshots/wirewing-play.png" width="49%" alt="WIREWING in a banked turn over a green wireframe landscape">
+  <img src="docs/screenshots/wirewing-crash.png" width="49%" alt="WIREWING after a crash: WHERE DID YOU LEARN TO FLY?">
+</p>
+
+Both games have only ever run in this emulator. Real hardware has not seen them.
 
 ## How it is put together
 
@@ -192,7 +200,7 @@ cli/       headless commands
 host/sdl/  window, audio stream, input
 cmd/       vjag (desktop) and vjag_test (headless)
 jagkit/    assemblers and helpers for writing Jaguar programs in V
-demos/     MAW, a game written with jagkit
+demos/     games written with jagkit
 ```
 
 Processors and devices only know the `Bus` interface from `hwtypes`. `machine` owns them all and is the bus. Nothing below `cli` touches a file, a clock or SDL, and the core does not allocate while it runs: a ten-second benchmark allocates about 12 KB in total.

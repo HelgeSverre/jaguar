@@ -39,11 +39,11 @@ run *args: release
 dev *args: build
     ./bin/vjag-debug "$@"
 
-# Rebuild MAW, the game written with jagkit, and play it.
+# Rebuild a game written with jagkit from its V source and play it, e.g. `just demo wirewing`.
 [group('run')]
-demo *args: release
-    v run demos/maw
-    ./bin/vjag demos/maw.jag "$@"
+demo name="maw": release
+    v run demos/{{ name }}
+    ./bin/vjag demos/{{ name }}.jag
 
 # Run the headless runner, e.g. `just headless inspect image.jag --json`.
 [group('run')]
