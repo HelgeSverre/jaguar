@@ -22,6 +22,9 @@ pub enum Command {
 	overlay
 	screenshot
 	fast_forward
+	shell  // dress or undress the window
+	shrink // make the shell smaller
+	grow   // make the shell larger
 	quit
 }
 
@@ -36,11 +39,14 @@ pub:
 	path    string
 }
 
-// Input tracks attached gamepads; the first two map to ports 0 and 1.
+// Input tracks attached gamepads; the first two map to ports 0 and 1. With
+// a shell attached, clicks on its controls become commands and key presses.
 pub struct Input {
 mut:
 	gamepads [2]voidptr
 	ids      [2]u32
+pub mut:
+	shell &Shell = unsafe { nil }
 }
 
 // poll returns the next pending event, or an event of kind `.none`.
@@ -92,6 +98,26 @@ pub fn (mut input Input) poll() Event {
 						button:  button
 						pressed: pad.down
 					}
+				}
+			}
+			u32(C.SDL_EVENT_MOUSE_MOTION) {
+				if input.shell != unsafe { nil } {
+					motion := unsafe { event.motion }
+					input.shell.hover = input.shell.control_at_point(motion.x, motion.y)
+				}
+			}
+			u32(C.SDL_EVENT_WINDOW_MOUSE_LEAVE) {
+				if input.shell != unsafe { nil } {
+					input.shell.hover = Control{}
+				}
+			}
+			u32(C.SDL_EVENT_MOUSE_BUTTON_DOWN), u32(C.SDL_EVENT_MOUSE_BUTTON_UP) {
+				click := unsafe { event.button }
+				if input.shell == unsafe { nil } || click.button != 1 {
+					continue
+				}
+				if decoded := input.shell.click(click.x, click.y, click.down) {
+					return decoded
 				}
 			}
 			u32(C.SDL_EVENT_DROP_FILE) {
@@ -146,6 +172,43 @@ fn (input &Input) port_of(id u32) int {
 	return -1
 }
 
+// click presses or releases the shell control under the pointer. A button
+// acts when pressed; a keypad key is held until the mouse button comes up,
+// wherever the pointer is by then.
+fn (mut s Shell) click(x f32, y f32, down bool) ?Event {
+	if !down {
+		held := s.held
+		s.held = Control{}
+		if held.kind == .key {
+			return Event{
+				kind:   .button
+				button: shell_keys[held.index]
+			}
+		}
+		return none
+	}
+	s.held = s.control_at_point(x, y)
+	return match s.held.kind {
+		.none {
+			none
+		}
+		.command {
+			Event{
+				kind:    .command
+				command: shell_commands[s.held.index]
+				pressed: true
+			}
+		}
+		.key {
+			Event{
+				kind:    .button
+				button:  shell_keys[s.held.index]
+				pressed: true
+			}
+		}
+	}
+}
+
 // decode_key maps a keyboard scancode to a controller button on port 0 or
 // to a frontend command.
 fn decode_key(scancode int, down bool) ?Event {
@@ -194,6 +257,9 @@ fn decode_command(scancode int, down bool) ?Event {
 		int(C.SDL_SCANCODE_F1) { Command.overlay }
 		int(C.SDL_SCANCODE_F12) { Command.screenshot }
 		int(C.SDL_SCANCODE_GRAVE) { Command.fast_forward }
+		int(C.SDL_SCANCODE_F2) { Command.shell }
+		int(C.SDL_SCANCODE_LEFTBRACKET) { Command.shrink }
+		int(C.SDL_SCANCODE_RIGHTBRACKET) { Command.grow }
 		else { return none }
 	}
 

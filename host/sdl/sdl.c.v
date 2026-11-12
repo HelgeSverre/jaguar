@@ -15,6 +15,28 @@ pub mut:
 	h f32
 }
 
+pub struct C.SDL_Rect {
+pub mut:
+	x int
+	y int
+	w int
+	h int
+}
+
+pub struct C.SDL_Point {
+pub:
+	x int
+	y int
+}
+
+pub struct C.SDL_Surface {
+pub:
+	w      int
+	h      int
+	pitch  int
+	pixels voidptr
+}
+
 pub struct C.SDL_AudioSpec {
 pub mut:
 	format   int
@@ -37,6 +59,20 @@ pub:
 	down   bool
 }
 
+pub struct C.SDL_MouseMotionEvent {
+pub:
+	x f32
+	y f32
+}
+
+pub struct C.SDL_MouseButtonEvent {
+pub:
+	button u8
+	down   bool
+	x      f32
+	y      f32
+}
+
 pub struct C.SDL_GamepadDeviceEvent {
 pub:
 	which u32
@@ -52,6 +88,8 @@ pub union C.SDL_Event {
 pub:
 	type    u32
 	key     C.SDL_KeyboardEvent
+	motion  C.SDL_MouseMotionEvent
+	button  C.SDL_MouseButtonEvent
 	gbutton C.SDL_GamepadButtonEvent
 	gdevice C.SDL_GamepadDeviceEvent
 	drop    C.SDL_DropEvent
@@ -82,9 +120,22 @@ fn C.SDL_DestroyTexture(texture voidptr)
 fn C.SDL_SetTextureScaleMode(texture voidptr, mode int) bool
 fn C.SDL_UpdateTexture(texture voidptr, rect voidptr, pixels voidptr, pitch int) bool
 
-fn C.SDL_RenderReadPixels(renderer voidptr, rect voidptr) voidptr
-fn C.SDL_SaveBMP(surface voidptr, file &char) bool
-fn C.SDL_DestroySurface(surface voidptr)
+fn C.SDL_SetHint(name &char, value &char) bool
+fn C.SDL_SetWindowSize(window voidptr, w int, h int) bool
+fn C.SDL_SetWindowHitTest(window voidptr, callback voidptr, data voidptr) bool
+fn C.SDL_SetRenderDrawBlendMode(renderer voidptr, mode u32) bool
+fn C.SDL_RenderFillRect(renderer voidptr, rect &C.SDL_FRect) bool
+fn C.SDL_SetRenderClipRect(renderer voidptr, rect &C.SDL_Rect) bool
+fn C.SDL_SetTextureBlendMode(texture voidptr, mode u32) bool
+fn C.SDL_SetTextureAlphaMod(texture voidptr, alpha u8) bool
+fn C.SDL_CreateTextureFromSurface(renderer voidptr, surface &C.SDL_Surface) voidptr
+fn C.SDL_IOFromConstMem(mem voidptr, size usize) voidptr
+fn C.SDL_LoadPNG_IO(src voidptr, closeio bool) &C.SDL_Surface
+fn C.SDL_ConvertSurface(surface &C.SDL_Surface, format u32) &C.SDL_Surface
+
+fn C.SDL_RenderReadPixels(renderer voidptr, rect voidptr) &C.SDL_Surface
+fn C.SDL_SaveBMP(surface &C.SDL_Surface, file &char) bool
+fn C.SDL_DestroySurface(surface &C.SDL_Surface)
 
 fn C.SDL_PollEvent(event &C.SDL_Event) bool
 fn C.SDL_PushEvent(event &C.SDL_Event) bool

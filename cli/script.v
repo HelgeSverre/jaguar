@@ -4,7 +4,7 @@ import jerry
 import machine
 
 // Press holds one controller button on port 0 over a range of frames.
-struct Press {
+pub struct Press {
 	button jerry.Button
 	first  int // first frame the button is held
 	last   int // last frame the button is held
@@ -12,7 +12,7 @@ struct Press {
 
 // parse_press reads `button@frame[+frames]`, e.g. `b@600+10`. Without a
 // length the button is held for six frames.
-fn parse_press(text string) !Press {
+pub fn parse_press(text string) !Press {
 	name := text.all_before('@')
 	timing := text.all_after('@')
 	if !text.contains('@') || timing == '' {
@@ -58,7 +58,7 @@ fn parse_button(name string) !jerry.Button {
 }
 
 // apply_presses sets the controller to what the script holds during `frame`.
-fn apply_presses(mut m machine.Machine, presses []Press, frame int) {
+pub fn apply_presses(mut m machine.Machine, presses []Press, frame int) {
 	for press in presses {
 		if frame == press.first {
 			m.set_button(0, press.button, true)

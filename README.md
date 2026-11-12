@@ -2,6 +2,10 @@
 
 An Atari Jaguar emulator written in [V](https://vlang.io).
 
+<p align="center">
+  <img src="docs/screenshots/hero.png" width="720" alt="vjag playing Tempest 2000 inside its console shell">
+</p>
+
 ![V 0.5.2](https://img.shields.io/badge/V-0.5.2-5d87bf)
 ![SDL 3](https://img.shields.io/badge/SDL-3-173f5f)
 ![macOS arm64](https://img.shields.io/badge/macOS-arm64-lightgrey)
@@ -20,7 +24,7 @@ The Jaguar is an odd machine: a Motorola 68000 that mostly gets out of the way, 
   <img src="docs/screenshots/nebula.png" width="49%" alt="A 16-bit CRY photograph shown by the object processor">
 </p>
 
-Screenshots are from public-domain homebrew. No ROMs or boot ROM images come with this project; bring your own.
+The four above are public-domain homebrew. No ROMs or boot ROM images come with this project; bring your own.
 
 ## Where it stands
 
@@ -67,6 +71,22 @@ just benchmark game.j64  # how fast it runs flat out
 
 `just run` with no image opens an empty window; drop an image on it to start. Drop another one at any time to switch games. Saves land in your data directory, keyed by the content of the image, so renaming a file keeps its save.
 
+### The shell
+
+By default the window is not a window. It is a borderless, see-through cutout shaped like a console, in the spirit of the media-player skins of twenty years ago:
+
+- The five red buttons are power, reset, pause, mute and fullscreen. Hover over one and the readout names it.
+- The twelve keys are the controller's keypad, laid out 1-9, `*`, 0, `#`. Click and hold works.
+- The strip shows what is loaded and scrolls when the title is too long for it.
+- The eyes flare with the sound.
+- Drag it anywhere by the body. `[` and `]` change its size.
+
+Not your thing? `F2` swaps it for an ordinary resizable window and back, and remembers the choice. So does `shell = false` in `vjag/config.toml` under your configuration directory (`~/Library/Application Support` on macOS), and `--no-shell` turns it off for one run. Fullscreen always shows the bare picture.
+
+<p>
+  <img src="docs/screenshots/shell.png" width="49%" alt="The console shell with no image loaded">
+</p>
+
 ### Controls
 
 | Jaguar | Keyboard | Gamepad |
@@ -86,6 +106,8 @@ just benchmark game.j64  # how fast it runs flat out
 | Mute | M |
 | Status overlay | F1 |
 | Screenshot | F12 |
+| Console shell on/off | F2 |
+| Shell smaller / larger | `[` / `]` |
 | Fast-forward (hold) | `` ` `` |
 | Quit | Esc |
 
@@ -157,6 +179,8 @@ just test
 ## Credits
 
 Built from the Atari Jaguar Technical and Software Reference manuals and the original hardware errata. The CRY colour tables are hardware data, tabulated in MAME's Jaguar driver (BSD-3-Clause). The 68000 corpus is the work of the SingleStepTests project. Virtual Jaguar and BigPEmu showed what was possible.
+
+The shell artwork was generated with an OpenAI image model, using Evan Amos's photographs of the console and controller on Wikimedia Commons as reference. `scripts/build-shell.py` turns the raw image into `host/sdl/shell.png`.
 
 ## Licence
 
