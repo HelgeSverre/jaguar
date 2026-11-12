@@ -50,6 +50,11 @@ pub fn (mut m Machine) advance(deadline u64, stop_at_frame bool) StopReason {
 			}
 			m.cpu_tick += u64(m.cpu.step(mut bus)) * cpu_clock_divider
 			m.counters.cpu_instructions++
+			if m.cpu.irq_acknowledged {
+				m.cpu.irq_acknowledged = false
+				m.tom.acknowledge()
+				m.cpu.irq_level = 0
+			}
 		}
 		if !m.gpu.running {
 			m.gpu_tick = target

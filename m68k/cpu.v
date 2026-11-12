@@ -41,7 +41,10 @@ pub mut:
 	// irq_vector is the vector number supplied at interrupt acknowledge;
 	// 0 requests the autovector (24 + level).
 	irq_vector u8
-	cycles     u64 // total MC68000 clock cycles executed
+	// irq_acknowledged is set when an interrupt exception is entered: the
+	// interrupt acknowledge cycle. The machine observes and clears it.
+	irq_acknowledged bool
+	cycles           u64 // total MC68000 clock cycles executed
 	// reset_line_pulsed is set when a RESET instruction asserts the external
 	// reset line. The machine observes and clears it.
 	reset_line_pulsed bool
@@ -60,6 +63,7 @@ pub fn (mut c Cpu) reset(mut bus hwtypes.Bus) {
 	c.trace_pending = false
 	c.ipl_seen = 0
 	c.reset_line_pulsed = false
+	c.irq_acknowledged = false
 }
 
 // step runs one instruction, or one trace or interrupt exception entry, and

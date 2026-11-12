@@ -16,7 +16,6 @@
 // long write (two word transfers) reaches them.
 module machine
 
-
 const address_mask = u32(0xff_ffff)
 const ram_mirror_end = u32(0x40_0000)
 const io_base = u32(0xf0_0000)

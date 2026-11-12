@@ -105,6 +105,7 @@ pub mut:
 	hc          u16 // refreshed by the machine before the guest reads it
 	int_pending u32 // INT1 latches, bit per `Irq`
 	int_enable  u32
+	irq_request bool // an enabled source fired and the 68000 has not acknowledged
 	gpu_irqs    u32  // interrupt lines for the machine to forward to the GPU
 	pit_dirty   bool // the programmable timer was rewritten
 	blitter     Blitter
@@ -143,6 +144,7 @@ pub fn (mut t Tom) reset() {
 	t.hc = 0
 	t.int_pending = 0
 	t.int_enable = 0
+	t.irq_request = false
 	t.gpu_irqs = 0
 	t.pit_dirty = true
 	t.op_pointer = 0
@@ -152,16 +154,30 @@ pub fn (mut t Tom) reset() {
 	t.blitter.reset()
 }
 
-// raise latches an interrupt source of INT1.
+// raise latches an interrupt source of INT1. The latch is set whether or
+// not the source is enabled, so software can poll it; the 68000 is only
+// interrupted when the source is enabled at the moment it fires.
 @[inline]
 pub fn (mut t Tom) raise(irq Irq) {
-	t.int_pending |= u32(1) << u32(irq)
+	bit := u32(1) << u32(irq)
+	t.int_pending |= bit
+	if t.int_enable & bit != 0 {
+		t.irq_request = true
+	}
 }
 
 // irq_asserted reports whether TOM drives the 68000 interrupt line.
 @[inline]
 pub fn (t &Tom) irq_asserted() bool {
-	return t.int_pending & t.int_enable != 0
+	return t.irq_request
+}
+
+// acknowledge is the 68000's interrupt acknowledge cycle: the request is
+// withdrawn. The latches stay set until the handler clears them, and a
+// latch left set does not interrupt again by itself.
+@[inline]
+pub fn (mut t Tom) acknowledge() {
+	t.irq_request = false
 }
 
 // half_period returns the length of one half-line in master ticks.

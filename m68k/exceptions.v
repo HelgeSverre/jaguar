@@ -129,5 +129,6 @@ fn (mut c Cpu) service_interrupt(mut bus hwtypes.Bus) bool {
 	vector := if c.irq_vector != 0 { u32(c.irq_vector) } else { vector_autovector + level }
 	c.exception(mut bus, vector, c.pc, 44)
 	c.sr = (c.sr & ~sr_int_mask) | (u16(level) << 8)
+	c.irq_acknowledged = true
 	return true
 }

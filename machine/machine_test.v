@@ -153,15 +153,22 @@ fn test_controller_matrix_and_region_bit() {
 	assert m.read16(0xf1_4002) & 0x0002 == 0, 'B reads on row 1'
 }
 
-fn test_vertical_interrupt_reaches_the_68000() {
-	mut m := boot(words([u16(0x60fe)]))
+fn test_vertical_interrupt_reaches_the_68000_once() {
+	// The handler at 0x4100 counts in D7 and returns without clearing the
+	// latch; the main program spins with interrupts enabled.
+	mut program := []u16{len: 0x82}
+	program[0] = 0x46fc // move #$2000,sr
+	program[1] = 0x2000
+	program[2] = 0x60fe // bra.s *
+	program[0x80] = 0x5287 // addq.l #1,d7
+	program[0x81] = 0x4e73 // rte
+	mut m := boot(words(program))
+	m.write32(0x100, 0x4100)
 	m.write16(0xf0_004e, 101) // VI
 	m.write16(0xf0_00e0, 0x0001) // enable the video interrupt
 	m.advance(m.tick + 200 * u64(m.tom.half_period()), false)
+	assert m.cpu.d[7] == 1, 'one event interrupts once, even with the latch left set'
 	assert m.tom.int_pending & 1 == 1
-	assert m.cpu.irq_level == 2
-	assert m.cpu.irq_vector == 64
-	m.write16(0xf0_00e0, 0x0101) // acknowledge
 	assert m.cpu.irq_level == 0
 }
 

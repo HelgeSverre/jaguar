@@ -163,15 +163,20 @@ fn test_rgb16_channel_order() {
 	assert cry_to_rgb(0x00ff) == 0xff_ffff || cry_to_rgb(0x0000) == 0
 }
 
-fn test_interrupt_latch_enable_and_clear() {
+fn test_interrupt_latch_enable_and_acknowledge() {
 	mut bus := hwtypes.new_ram_bus(0x10_0000)
 	mut t := ready(mut bus)
-	t.raise(.video)
-	assert !t.irq_asserted(), 'a pending source needs its enable'
-	t.write16(reg_int1, 0x0001, mut bus)
-	assert t.irq_asserted(), 'enabling an already pending source asserts'
-	t.write16(reg_int1, 0x0101, mut bus)
+	t.raise(.object)
+	assert t.read16(reg_int1) == 0x0004, 'a disabled source still latches'
 	assert !t.irq_asserted()
+	t.write16(reg_int1, 0x0005, mut bus)
+	assert !t.irq_asserted(), 'enabling a stale latch does not interrupt'
+	t.raise(.video)
+	assert t.irq_asserted()
+	t.acknowledge()
+	assert !t.irq_asserted(), 'one request per event'
+	assert t.read16(reg_int1) == 0x0005, 'latches wait for the handler'
+	t.write16(reg_int1, 0x0501, mut bus)
 	assert t.read16(reg_int1) == 0
 }
 
