@@ -35,10 +35,62 @@ fn (mut c Cpu) op_move(mut bus hwtypes.Bus, size Size) {
 }
 
 // move_write_fault raises the address error for a MOVE whose destination
-// address is odd.
+// address is odd. How far the instruction had progressed when the write was
+// refused depends on the destination mode, the operand size and on whether
+// the source came from memory.
+@[direct_array_access]
 fn (mut c Cpu) move_write_fault(mut bus hwtypes.Bus, addr u32, src u32, size Size) {
-	c.set_logic_flags(src, size)
-	c.address_error(mut bus, addr, .write, c.pc)
+	opcode := u32(c.ir)
+	dst_mode := (opcode >> 6) & 7
+	dst_reg := (opcode >> 9) & 7
+	memory_src := is_memory_ea((opcode >> 3) & 7, opcode & 7)
+	mut return_pc := c.pc
+	mut fault_addr := addr
+	mut ccr := nz_ccr(src, size) | (c.sr & flag_x)
+	match dst_mode {
+		mode_indirect, mode_postinc {
+			return_pc += 2
+			// The increment is applied only after a successful write.
+			c.a[dst_reg] = addr
+			if size == .long {
+				// A long is flagged while its low word is on its way out:
+				// not yet at all for a register or immediate source.
+				ccr = if memory_src { nz_ccr(src, .word) | (c.sr & flag_x) } else { c.sr & 0x1f }
+			}
+		}
+		mode_predec {
+			// The next opcode is prefetched before the write.
+			return_pc += 2
+			c.cycles += 4
+			if size == .long {
+				// The low word goes first and An is updated afterwards.
+				fault_addr = addr + 2
+				c.a[dst_reg] = addr + 4
+			} else {
+				c.ir = bus.read16(c.pc)
+			}
+		}
+		mode_disp, mode_index {
+			if size == .long && !memory_src {
+				// V and C are cleared one microcycle after N and Z.
+				ccr |= c.sr & (flag_v | flag_c)
+			}
+		}
+		else {
+			if dst_reg == other_abs_l && memory_src {
+				// With a memory source the write precedes the fetch of
+				// the word after the destination address.
+				return_pc -= 2
+				c.cycles -= 4
+				if size == .long {
+					ccr = nz_ccr(src, .word) | (c.sr & flag_x)
+				}
+			}
+		}
+	}
+
+	c.set_xnzvc(ccr)
+	c.address_error(mut bus, fault_addr, .write, return_pc)
 }
 
 // op_movea executes MOVEA: the source is sign extended to 32 bits and no
