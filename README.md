@@ -7,6 +7,7 @@ An Atari Jaguar emulator written in [V](https://vlang.io).
 ![macOS arm64](https://img.shields.io/badge/macOS-arm64-lightgrey)
 ![68000 vectors](https://img.shields.io/badge/68000%20test%20vectors-317%2C500%20passing-brightgreen)
 ![timing profile](https://img.shields.io/badge/timing-functional__v1-orange)
+![MIT licence](https://img.shields.io/badge/licence-MIT-blue)
 
 The Jaguar is an odd machine: a Motorola 68000 that mostly gets out of the way, two custom RISC processors (one for graphics, one for sound), a display-list chip that rewrites its own list while it draws, and a blitter with more mode bits than documentation. vjag emulates all of it in about 14,000 lines of V, with no C emulation cores underneath. SDL3 only puts the picture in a window and the samples in the speakers.
 
@@ -155,3 +156,7 @@ just test
 ## Credits
 
 Built from the Atari Jaguar Technical and Software Reference manuals and the original hardware errata. The CRY colour tables are hardware data, tabulated in MAME's Jaguar driver (BSD-3-Clause). The 68000 corpus is the work of the SingleStepTests project. Virtual Jaguar and BigPEmu showed what was possible.
+
+## Licence
+
+MIT. See [LICENSE](LICENSE).
