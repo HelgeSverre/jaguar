@@ -39,6 +39,12 @@ run *args: release
 dev *args: build
     ./bin/vjag-debug "$@"
 
+# Rebuild MAW, the game written with jagkit, and play it.
+[group('run')]
+demo *args: release
+    v run demos/maw
+    ./bin/vjag demos/maw.jag "$@"
+
 # Run the headless runner, e.g. `just headless inspect image.jag --json`.
 [group('run')]
 headless *args: release

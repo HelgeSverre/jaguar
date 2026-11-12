@@ -127,7 +127,7 @@ pub fn (mut r Risc) assemble() ![]u8 {
 }
 
 fn (mut r Risc) emit(opcode int, first int, second Reg) {
-	r.words << u16(opcode << 10) | u16((first & 31) << 5) | u16(second)
+	r.words << (u16(opcode) << 10) | (u16(first & 31) << 5) | u16(second)
 }
 
 fn (mut r Risc) rr(opcode int, src Reg, dst Reg) {
@@ -152,14 +152,17 @@ fn (mut r Risc) bit(name string, opcode int, n int, dst Reg) {
 
 // Arithmetic and logic. The destination is always the second operand.
 
+// add adds src to dst.
 pub fn (mut r Risc) add(src Reg, dst Reg) {
 	r.rr(0, src, dst)
 }
 
+// addc adds src and the carry to dst.
 pub fn (mut r Risc) addc(src Reg, dst Reg) {
 	r.rr(1, src, dst)
 }
 
+// addq adds 1..32.
 pub fn (mut r Risc) addq(n int, dst Reg) {
 	r.quick('addq', 2, n, dst)
 }
@@ -169,14 +172,17 @@ pub fn (mut r Risc) addqt(n int, dst Reg) {
 	r.quick('addqt', 3, n, dst)
 }
 
+// sub subtracts src from dst.
 pub fn (mut r Risc) sub(src Reg, dst Reg) {
 	r.rr(4, src, dst)
 }
 
+// subc subtracts src and the carry from dst.
 pub fn (mut r Risc) subc(src Reg, dst Reg) {
 	r.rr(5, src, dst)
 }
 
+// subq subtracts 1..32.
 pub fn (mut r Risc) subq(n int, dst Reg) {
 	r.quick('subq', 6, n, dst)
 }
@@ -186,34 +192,42 @@ pub fn (mut r Risc) subqt(n int, dst Reg) {
 	r.quick('subqt', 7, n, dst)
 }
 
+// neg negates dst.
 pub fn (mut r Risc) neg(dst Reg) {
 	r.emit(8, 0, dst)
 }
 
+// and keeps the bits set in both.
 pub fn (mut r Risc) and(src Reg, dst Reg) {
 	r.rr(9, src, dst)
 }
 
+// orr is `or`: it keeps the bits set in either.
 pub fn (mut r Risc) orr(src Reg, dst Reg) {
 	r.rr(10, src, dst)
 }
 
+// xor flips the bits set in src.
 pub fn (mut r Risc) xor(src Reg, dst Reg) {
 	r.rr(11, src, dst)
 }
 
+// not flips every bit of dst.
 pub fn (mut r Risc) not(dst Reg) {
 	r.emit(12, 0, dst)
 }
 
+// btst sets Z when bit n is clear.
 pub fn (mut r Risc) btst(n int, dst Reg) {
 	r.bit('btst', 13, n, dst)
 }
 
+// bset sets bit n.
 pub fn (mut r Risc) bset(n int, dst Reg) {
 	r.bit('bset', 14, n, dst)
 }
 
+// bclr clears bit n.
 pub fn (mut r Risc) bclr(n int, dst Reg) {
 	r.bit('bclr', 15, n, dst)
 }
@@ -233,6 +247,7 @@ pub fn (mut r Risc) div(src Reg, dst Reg) {
 	r.rr(21, src, dst)
 }
 
+// abs makes dst positive.
 pub fn (mut r Risc) abs(dst Reg) {
 	r.emit(22, 0, dst)
 }
@@ -255,6 +270,7 @@ pub fn (mut r Risc) sharq(n int, dst Reg) {
 	r.quick('sharq', 27, n, dst)
 }
 
+// rorq rotates right by 1..32.
 pub fn (mut r Risc) rorq(n int, dst Reg) {
 	r.quick('rorq', 29, n, dst)
 }
@@ -274,6 +290,7 @@ pub fn (mut r Risc) cmpq(n int, dst Reg) {
 
 // Moves.
 
+// move copies src to dst.
 pub fn (mut r Risc) move(src Reg, dst Reg) {
 	r.rr(34, src, dst)
 }
@@ -307,26 +324,32 @@ pub fn (mut r Risc) move_pc(dst Reg) {
 
 // Memory. Loads read `(addr)` into dst; stores write src to `(addr)`.
 
+// loadb reads a byte.
 pub fn (mut r Risc) loadb(addr Reg, dst Reg) {
 	r.rr(39, addr, dst)
 }
 
+// loadw reads a word.
 pub fn (mut r Risc) loadw(addr Reg, dst Reg) {
 	r.rr(40, addr, dst)
 }
 
+// load reads a long.
 pub fn (mut r Risc) load(addr Reg, dst Reg) {
 	r.rr(41, addr, dst)
 }
 
+// storeb writes a byte.
 pub fn (mut r Risc) storeb(src Reg, addr Reg) {
 	r.rr(45, addr, src)
 }
 
+// storew writes a word.
 pub fn (mut r Risc) storew(src Reg, addr Reg) {
 	r.rr(46, addr, src)
 }
 
+// store writes a long.
 pub fn (mut r Risc) store(src Reg, addr Reg) {
 	r.rr(47, addr, src)
 }
@@ -363,9 +386,10 @@ pub fn (mut r Risc) jr(cond Cond, name string) {
 
 // jump goes to the address in a register.
 pub fn (mut r Risc) jump(cond Cond, addr Reg) {
-	r.words << u16(52 << 10) | u16(int(addr) << 5) | u16(cond)
+	r.words << u16(52 << 10) | (u16(addr) << 5) | u16(cond)
 }
 
+// nop does nothing.
 pub fn (mut r Risc) nop() {
 	r.emit(57, 0, .r0)
 }

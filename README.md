@@ -24,7 +24,7 @@ The Jaguar is an odd machine: a Motorola 68000 that mostly gets out of the way, 
   <img src="docs/screenshots/nebula.png" width="49%" alt="A 16-bit CRY photograph shown by the object processor">
 </p>
 
-The four above are public-domain homebrew. No ROMs or boot ROM images come with this project; bring your own.
+The four above are public-domain homebrew. No commercial ROMs or boot ROM images come with this project; bring your own, or start with the [game that is built from source here](#write-your-own).
 
 ## Where it stands
 
@@ -141,6 +141,41 @@ vjag_test run game.j64 --watch-io 0xf1a100:0xf1a120          # every write to th
 vjag_test run game.j64 --frames 900 --press b@600 --press left@700+30 --screenshot shot.png   # scripted pad input
 ```
 
+## Write your own
+
+`jagkit` is a small V module for making Jaguar programs without an assembler: you write V, and V emits the image.
+
+- **Two assemblers.** One for the 68000, one for the GPU and DSP. An instruction is a method call, a label is a string, a register can have a name that means something, and V itself is the macro language.
+- **Display lists.** Describe the bitmaps; the list comes out laid out, linked and guarded for NTSC or PAL.
+- **The dull parts.** The hardware register map, nearest-colour matching into CRY, and a `.jag` writer.
+
+```v
+mut gpu := jagkit.new_risc(jagkit.gpu_ram)
+pixel := jagkit.Reg.r0
+gpu.label('next')
+gpu.loadw(texture, pixel)      // fetch a texel
+gpu.storew(pixel, target)      // put it on screen
+gpu.subq(1, left)
+gpu.jr(.ne, 'next')
+gpu.addqt(2, target)           // delay slot
+```
+
+`demos/maw` is a whole game built this way, and `demos/maw.jag` is its output, so there is something to run out of the box:
+
+```sh
+just run demos/maw.jag   # play it
+just demo                # rebuild the image from the V source first
+```
+
+<p>
+  <img src="docs/screenshots/maw-title.png" width="49%" alt="The title screen of MAW: a logo and a scroller over a textured tunnel">
+  <img src="docs/screenshots/maw-play.png" width="49%" alt="MAW in play: a ship at the bottom of the tunnel and a striped gate">
+</p>
+
+MAW is a tunnel flyer. Left and right turn the world; put the opening of each gate under the ship. The GPU draws the tunnel from a lookup table with depth fog, a gate is a few rings of the wall texture painted over, the DSP is a three-voice synthesizer and the 68000 runs the rules and the tune. Its test plays the game: it boots the image in the emulator, reads the game's variables through the assembler's symbol table and steers.
+
+It has only ever run in this emulator. Real hardware has not seen it.
+
 ## How it is put together
 
 ```
@@ -156,6 +191,8 @@ debug/     disassemblers and read-only inspection
 cli/       headless commands
 host/sdl/  window, audio stream, input
 cmd/       vjag (desktop) and vjag_test (headless)
+jagkit/    assemblers and helpers for writing Jaguar programs in V
+demos/     MAW, a game written with jagkit
 ```
 
 Processors and devices only know the `Bus` interface from `hwtypes`. `machine` owns them all and is the bus. Nothing below `cli` touches a file, a clock or SDL, and the core does not allocate while it runs: a ten-second benchmark allocates about 12 KB in total.

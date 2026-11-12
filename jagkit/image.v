@@ -77,7 +77,7 @@ pub fn cry(r int, g int, b int) u16 {
 			best_error = distance
 		}
 	}
-	return u16(best << 8) | u16(if luma > 255 {
+	return (u16(best) << 8) | u16(if luma > 255 {
 		255
 	} else {
 		luma
