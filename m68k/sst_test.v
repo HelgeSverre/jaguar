@@ -2,9 +2,11 @@
 // scripts/fetch-m68000-tests.sh) against the interpreter.
 //
 // Every test loads registers and RAM, executes one `step` and compares all
-// registers and all RAM. Cycle counts and the order of data-bus accesses are
-// compared as separate metrics. Without the corpus the test prints a SKIPPED
-// notice and passes without claiming any coverage.
+// registers (D0-D7, A0-A6, USP, SSP, SR, PC) and all RAM. Two further
+// metrics are reported per file: the cycle count (`length`) and the order,
+// address and data of the bus accesses. All three must match on every test
+// of every file; there are no exclusions. Without the corpus the test prints
+// a SKIPPED notice and passes without claiming any coverage.
 //
 // Environment:
 //   M68K_SST_FILTER=<substring>  only run corpus files whose name contains it
@@ -14,14 +16,26 @@
 // - The state PC is MAME's `m_au`, four bytes past the opcode address; the
 //   two prefetched words are also present in RAM, so execution simply starts
 //   at PC-4 and the final PC is compared as `cpu.pc + 4`.
-// - Tests run with the trace bit set do not include the trace exception that
-//   would follow; a single `step` stops before it as well.
 // - After STOP the corpus PC is not advanced by a prefetch, so it equals
 //   the address of the next instruction.
+// - Tests run with the trace bit set do not include the trace exception that
+//   would follow; a single `step` stops before it as well.
 // - RAM is listed as 16-bit words; byte accesses appear on the bus without
 //   A0 and are told apart by the UDS/LDS strobes.
 // - Transactions of kind "re"/"we" are the refused bus cycles of an address
 //   error and are not real accesses.
+// - The bus-order metric compares every write exactly and requires the
+//   corpus data-space reads to appear in order among the core's reads. The
+//   core fetches an opcode when it executes it instead of prefetching, so
+//   program-space reads are not comparable one to one and are skipped.
+//
+// Corpus caveats named in its README, and how they turn out:
+// - TAS: the corpus does not model the indivisible read-modify-write bus
+//   cycle and records an ordinary read followed by a write. That is also
+//   what this core does, so TAS is compared in full and matches.
+// - TRAPV: the README suspects a dependence on the S bit. The pinned corpus
+//   traps exactly when V is set, in both modes, so TRAPV is compared in full
+//   and matches.
 module m68k
 
 import os
@@ -321,10 +335,6 @@ fn run_file(path string, mut bus testbus.TestBus, show int) FileResult {
 	return res
 }
 
-// Corpus files whose mismatches are accepted, each with the reason. Every
-// other file must match on all tests.
-const state_exclusions = map[string]string{}
-
 fn test_single_step_corpus() {
 	if !os.is_dir(corpus_dir) {
 		println('SKIPPED: SingleStepTests/m68000 corpus not found at ${corpus_dir}')
@@ -353,15 +363,12 @@ fn test_single_step_corpus() {
 		sum.state += res.state
 		sum.cycles += res.cycles
 		sum.bus += res.bus
-		if res.state != res.total && res.name !in state_exclusions {
+		if res.state != res.total || res.cycles != res.total || res.bus != res.total {
 			failed << res.name
 		}
 	}
 	println('${sum.name:-16} ${sum.total:7} ${sum.state:7} ${sum.cycles:7} ${sum.bus:7}')
-	for name, reason in state_exclusions {
-		println('excluded from the state gate: ${name}: ${reason}')
-	}
 	if failed.len > 0 {
-		fail('state mismatches in: ${failed.join(', ')}')
+		fail('state, cycle or bus-order mismatches in: ${failed.join(', ')}')
 	}
 }

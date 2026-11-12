@@ -4,6 +4,7 @@ import hwtypes
 
 // dispatch runs the handler selected by the decode table for the opcode
 // held in `c.ir`.
+@[inline]
 fn (mut c Cpu) dispatch(mut bus hwtypes.Bus, op Op) {
 	match op {
 		.illegal { c.illegal(mut bus, vector_illegal) }

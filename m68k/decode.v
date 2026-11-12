@@ -91,8 +91,6 @@ enum Op as u8 {
 // Addressing-mode categories as bit sets: bit n stands for mode n (0..6) or
 // for mode 7 with register field n-7. They are plain literals because the
 // decode table below is built during constant initialisation.
-const ea_dn = u16(0x001)
-const ea_an = u16(0x002)
 const ea_postinc = u16(0x008)
 const ea_predec = u16(0x010)
 const ea_imm = u16(0x800)

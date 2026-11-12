@@ -65,6 +65,10 @@ pub fn (mut c Cpu) reset(mut bus hwtypes.Bus) {
 // step runs one instruction, or one trace or interrupt exception entry, and
 // returns the number of MC68000 clock cycles it consumed. The result is never
 // zero: a stopped or halted processor reports a small idle quantum.
+//
+// Callers should hold the bus as a `hwtypes.Bus` value and pass that: V boxes
+// a concrete bus type on every implicit conversion to the interface, which
+// would put a heap allocation into each call.
 pub fn (mut c Cpu) step(mut bus hwtypes.Bus) u32 {
 	if c.halted {
 		c.cycles += idle_quantum
