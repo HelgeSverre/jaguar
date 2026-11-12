@@ -224,7 +224,7 @@ fn (mut m Machine) io_read8(a u32) u8 {
 	if a < jerry_base {
 		offset := tom_offset(a)
 		if offset >= gpu_ram && offset < gpu_ram_end {
-			return m.gpu.read_ram8(offset)
+			return m.gpu.read_ram8(offset - gpu_ram)
 		}
 	} else {
 		offset := a & 0xffff
@@ -337,7 +337,7 @@ fn (mut m Machine) io_write8(a u32, value u8) {
 	if a < jerry_base {
 		offset := tom_offset(a)
 		if offset >= gpu_ram && offset < gpu_ram_end {
-			m.gpu.write_ram8(offset, value)
+			m.gpu.write_ram8(offset - gpu_ram, value)
 			return
 		}
 	} else {
@@ -401,7 +401,7 @@ pub fn (m &Machine) peek8(addr u32) u8 {
 	if a < jerry_base {
 		offset := tom_offset(a)
 		if offset >= gpu_ram && offset < gpu_ram_end {
-			return m.gpu.read_ram8(offset)
+			return m.gpu.read_ram8(offset - gpu_ram)
 		}
 		if offset < tom_registers_end {
 			value := m.tom.read16(offset & 0xfffe)

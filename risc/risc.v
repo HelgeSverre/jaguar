@@ -283,34 +283,36 @@ pub fn (mut c Risc) write_ctrl32(offset u32, value u32) {
 	}
 }
 
-// read_ram8 reads local RAM for another bus master; `addr` is masked.
+// read_ram8 reads local RAM for another bus master. `offset` is relative
+// to `ram_base` and wraps at the RAM size.
 @[direct_array_access; inline]
-pub fn (c &Risc) read_ram8(addr u32) u8 {
-	return c.ram[addr & (c.ram_size - 1)]
+pub fn (c &Risc) read_ram8(offset u32) u8 {
+	return c.ram[offset & (c.ram_size - 1)]
 }
 
-// write_ram8 writes local RAM for another bus master; `addr` is masked.
+// write_ram8 writes local RAM for another bus master. `offset` is relative
+// to `ram_base` and wraps at the RAM size.
 @[direct_array_access; inline]
-pub fn (mut c Risc) write_ram8(addr u32, value u8) {
-	c.ram[addr & (c.ram_size - 1)] = value
+pub fn (mut c Risc) write_ram8(offset u32, value u8) {
+	c.ram[offset & (c.ram_size - 1)] = value
 }
 
 @[direct_array_access; inline]
 fn (c &Risc) ram16(addr u32) u32 {
-	i := addr & (c.ram_size - 2)
+	i := (addr - c.ram_base) & (c.ram_size - 2)
 	return (u32(c.ram[i]) << 8) | c.ram[i + 1]
 }
 
 @[direct_array_access; inline]
 fn (c &Risc) ram32(addr u32) u32 {
-	i := addr & (c.ram_size - 4)
+	i := (addr - c.ram_base) & (c.ram_size - 4)
 	return (u32(c.ram[i]) << 24) | (u32(c.ram[i + 1]) << 16) | (u32(c.ram[i + 2]) << 8) | c.ram[i +
 		3]
 }
 
 @[direct_array_access; inline]
 fn (mut c Risc) set_ram32(addr u32, value u32) {
-	i := addr & (c.ram_size - 4)
+	i := (addr - c.ram_base) & (c.ram_size - 4)
 	c.ram[i] = u8(value >> 24)
 	c.ram[i + 1] = u8(value >> 16)
 	c.ram[i + 2] = u8(value >> 8)

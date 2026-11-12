@@ -255,6 +255,20 @@ fn test_dsp_accumulator_is_forty_bits() {
 	assert c.regs[3] == 0x7fff_ffff
 }
 
+fn test_dsp_program_runs_from_its_unaligned_ram_base() {
+	// The DSP's RAM base is not a multiple of its size, so indexing must be
+	// relative to the base.
+	mut c := new_dsp()
+	mut bus := &TestBus{}
+	mut program := movei(c.ram_base + 0x100, 1)
+	program << ins(.store, 1, 1)
+	program << ins(.load, 1, 2)
+	program << stop(c)
+	load_and_run(mut c, mut bus, program)
+	assert c.regs[2] == c.ram_base + 0x100
+	assert c.read_ram8(0x101) == 0xf1
+}
+
 fn test_dsp_modulo_addressing() {
 	mut c := new_dsp()
 	mut bus := &TestBus{}

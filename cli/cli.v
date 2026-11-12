@@ -13,6 +13,7 @@ commands:
   run <image>                run headlessly for a number of frames
   compat <directory>         boot every image and write a triage report
   bench <image>              measure unthrottled emulation speed
+  trace <image>              show the last GPU or DSP instructions before a stop
 
 common options:
   --region ntsc|pal          television standard (default ntsc)
@@ -21,7 +22,10 @@ common options:
   --entry <addr>             entry point override
   --frames <n>               frames to run
   --screenshot <png>         run: save the final frame
-  --dump                     run: print machine state at the end'
+  --dump                     run: print machine state at the end
+  --cpu gpu|dsp              trace: processor to watch (default dsp)
+  --tail <n>                 trace: instructions to print (default 64)
+  --stop-pc <addr>           trace: stop when the processor reaches addr'
 
 // main_headless runs a headless command and returns the process exit code.
 // `args` excludes the executable name.
@@ -39,7 +43,7 @@ pub fn main_headless(args []string) int {
 
 // is_headless_command reports whether `name` is handled by `main_headless`.
 pub fn is_headless_command(name string) bool {
-	return name in ['inspect', 'run', 'compat', 'bench', 'help', '--help', '-h']
+	return name in ['inspect', 'run', 'compat', 'bench', 'trace', 'help', '--help', '-h']
 }
 
 // parse_image_args parses the image options shared by every command and
@@ -77,16 +81,37 @@ fn run_command(command string, args []string) ! {
 	as_json := parser.bool('json', 0, false, 'machine-readable output')
 	dump_state := parser.bool('dump', 0, false,
 		'print processor, video and display-list state at the end')
+	processor := parser.string('cpu', 0, 'dsp', 'processor to trace')
+	tail := parser.int('tail', 0, 64, 'instructions to print')
+	stop_text := parser.string('stop-pc', 0, '', 'stop address')
 	free := parser.finalize()!
 	if free.len != 1 {
 		return error('${command}: expected exactly one path\n\n${usage}')
 	}
 	match command {
-		'inspect' { inspect(free[0], options, as_json)! }
-		'run' { run_headless(free[0], options, frames, screenshot, dump_state)! }
-		'compat' { run_compat(free[0], frames, report, screenshots)! }
-		'bench' { bench(free[0], options, frames)! }
-		else { return error('unknown command "${command}"\n\n${usage}') }
+		'inspect' {
+			inspect(free[0], options, as_json)!
+		}
+		'run' {
+			run_headless(free[0], options, frames, screenshot, dump_state)!
+		}
+		'compat' {
+			run_compat(free[0], frames, report, screenshots)!
+		}
+		'bench' {
+			bench(free[0], options, frames)!
+		}
+		'trace' {
+			trace(free[0], options, TraceOptions{
+				processor: if processor == 'gpu' { .gpu } else { .dsp }
+				frames:    frames
+				tail:      tail
+				stop_pc:   if stop_text == '' { none } else { parse_address(stop_text)! }
+			})!
+		}
+		else {
+			return error('unknown command "${command}"\n\n${usage}')
+		}
 	}
 }
 
@@ -113,6 +138,15 @@ fn run_headless(path string, options ImageOptions, frames int, screenshot string
 	print_counters(m)
 	if dump_state {
 		print(debug.processors(m))
+		print(debug.hex_dump(m, (m.cpu.pc - 32) & 0xff_fffe, 96))
+		if m.gpu.running {
+			print(debug.registers_risc(m.gpu))
+			print(debug.risc_listing(m, .gpu, m.gpu.pc - 24, 28))
+		}
+		if m.dsp.running {
+			print(debug.registers_risc(m.dsp))
+			print(debug.risc_listing(m, .dsp, m.dsp.pc - 24, 28))
+		}
 		print(debug.video_registers(m))
 		print(debug.object_list(m, 100))
 	}

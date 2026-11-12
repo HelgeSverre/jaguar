@@ -33,6 +33,9 @@ pub fn (mut m Machine) advance(deadline u64, stop_at_frame bool) StopReason {
 	m.frame_done = false
 	for m.tick < deadline {
 		mut target := m.tick + m.config.quantum
+		if deadline < target {
+			target = deadline
+		}
 		next := m.next_event()
 		if next < target {
 			target = next
