@@ -196,8 +196,10 @@ fn new_window(base u32, flags u32, pixel u32, fpixel u32) Window {
 // holds it and its index within that phrase.
 @[inline]
 fn (w &Window) phrase_and_slot() (u32, u32) {
-	x := (w.x >> 16) & 0xffff
-	y := (w.y >> 16) & 0xffff
+	// The pointers are signed: a line step may leave X negative, which
+	// addresses pixels before the start of line Y.
+	x := hwtypes.sext16(w.x >> 16)
+	y := hwtypes.sext16(w.y >> 16)
 	index := y * w.width + x
 	per_phrase_shift := 6 - w.psize
 	phrase := index >> per_phrase_shift

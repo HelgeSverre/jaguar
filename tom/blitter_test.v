@@ -171,3 +171,25 @@ fn test_word_writes_start_the_blit_on_the_low_half() {
 	assert b.blits == 1
 	assert bus.read16(target_base) == 0x0bad
 }
+
+fn test_negative_x_addresses_the_previous_line() {
+	// Source lines of 4 pixels stored back to back in a window declared 64
+	// wide: the step of 1 line and -64 pixels walks them contiguously.
+	mut bus := hwtypes.new_ram_bus(0x10_0000)
+	mut b := Blitter{}
+	for i in u32(0) .. 8 {
+		bus.write16(source_base + i * 2, u16(0x100 + i))
+	}
+	b.set(mut bus, b_a1_base, target_base)
+	b.set(mut bus, b_a1_flags, flags_16bpp_w64 | xadd_pix)
+	b.set(mut bus, b_a1_step, (1 << 16) | u32(u16(-4)))
+	b.set(mut bus, b_a2_base, source_base)
+	b.set(mut bus, b_a2_flags, flags_16bpp_w64 | xadd_pix)
+	b.set(mut bus, b_a2_step, (1 << 16) | u32(u16(-64)))
+	b.set(mut bus, b_count, (2 << 16) | 4)
+	b.set(mut bus, b_cmd, cmd_srcen | cmd_upda1 | cmd_upda2 | (0xc << 21))
+	for i in u32(0) .. 4 {
+		assert bus.read16(target_base + i * 2) == u16(0x100 + i)
+		assert bus.read16(target_base + (64 + i) * 2) == u16(0x104 + i)
+	}
+}

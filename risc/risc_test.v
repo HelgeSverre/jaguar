@@ -294,3 +294,11 @@ fn test_dsp_modulo_addressing() {
 	load_and_run(mut c, mut bus, program)
 	assert c.regs[1] == 0x0000_1004
 }
+
+fn test_normi_normalises_to_bit_23() {
+	assert normalisation_integer(0) == 0
+	assert normalisation_integer(0x0080_0000) == 0
+	assert normalisation_integer(320) == u32(-15)
+	assert normalisation_integer(1) == u32(-23)
+	assert normalisation_integer(0x8000_0000) == 8
+}

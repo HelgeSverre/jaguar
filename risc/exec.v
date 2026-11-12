@@ -547,19 +547,21 @@ fn reverse_bits(value u32) u32 {
 	return (v >> 16) | (v << 16)
 }
 
-// normalisation_integer implements NORMI: the shift that brings a mantissa
-// into the 24-bit floating-point format used by the matrix code.
+// normalisation_integer implements NORMI: the signed number of right shifts
+// that brings the operand's most significant set bit to bit 23, the position
+// of the leading one in the 24-bit mantissa format. Small operands give a
+// negative count (left shifts).
 fn normalisation_integer(value u32) u32 {
 	if value == 0 {
 		return 0
 	}
 	mut v := value
 	mut result := u32(0)
-	for v & 0xffc0_0000 == 0 {
+	for v & 0xff80_0000 == 0 {
 		v <<= 1
 		result--
 	}
-	for v & 0xff80_0000 != 0 {
+	for v & 0xff00_0000 != 0 {
 		v >>= 1
 		result++
 	}
