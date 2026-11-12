@@ -2,6 +2,7 @@
 # External tools: v (0.5.2), clang, SDL3, hyperfine (benchmark only).
 
 set shell := ["sh", "-cu"]
+set positional-arguments := true
 
 install_dir := env_var('HOME') / ".local/bin"
 rom_dir := "data/roms"
@@ -31,17 +32,17 @@ clean:
 # Run the optimized desktop app, e.g. `just run path/to/image.jag`.
 [group('run')]
 run *args: release
-    ./bin/vjag {{ args }}
+    ./bin/vjag "$@"
 
 # Run the debug desktop app (runtime checks kept, slower).
 [group('run')]
 dev *args: build
-    ./bin/vjag-debug {{ args }}
+    ./bin/vjag-debug "$@"
 
 # Run the headless runner, e.g. `just headless inspect image.jag --json`.
 [group('run')]
 headless *args: release
-    ./bin/vjag_test {{ args }}
+    ./bin/vjag_test "$@"
 
 # Unit tests; optionally limit to one module, e.g. `just test m68k`.
 [group('check')]
