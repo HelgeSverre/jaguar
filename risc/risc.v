@@ -331,7 +331,9 @@ fn (mut c Risc) load32(mut bus hwtypes.Bus, addr u32) u32 {
 	if c.owns_ctrl(addr) {
 		return c.read_ctrl32(addr - c.ctrl_base)
 	}
-	return bus.read32(addr & 0xffff_fffc)
+	// The external bus is 16 bits wide: a long is two word transfers and
+	// needs only word alignment.
+	return bus.read32(addr & 0xffff_fffe)
 }
 
 // store32 is a processor-initiated long write.
@@ -342,7 +344,7 @@ fn (mut c Risc) store32(mut bus hwtypes.Bus, addr u32, value u32) {
 	} else if c.owns_ctrl(addr) {
 		c.write_ctrl32(addr - c.ctrl_base, value)
 	} else {
-		bus.write32(addr & 0xffff_fffc, value)
+		bus.write32(addr & 0xffff_fffe, value)
 	}
 }
 

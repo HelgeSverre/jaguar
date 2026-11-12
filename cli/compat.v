@@ -11,6 +11,7 @@ import machine
 pub enum Verdict {
 	load_error     // the loader refused the image
 	halted         // the 68000 double-faulted
+	crashed        // the 68000 ended outside any program: vector table, I/O or unmapped space
 	blank          // every sampled frame was a single colour
 	static_picture // a picture appeared and never changed
 	animated       // the picture changed between samples
@@ -59,6 +60,16 @@ fn press_script(mut m machine.Machine, frame int) {
 	m.set_button(0, jerry.Button.c, phase >= 60 && phase < 66)
 }
 
+// plausible_program_counter reports whether the 68000 is executing where a
+// program can live: RAM above the vector table or the cartridge image.
+fn plausible_program_counter(m &machine.Machine) bool {
+	pc := m.cpu.pc & 0xff_ffff
+	in_ram := pc >= 0x400 && pc < machine.ram_size
+	in_cartridge := pc >= machine.cart_base && pc < machine.cart_base + machine.cart_window
+		&& m.rom.len > 0
+	return pc & 1 == 0 && (in_ram || in_cartridge)
+}
+
 // run_compat_image boots one image headlessly and triages it.
 pub fn run_compat_image(path string, frames int, screenshot_dir string) CompatResult {
 	name := os.file_name(path)
@@ -96,6 +107,8 @@ pub fn run_compat_image(path string, frames int, screenshot_dir string) CompatRe
 	}
 	verdict := if halted {
 		Verdict.halted
+	} else if !plausible_program_counter(m) {
+		Verdict.crashed
 	} else if best.colours <= 1 {
 		Verdict.blank
 	} else if checksums.len <= 1 {
@@ -107,7 +120,7 @@ pub fn run_compat_image(path string, frames int, screenshot_dir string) CompatRe
 		name:             name
 		kind:             '${session.plan.kind} ${session.plan.variant}'.trim_space()
 		verdict:          verdict.str()
-		detail:           if halted { m.cpu.str_state() } else { '' }
+		detail:           if verdict in [.halted, .crashed] { m.cpu.str_state() } else { '' }
 		frames:           m.counters.frames
 		cpu_instructions: m.counters.cpu_instructions
 		gpu_instructions: m.gpu.instructions

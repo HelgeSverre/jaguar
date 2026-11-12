@@ -78,10 +78,12 @@ pub fn (mut m Machine) read16(addr u32) u16 {
 @[direct_array_access]
 pub fn (mut m Machine) read32(addr u32) u32 {
 	a := addr & address_mask
-	if a < ram_mirror_end {
-		i := a & (ram_size - 4)
-		return (u32(m.ram[i]) << 24) | (u32(m.ram[i + 1]) << 16) | (u32(m.ram[i + 2]) << 8) | m.ram[
-			i + 3]
+	if a < ram_mirror_end - 3 {
+		i := a & (ram_size - 1)
+		if i <= ram_size - 4 {
+			return (u32(m.ram[i]) << 24) | (u32(m.ram[i + 1]) << 16) | (u32(m.ram[i + 2]) << 8) | m.ram[
+				i + 3]
+		}
 	}
 	if a >= io_base {
 		return m.io_read32(a & 0xff_fffc)
@@ -117,14 +119,18 @@ pub fn (mut m Machine) write16(addr u32, val u16) {
 @[direct_array_access]
 pub fn (mut m Machine) write32(addr u32, val u32) {
 	a := addr & address_mask
-	if a < ram_mirror_end {
-		i := a & (ram_size - 4)
+	i := a & (ram_size - 1)
+	if a < ram_mirror_end - 3 && i <= ram_size - 4 {
 		m.ram[i] = u8(val >> 24)
 		m.ram[i + 1] = u8(val >> 16)
 		m.ram[i + 2] = u8(val >> 8)
 		m.ram[i + 3] = u8(val)
 	} else if a >= io_base {
 		m.io_write32(a & 0xff_fffc, val)
+	} else {
+		// A long that straddles the end of RAM or its mirror.
+		m.write16(a, u16(val >> 16))
+		m.write16(a + 2, u16(val))
 	}
 }
 
