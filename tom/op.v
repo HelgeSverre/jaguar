@@ -17,7 +17,7 @@ const object_stop = u32(4)
 const max_objects_per_line = 512
 
 // one is 1.0 in the 3.5 fixed-point format of the scaling fields.
-const one = 0x20
+const one = u32(0x20)
 
 // BitmapObject is the decoded second phrase of a bitmap object.
 struct BitmapObject {
@@ -145,26 +145,28 @@ fn advance_bitmap(p0 u64, height u32, dwidth u64) u64 {
 	return (p0 & 0x0000_07ff_ff00_3fff) | (u64(height) << 14) | (data << 43)
 }
 
-// advance_scaled steps a scaled object's vertical remainder by one display
-// line and writes the consumed source lines back to the object.
+// advance_scaled steps a scaled object by one display line. While the
+// vertical remainder is below 1.0 it is topped up by VSCALE and one source
+// line is consumed; then the displayed line costs 1.0. Consumed lines are
+// written back to the object's height and data pointer, the remainder to
+// its third phrase. A zero VSCALE behaves as 1.0.
 fn (mut t Tom) advance_scaled(mut bus hwtypes.Bus, addr u32, p0 u64, p1 u64, p2 u64) {
-	vscale := int(p2 >> 8) & 0xff
-	mut remainder := (int(p2 >> 16) & 0xff) - one
+	vscale := if (p2 >> 8) & 0xff == 0 { u32(one) } else { u32(p2 >> 8) & 0xff }
+	mut remainder := u32(p2 >> 16) & 0xff
 	mut height := u32(p0 >> 14) & 0x3ff
 	mut lines := u64(0)
-	if vscale != 0 {
-		for remainder <= 0 {
-			remainder += vscale
-			lines++
-			if height > 0 {
-				height--
-			}
+	for remainder < one {
+		remainder += vscale
+		lines++
+		if height > 0 {
+			height--
 		}
 	}
 	if lines > 0 {
 		dwidth := (p1 >> 18) & 0x3ff
 		write_phrase(mut bus, addr, advance_bitmap(p0, height, dwidth * lines))
 	}
+	remainder -= one
 	write_phrase(mut bus, addr + 16, (p2 & ~u64(0xff_0000)) | (u64(remainder & 0xff) << 16))
 }
 
@@ -184,6 +186,7 @@ fn (mut t Tom) draw_bitmap(mut bus hwtypes.Bus, o BitmapObject) {
 	limit := if o.depth == 5 { lbuf_pixels / 2 } else { lbuf_pixels }
 	step := if o.reflect { -1 } else { 1 }
 	hscale := int(o.hscale)
+	unit := int(one)
 
 	mut source := o.first_pix >> o.depth
 	mut x := o.xpos
@@ -207,7 +210,7 @@ fn (mut t Tom) draw_bitmap(mut bus hwtypes.Bus, o BitmapObject) {
 			}
 		}
 		x += step
-		remainder -= one
+		remainder -= unit
 		for remainder <= 0 {
 			remainder += hscale
 			source++

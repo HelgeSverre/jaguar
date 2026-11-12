@@ -120,7 +120,8 @@ pub mut:
 	frame_width    int   = 325
 	frame_height   int   = 240
 	frame_sequence u64
-	pixel_divider  u32 = 4
+	pixel_divider  u32 = 4 // divider the frame is presented at
+	finest_divider u32 // smallest divider of the lines shown so far
 }
 
 // new creates TOM for a television standard.
@@ -281,8 +282,17 @@ pub fn (mut t Tom) half_line(mut bus hwtypes.Bus) bool {
 // next one from the pixel clock divider.
 fn (mut t Tom) begin_frame() {
 	t.frame_sequence++
-	t.pixel_divider = ((u32(t.regs[reg_vmode >> 1]) >> 9) & 7) + 1
+	// The picture is as fine as the finest line of the field just shown; a
+	// guest may switch the divider between lines.
+	t.pixel_divider = if t.finest_divider == 0 { t.line_divider() } else { t.finest_divider }
+	t.finest_divider = 0
 	t.frame_width = visible_hc_width / int(t.pixel_divider)
+}
+
+// line_divider returns the pixel clock divider currently programmed.
+@[inline]
+fn (t &Tom) line_divider() u32 {
+	return ((u32(t.regs[reg_vmode >> 1]) >> 9) & 7) + 1
 }
 
 // frame_info describes the most recently completed frame.
@@ -354,21 +364,26 @@ fn (mut t Tom) finish_line() {
 		}
 		return
 	}
-	divider := int(t.pixel_divider)
-	first := (t.linear_hc(t.regs[reg_hdb1 >> 1]) - t.raster.left_hc) / divider
-	mut last := (t.linear_hc(t.regs[reg_hde >> 1]) - t.raster.left_hc) / divider
-	if last > width {
-		last = width
+	// Each output pixel samples the line buffer at its own horizontal
+	// counter position, so lines with a coarser divider than the frame's
+	// are widened.
+	divider := int(t.line_divider())
+	if t.finest_divider == 0 || u32(divider) < t.finest_divider {
+		t.finest_divider = u32(divider)
 	}
+	frame_divider := int(t.pixel_divider)
+	display_begin := t.linear_hc(t.regs[reg_hdb1 >> 1])
+	display_end := t.linear_hc(t.regs[reg_hde >> 1])
 	vmode := t.regs[reg_vmode >> 1]
 	mode := (vmode >> 1) & 3
 	variable := vmode & vmode_variable_colour != 0
 	for x in 0 .. width {
-		source := x - first
-		if x >= last || source < 0 {
+		hc := t.raster.left_hc + x * frame_divider
+		if hc < display_begin || hc >= display_end {
 			t.frame[base + x] = border
 			continue
 		}
+		source := (hc - display_begin) / divider
 		t.frame[base + x] = match mode {
 			0 {
 				if source >= lbuf_pixels {

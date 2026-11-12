@@ -144,11 +144,15 @@ fn test_scaled_object_doubles_pixels_and_lines() {
 
 	t.compose(mut bus, 0)
 	assert t.lbuf[0..8] == [u16(0xa), 0xa, 0xb, 0xb, 0xc, 0xc, 0xd, 0xd]
-	assert (bus.read64(list) >> 14) & 0x3ff == 2, 'first source line shows twice'
+	assert (bus.read64(list) >> 14) & 0x3ff == 2, 'remainder 2.0 covers the first two lines'
 	t.compose(mut bus, 2)
 	assert t.lbuf[0] == 0xa
-	assert (bus.read64(list) >> 14) & 0x3ff == 1
+	assert (bus.read64(list) >> 14) & 0x3ff == 2
 	t.compose(mut bus, 4)
+	assert t.lbuf[0] == 0xa, 'the source line advances after this line is drawn'
+	assert (bus.read64(list) >> 14) & 0x3ff == 1
+	assert u32(bus.read64(list) >> 40) & 0xff_fff8 == image + 8
+	t.compose(mut bus, 6)
 	assert t.lbuf[0] == 0x1a
 }
 

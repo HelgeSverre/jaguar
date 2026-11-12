@@ -23,6 +23,7 @@ common options:
   --frames <n>               frames to run
   --screenshot <png>         run: save the final frame
   --dump                     run: print machine state at the end
+  --peek <addr[:len]>        run: print memory at the end (repeatable)
   --cpu gpu|dsp              trace: processor to watch (default dsp)
   --tail <n>                 trace: instructions to print (default 64)
   --stop-pc <addr>           trace: stop when the processor reaches addr'
@@ -81,6 +82,7 @@ fn run_command(command string, args []string) ! {
 	as_json := parser.bool('json', 0, false, 'machine-readable output')
 	dump_state := parser.bool('dump', 0, false,
 		'print processor, video and display-list state at the end')
+	peeks := parser.string_multi('peek', 0, 'memory range to print')
 	processor := parser.string('cpu', 0, 'dsp', 'processor to trace')
 	tail := parser.int('tail', 0, 64, 'instructions to print')
 	stop_text := parser.string('stop-pc', 0, '', 'stop address')
@@ -93,7 +95,7 @@ fn run_command(command string, args []string) ! {
 			inspect(free[0], options, as_json)!
 		}
 		'run' {
-			run_headless(free[0], options, frames, screenshot, dump_state)!
+			run_headless(free[0], options, frames, screenshot, dump_state, peeks)!
 		}
 		'compat' {
 			run_compat(free[0], frames, report, screenshots)!
@@ -126,7 +128,7 @@ fn inspect(path string, options ImageOptions, as_json bool) ! {
 }
 
 // run_headless runs an image for a fixed number of frames.
-fn run_headless(path string, options ImageOptions, frames int, screenshot string, dump_state bool) ! {
+fn run_headless(path string, options ImageOptions, frames int, screenshot string, dump_state bool, peeks []string) ! {
 	mut session := open_session(path, options)!
 	mut m := session.machine
 	for _ in 0 .. frames {
@@ -149,6 +151,11 @@ fn run_headless(path string, options ImageOptions, frames int, screenshot string
 		}
 		print(debug.video_registers(m))
 		print(debug.object_list(m, 100))
+	}
+	for peek in peeks {
+		addr := parse_address(peek.all_before(':'))!
+		length := if peek.contains(':') { parse_address(peek.all_after(':'))! } else { u32(64) }
+		print(debug.hex_dump(m, addr, length))
 	}
 	if screenshot != '' {
 		os.mkdir_all(os.dir(screenshot))!
