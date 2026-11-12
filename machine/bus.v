@@ -16,7 +16,6 @@
 // long write (two word transfers) reaches them.
 module machine
 
-import hwtypes
 
 const address_mask = u32(0xff_ffff)
 const ram_mirror_end = u32(0x40_0000)
@@ -252,7 +251,7 @@ fn (mut m Machine) io_write32(a u32, value u32) {
 			return
 		}
 		if offset >= blitter && offset < blitter_end {
-			mut bus := hwtypes.Bus(m)
+			mut bus := m.self_bus
 			m.tom.blitter.write32(offset - blitter, value, mut bus)
 			return
 		}
@@ -289,7 +288,7 @@ fn (mut m Machine) io_write16(a u32, value u16) {
 	if a < jerry_base {
 		offset := tom_offset(a)
 		if offset < tom_registers_end {
-			mut bus := hwtypes.Bus(m)
+			mut bus := m.self_bus
 			m.tom.write16(offset, value, mut bus)
 			m.sync()
 		}
@@ -313,7 +312,7 @@ fn (mut m Machine) io_write16(a u32, value u16) {
 fn (mut m Machine) write_long_block16(a u32, value u16) {
 	offset := if a < jerry_base { tom_offset(a) } else { a & 0xffff }
 	if a < jerry_base && offset >= blitter && offset < blitter_end {
-		mut bus := hwtypes.Bus(m)
+		mut bus := m.self_bus
 		m.tom.blitter.write16(offset - blitter, value, mut bus)
 		return
 	}

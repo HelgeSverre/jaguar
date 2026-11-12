@@ -122,8 +122,10 @@ pub fn run_compat_image(path string, frames int, screenshot_dir string) CompatRe
 	}
 }
 
-// run_compat sweeps a directory of images and writes the report.
-pub fn run_compat(dir string, frames int, report_path string, screenshot_dir string) ! {
+// run_compat sweeps a directory of images on `jobs` worker threads and
+// writes the report. Machines share nothing, so the sweep parallelises
+// without changing any result.
+pub fn run_compat(dir string, frames int, report_path string, screenshot_dir string, jobs int) ! {
 	mut paths := os.ls(dir)!.filter(os.is_file(os.join_path(dir, it)) && !it.starts_with('.'))
 	paths.sort()
 	if screenshot_dir != '' {
@@ -131,11 +133,17 @@ pub fn run_compat(dir string, frames int, report_path string, screenshot_dir str
 	}
 	mut results := []CompatResult{}
 	mut tally := map[string]int{}
-	for name in paths {
-		result := run_compat_image(os.join_path(dir, name), frames, screenshot_dir)
-		tally[result.verdict]++
-		println('${result.verdict:-15} ${result.seconds:6.1f}s colours=${result.colours:-5} frames=${result.distinct_frames} gpu=${result.gpu_instructions} dsp=${result.dsp_instructions} blits=${result.blits}  ${name}')
-		results << result
+	for start := 0; start < paths.len; start += jobs {
+		end := if start + jobs < paths.len { start + jobs } else { paths.len }
+		mut workers := []thread CompatResult{}
+		for name in paths[start..end] {
+			workers << spawn run_compat_image(os.join_path(dir, name), frames, screenshot_dir)
+		}
+		for result in workers.wait() {
+			tally[result.verdict]++
+			println('${result.verdict:-15} ${result.seconds:6.1f}s colours=${result.colours:-5} frames=${result.distinct_frames} gpu=${result.gpu_instructions} dsp=${result.dsp_instructions} blits=${result.blits}  ${result.name}')
+			results << result
+		}
 	}
 	println('')
 	for verdict, count in tally {

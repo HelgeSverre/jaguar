@@ -2,6 +2,7 @@ module cli
 
 import os
 import flag
+import runtime
 import time
 import machine
 import debug
@@ -21,9 +22,11 @@ common options:
   --load-address <addr>      load address for raw images
   --entry <addr>             entry point override
   --frames <n>               frames to run
+  --jobs <n>                 compat: parallel workers (default: all cores)
   --screenshot <png>         run: save the final frame
   --dump                     run: print machine state at the end
   --peek <addr[:len]>        run: print memory at the end (repeatable)
+  --list <addr[:count]>      run: disassemble 68000 code at the end (repeatable)
   --cpu m68k|gpu|dsp         trace: processor to follow (default dsp)
   --tail <n>                 trace: instructions to print (default 64)
   --stop-pc <addr>           trace: stop when the processor reaches addr
@@ -82,10 +85,12 @@ fn run_command(command string, args []string) ! {
 	screenshot := parser.string('screenshot', 0, '', 'write the final frame as PNG')
 	screenshots := parser.string('screenshots', 0, '', 'directory for sampled frames')
 	report := parser.string('report-json', 0, '', 'write the report as JSON')
+	jobs := parser.int('jobs', 0, runtime.nr_cpus(), 'parallel workers for compat')
 	as_json := parser.bool('json', 0, false, 'machine-readable output')
 	dump_state := parser.bool('dump', 0, false,
 		'print processor, video and display-list state at the end')
 	peeks := parser.string_multi('peek', 0, 'memory range to print')
+	listings := parser.string_multi('list', 0, '68000 code range to disassemble')
 	processor := parser.string('cpu', 0, 'dsp', 'processor to trace')
 	tail := parser.int('tail', 0, 64, 'instructions to print')
 	stop_text := parser.string('stop-pc', 0, '', 'stop address')
@@ -101,10 +106,10 @@ fn run_command(command string, args []string) ! {
 			inspect(free[0], options, as_json)!
 		}
 		'run' {
-			run_headless(free[0], options, frames, screenshot, dump_state, peeks)!
+			run_headless(free[0], options, frames, screenshot, dump_state, peeks, listings)!
 		}
 		'compat' {
-			run_compat(free[0], frames, report, screenshots)!
+			run_compat(free[0], frames, report, screenshots, if jobs < 1 { 1 } else { jobs })!
 		}
 		'bench' {
 			bench(free[0], options, frames)!
@@ -153,7 +158,7 @@ fn inspect(path string, options ImageOptions, as_json bool) ! {
 }
 
 // run_headless runs an image for a fixed number of frames.
-fn run_headless(path string, options ImageOptions, frames int, screenshot string, dump_state bool, peeks []string) ! {
+fn run_headless(path string, options ImageOptions, frames int, screenshot string, dump_state bool, peeks []string, listings []string) ! {
 	mut session := open_session(path, options)!
 	mut m := session.machine
 	for _ in 0 .. frames {
@@ -182,6 +187,11 @@ fn run_headless(path string, options ImageOptions, frames int, screenshot string
 		length := if peek.contains(':') { parse_address(peek.all_after(':'))! } else { u32(64) }
 		print(debug.hex_dump(m, addr, length))
 	}
+	for listing in listings {
+		addr := parse_address(listing.all_before(':'))!
+		count := if listing.contains(':') { int(parse_address(listing.all_after(':'))!) } else { 24 }
+		print(debug.m68k_listing(m, addr, count))
+	}
 	if screenshot != '' {
 		os.mkdir_all(os.dir(screenshot))!
 		write_png(m, screenshot)!
@@ -192,14 +202,17 @@ fn run_headless(path string, options ImageOptions, frames int, screenshot string
 fn bench(path string, options ImageOptions, frames int) ! {
 	mut session := open_session(path, options)!
 	mut m := session.machine
+	allocated_before := gc_heap_usage().total_bytes
 	watch := time.new_stopwatch()
 	for _ in 0 .. frames {
 		m.run_frame()
 	}
 	host := f64(watch.elapsed().microseconds()) / 1_000_000.0
+	allocated := gc_heap_usage().total_bytes - allocated_before
 	guest := m.seconds(m.tick)
 	print_counters(m)
 	println('guest ${guest:.2f}s in host ${host:.2f}s: ${guest / host * 100.0:.0f}% of real time, ${f64(frames) / host:.0f} frames/s')
+	println('host heap allocated while running: ${allocated} bytes')
 }
 
 fn print_counters(m &machine.Machine) {

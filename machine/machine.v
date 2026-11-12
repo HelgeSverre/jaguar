@@ -78,7 +78,10 @@ pub mut:
 	next_timer2    u64 = no_event
 	next_sample    u64 = no_event
 	frame_done     bool
-	entry          u32 // direct-boot entry point of the loaded program
+	// self_bus is this machine behind the bus interface, boxed once: V
+	// allocates each time a concrete value is converted to an interface.
+	self_bus hwtypes.Bus = hwtypes.Bus(unsafe { nil })
+	entry    u32 // direct-boot entry point of the loaded program
 }
 
 // new builds a powered-off machine with no cartridge.
@@ -94,6 +97,7 @@ pub fn new(config Config) &Machine {
 		ram:       []u8{len: ram_size}
 		wavetable: jerry.synthesized_wavetable()
 	}
+	m.self_bus = hwtypes.Bus(m)
 	m.jerry.pads.region_ntsc = config.region == .ntsc
 	// TOM answers every interrupt acknowledge with one user vector.
 	m.cpu.irq_vector = interrupt_vector
@@ -183,7 +187,7 @@ pub fn (mut m Machine) power_on() {
 // direct_boot installs the synthetic start state promised by direct boot.
 // Everything it does not set is unspecified, as the specification requires.
 fn (mut m Machine) direct_boot() {
-	mut bus := hwtypes.Bus(m)
+	mut bus := m.self_bus
 	bus.write32(0, ram_size)
 	bus.write32(4, m.entry)
 	m.cpu.reset(mut bus)

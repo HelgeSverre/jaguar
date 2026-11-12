@@ -29,7 +29,7 @@ pub fn (mut m Machine) run_frame() StopReason {
 // then the GPU, then the DSP, then every device event due at the slice end
 // fires in a fixed order (video, TOM timer, JERRY timers, audio sample).
 pub fn (mut m Machine) advance(deadline u64, stop_at_frame bool) StopReason {
-	mut bus := hwtypes.Bus(m)
+	mut bus := m.self_bus
 	m.frame_done = false
 	for m.tick < deadline {
 		mut target := m.tick + m.config.quantum
