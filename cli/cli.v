@@ -42,12 +42,34 @@ pub fn is_headless_command(name string) bool {
 	return name in ['inspect', 'run', 'compat', 'bench', 'help', '--help', '-h']
 }
 
-fn run_command(command string, args []string) ! {
+// parse_image_args parses the image options shared by every command and
+// returns the single image path with them.
+pub fn parse_image_args(args []string) !(string, ImageOptions) {
 	mut parser := flag.new_flag_parser(args)
+	options := image_options(mut parser)!
+	free := parser.finalize()!
+	if free.len != 1 {
+		return error('expected exactly one image path')
+	}
+	return free[0], options
+}
+
+fn image_options(mut parser flag.FlagParser) !ImageOptions {
 	region := parse_region(parser.string('region', 0, 'ntsc', 'television standard'))!
 	format_name := parser.string('format', 0, '', 'image kind')
 	load_text := parser.string('load-address', 0, '', 'load address')
 	entry_text := parser.string('entry', 0, '', 'entry point')
+	return ImageOptions{
+		region:    region
+		format:    if format_name == '' { none } else { parse_format(format_name)! }
+		load_addr: if load_text == '' { none } else { parse_address(load_text)! }
+		entry:     if entry_text == '' { none } else { parse_address(entry_text)! }
+	}
+}
+
+fn run_command(command string, args []string) ! {
+	mut parser := flag.new_flag_parser(args)
+	options := image_options(mut parser)!
 	frames := parser.int('frames', 0, 600, 'frames to run')
 	screenshot := parser.string('screenshot', 0, '', 'write the final frame as PNG')
 	screenshots := parser.string('screenshots', 0, '', 'directory for sampled frames')
@@ -58,12 +80,6 @@ fn run_command(command string, args []string) ! {
 	free := parser.finalize()!
 	if free.len != 1 {
 		return error('${command}: expected exactly one path\n\n${usage}')
-	}
-	options := ImageOptions{
-		region:    region
-		format:    if format_name == '' { none } else { parse_format(format_name)! }
-		load_addr: if load_text == '' { none } else { parse_address(load_text)! }
-		entry:     if entry_text == '' { none } else { parse_address(entry_text)! }
 	}
 	match command {
 		'inspect' { inspect(free[0], options, as_json)! }
