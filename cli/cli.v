@@ -27,6 +27,7 @@ common options:
   --dump                     run: print machine state at the end
   --peek <addr[:len]>        run: print memory at the end (repeatable)
   --list <addr[:count]>      run: disassemble 68000 code at the end (repeatable)
+  --watch-io <lo:hi>         run: log writes to TOM/JERRY addresses in lo..hi
   --cpu m68k|gpu|dsp         trace: processor to follow (default dsp)
   --tail <n>                 trace: instructions to print (default 64)
   --stop-pc <addr>           trace: stop when the processor reaches addr
@@ -91,6 +92,7 @@ fn run_command(command string, args []string) ! {
 		'print processor, video and display-list state at the end')
 	peeks := parser.string_multi('peek', 0, 'memory range to print')
 	listings := parser.string_multi('list', 0, '68000 code range to disassemble')
+	io_range := parser.string('watch-io', 0, '', 'log register writes in lo:hi')
 	processor := parser.string('cpu', 0, 'dsp', 'processor to trace')
 	tail := parser.int('tail', 0, 64, 'instructions to print')
 	stop_text := parser.string('stop-pc', 0, '', 'stop address')
@@ -106,7 +108,8 @@ fn run_command(command string, args []string) ! {
 			inspect(free[0], options, as_json)!
 		}
 		'run' {
-			run_headless(free[0], options, frames, screenshot, dump_state, peeks, listings)!
+			run_headless(free[0], options, frames, screenshot, dump_state, peeks, listings,
+				io_range)!
 		}
 		'compat' {
 			run_compat(free[0], frames, report, screenshots, if jobs < 1 { 1 } else { jobs })!
@@ -158,9 +161,13 @@ fn inspect(path string, options ImageOptions, as_json bool) ! {
 }
 
 // run_headless runs an image for a fixed number of frames.
-fn run_headless(path string, options ImageOptions, frames int, screenshot string, dump_state bool, peeks []string, listings []string) ! {
+fn run_headless(path string, options ImageOptions, frames int, screenshot string, dump_state bool, peeks []string, listings []string, io_range string) ! {
 	mut session := open_session(path, options)!
 	mut m := session.machine
+	if io_range != '' {
+		m.watch_io(parse_address(io_range.all_before(':'))!,
+			parse_address(io_range.all_after(':'))!)
+	}
 	for _ in 0 .. frames {
 		if m.run_frame() == .cpu_halted {
 			println('68000 halted: ${m.cpu.str_state()}')
@@ -181,6 +188,9 @@ fn run_headless(path string, options ImageOptions, frames int, screenshot string
 		}
 		print(debug.video_registers(m))
 		print(debug.object_list(m, 100))
+	}
+	for w in m.io_watch.writes {
+		println('tick ${w.tick:10} pc=${w.cpu_pc:06x} ${w.addr:06x} <- ${w.value:08x} (${w.bits} bits)')
 	}
 	for peek in peeks {
 		addr := parse_address(peek.all_before(':'))!

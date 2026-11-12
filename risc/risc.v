@@ -194,11 +194,14 @@ fn (mut c Risc) set_ctrl(value u32) {
 	}
 }
 
-// raise_irq latches interrupt source `line`. The service routine starts at
-// the next instruction boundary where the source is enabled and unmasked.
+// raise_irq requests interrupt source `line`. The enable bit in FLAGS gates
+// the request into its latch: a request for a disabled source is lost, it
+// does not wait for the source to be enabled. A latched request is served
+// at the next instruction boundary where interrupts are unmasked.
 pub fn (mut c Risc) raise_irq(line u32) {
-	if line < c.irq_lines {
-		c.latches |= u32(1) << line
+	bit := u32(1) << line
+	if line < c.irq_lines && c.interrupt_enable_mask() & bit != 0 {
+		c.latches |= bit
 		c.irq_dirty = true
 	}
 }

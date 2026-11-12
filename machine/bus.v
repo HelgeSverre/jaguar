@@ -238,6 +238,9 @@ fn (mut m Machine) io_read8(a u32) u8 {
 
 // io_write32 writes a long to TOM or JERRY; `a` is long-aligned.
 fn (mut m Machine) io_write32(a u32, value u32) {
+	if a - m.io_watch.low < m.io_watch.high - m.io_watch.low {
+		m.record_io_write(a, value, 32)
+	}
 	if a < jerry_base {
 		offset := tom_offset(a)
 		if offset >= gpu_ram && offset < gpu_ram_end {
@@ -280,6 +283,9 @@ fn (mut m Machine) io_write32(a u32, value u32) {
 
 // io_write16 writes a word to TOM or JERRY; `a` is word-aligned.
 fn (mut m Machine) io_write16(a u32, value u16) {
+	if a - m.io_watch.low < m.io_watch.high - m.io_watch.low {
+		m.record_io_write(a, value, 16)
+	}
 	if is_long_block(a) {
 		m.write_long_block16(a, value)
 		return
@@ -334,6 +340,9 @@ fn (mut m Machine) write_long_block16(a u32, value u16) {
 
 // io_write8 writes a byte to TOM or JERRY.
 fn (mut m Machine) io_write8(a u32, value u8) {
+	if a - m.io_watch.low < m.io_watch.high - m.io_watch.low {
+		m.record_io_write(a, value, 8)
+	}
 	if a < jerry_base {
 		offset := tom_offset(a)
 		if offset >= gpu_ram && offset < gpu_ram_end {

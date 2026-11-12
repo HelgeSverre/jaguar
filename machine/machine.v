@@ -36,6 +36,27 @@ pub:
 	ram_seed u32
 }
 
+// IoWrite is one recorded write to a watched register range.
+pub struct IoWrite {
+pub:
+	tick   u64
+	cpu_pc u32 // 68000 program counter when the write happened
+	addr   u32
+	value  u32
+	bits   u8
+}
+
+// IoWatch records writes to a range of TOM/JERRY addresses for diagnosis.
+// It is off (empty range) by default and bounded when on.
+pub struct IoWatch {
+pub mut:
+	low    u32
+	high   u32
+	writes []IoWrite
+}
+
+const io_watch_capacity = 4096
+
 // Counters are per-subsystem activity totals since power-on.
 pub struct Counters {
 pub mut:
@@ -65,6 +86,7 @@ pub mut:
 	bios            []u8 // boot ROM, mapped at `bios_base` when present
 	wavetable       []u8
 	counters        Counters
+	io_watch        IoWatch
 	// Guest timeline, in master ticks. Each processor has its own frontier
 	// because an instruction can overshoot the end of a slice.
 	tick     u64
@@ -277,4 +299,26 @@ pub fn (m &Machine) audio_rate() f64 {
 // seconds converts a tick count on the guest timeline to seconds.
 pub fn (m &Machine) seconds(ticks u64) f64 {
 	return f64(ticks) / f64(m.config.region.master_clock_hz())
+}
+
+// watch_io starts recording writes to TOM/JERRY addresses in [low, high).
+pub fn (mut m Machine) watch_io(low u32, high u32) {
+	m.io_watch = IoWatch{
+		low:    low
+		high:   high
+		writes: []IoWrite{cap: io_watch_capacity}
+	}
+}
+
+// record_io_write notes a write for the watch; the caller checked the range.
+fn (mut m Machine) record_io_write(addr u32, value u32, bits u8) {
+	if m.io_watch.writes.len < io_watch_capacity {
+		m.io_watch.writes << IoWrite{
+			tick:   m.tick
+			cpu_pc: m.cpu.pc
+			addr:   addr
+			value:  value
+			bits:   bits
+		}
+	}
 }

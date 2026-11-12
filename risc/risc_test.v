@@ -205,13 +205,28 @@ fn test_interrupt_entry_and_mask() {
 	assert c.flags_ctl & flag_imask == 0
 }
 
-fn test_masked_interrupt_stays_latched() {
+fn test_disabled_interrupt_request_is_lost() {
 	mut c := new_dsp()
-	mut bus := &TestBus{}
+	c.raise_irq(5)
+	assert c.latches == 0, 'the enable gates the request into the latch'
+	c.write_ctrl32(reg_flags, 1 << 16)
+	assert c.latches == 0, 'enabling later does not recover it'
 	c.raise_irq(5)
 	assert c.read_ctrl32(reg_ctrl) & (1 << 16) != 0
-	c.write_ctrl32(reg_flags, 1 << 17)
+	c.write_ctrl32(reg_flags, (1 << 16) | (1 << 17))
 	assert c.latches == 0
+}
+
+fn test_latched_interrupt_waits_while_masked() {
+	mut c := new_gpu()
+	mut bus := &TestBus{}
+	c.write_ctrl32(reg_flags, 1 << (4 + 2))
+	c.flags_ctl |= flag_imask
+	c.raise_irq(2)
+	pc := c.pc
+	c.service_interrupts(mut bus)
+	assert c.latches == 1 << 2
+	assert c.pc == pc, 'no entry while a service routine is active'
 }
 
 fn test_divide_integer_and_fixed_point() {
