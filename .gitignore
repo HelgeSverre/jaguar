@@ -1,2 +1,10 @@
-# ROM images in data folder
+# ROM images and fetched third-party test corpora stay local
 /data/roms/
+/data/tests/
+/data/bios/
+
+# Build and run artifacts
+/bin/
+/out/
+*.dSYM/
+.DS_Store
