@@ -8,7 +8,7 @@ const gpu_mnemonics = ['add', 'addc', 'addq', 'addqt', 'sub', 'subc', 'subq', 's
 	'abs', 'sh', 'shlq', 'shrq', 'sha', 'sharq', 'ror', 'rorq', 'cmp', 'cmpq', 'sat8', 'sat16',
 	'move', 'moveq', 'moveta', 'movefa', 'movei', 'loadb', 'loadw', 'load', 'loadp', 'load', 'load',
 	'storeb', 'storew', 'store', 'storep', 'store', 'store', 'move', 'jump', 'jr', 'mmult', 'mtoi',
-	'normi', 'nop', 'load', 'load', 'store', 'store', 'sat24', 'pack']
+	'normi', 'nop', 'load', 'load', 'store', 'store', 'sat24', 'pack']!
 
 // Shape is the operand layout of an instruction.
 enum Shape {

@@ -15,29 +15,35 @@ pub fn new_ram_bus(size int) &RamBus {
 	}
 }
 
+// read8 implements Bus.
 @[direct_array_access; inline]
 pub fn (mut b RamBus) read8(addr u32) u8 {
 	return b.mem[addr & u32(b.mem.len - 1)]
 }
 
+// read16 implements Bus.
 pub fn (mut b RamBus) read16(addr u32) u16 {
 	return (u16(b.read8(addr)) << 8) | b.read8(addr + 1)
 }
 
+// read32 implements Bus.
 pub fn (mut b RamBus) read32(addr u32) u32 {
 	return (u32(b.read16(addr)) << 16) | b.read16(addr + 2)
 }
 
+// write8 implements Bus.
 @[direct_array_access; inline]
 pub fn (mut b RamBus) write8(addr u32, val u8) {
 	b.mem[addr & u32(b.mem.len - 1)] = val
 }
 
+// write16 implements Bus.
 pub fn (mut b RamBus) write16(addr u32, val u16) {
 	b.write8(addr, u8(val >> 8))
 	b.write8(addr + 1, u8(val))
 }
 
+// write32 implements Bus.
 pub fn (mut b RamBus) write32(addr u32, val u32) {
 	b.write16(addr, u16(val >> 16))
 	b.write16(addr + 2, u16(val))
