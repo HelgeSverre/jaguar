@@ -193,3 +193,26 @@ fn test_negative_x_addresses_the_previous_line() {
 		assert bus.read16(target_base + (64 + i) * 2) == u16(0x104 + i)
 	}
 }
+
+fn test_y_add_flag_needs_a_stationary_x() {
+	mut bus := hwtypes.new_ram_bus(0x10_0000)
+	mut b := Blitter{}
+	yadd1 := u32(1 << 18)
+	b.set(mut bus, b_a1_base, target_base)
+	b.set(mut bus, b_patd, 0x0101_0101)
+	b.set(mut bus, b_patd + 4, 0x0101_0101)
+	// X advancing: a horizontal run on line 0, the flag is inert.
+	b.set(mut bus, b_a1_flags, flags_16bpp_w64 | xadd_pix | yadd1)
+	b.set(mut bus, b_count, (1 << 16) | 3)
+	b.set(mut bus, b_cmd, cmd_patdsel)
+	assert bus.read16(target_base + 2 * 2) == 0x0101
+	assert bus.read16(target_base + 64 * 2) == 0
+	// X stationary: a vertical run down column 5.
+	b.set(mut bus, b_a1_flags, flags_16bpp_w64 | (xadd_zero << 16) | yadd1)
+	b.set(mut bus, b_a1_pixel, 5)
+	b.set(mut bus, b_count, (1 << 16) | 3)
+	b.set(mut bus, b_cmd, cmd_patdsel)
+	for y in u32(0) .. 3 {
+		assert bus.read16(target_base + (y * 64 + 5) * 2) == 0x0101
+	}
+}

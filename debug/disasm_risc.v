@@ -146,8 +146,8 @@ fn signed5(field u32) int {
 
 // disassemble_risc decodes one GPU or DSP instruction at `addr` and returns
 // its text and its length in bytes.
-pub fn disassemble_risc(m &machine.Machine, variant risc.Variant, addr u32) (string, u32) {
-	word := (u32(m.peek8(addr)) << 8) | m.peek8(addr + 1)
+pub fn disassemble_risc(read WordReader, variant risc.Variant, addr u32) (string, u32) {
+	word := u32(read(addr))
 	opcode := word >> 10
 	src := (word >> 5) & 31
 	dst := word & 31
@@ -202,8 +202,8 @@ pub fn disassemble_risc(m &machine.Machine, variant risc.Variant, addr u32) (str
 			'jr ${condition_name(dst)}${target:06x}'
 		}
 		.movei {
-			low := (u32(m.peek8(addr + 2)) << 8) | m.peek8(addr + 3)
-			high := (u32(m.peek8(addr + 4)) << 8) | m.peek8(addr + 5)
+			low := u32(read(addr + 2))
+			high := u32(read(addr + 4))
 			'movei #${(high << 16) | low:08x},r${dst}'
 		}
 		.nop {
@@ -220,10 +220,11 @@ pub fn disassemble_risc(m &machine.Machine, variant risc.Variant, addr u32) (str
 
 // risc_listing disassembles `count` instructions starting at `addr`.
 pub fn risc_listing(m &machine.Machine, variant risc.Variant, addr u32, count int) string {
+	read := word_reader(m)
 	mut lines := []string{}
 	mut pc := addr
 	for _ in 0 .. count {
-		text, length := disassemble_risc(m, variant, pc)
+		text, length := disassemble_risc(read, variant, pc)
 		lines << '${pc:06x}  ${text}'
 		pc += length
 	}

@@ -42,13 +42,26 @@ fn program_counter(m &machine.Machine, processor Processor) (u32, u64) {
 	}
 }
 
-// disassemble decodes the instruction at `pc` for the traced processor.
-fn disassemble(m &machine.Machine, read debug.WordReader, processor Processor, pc u32) string {
-	if processor == .m68k {
-		text, _ := debug.disassemble_m68k(read, pc)
-		return text
+// Executed is one traced instruction: its address and the words at that
+// address when it ran, so later self-modification cannot change the listing.
+struct Executed {
+mut:
+	pc    u32
+	words [5]u16
+}
+
+// text disassembles the recorded instruction.
+fn (e Executed) text(processor Processor) string {
+	read := fn [e] (addr u32) u16 {
+		index := (addr - e.pc) >> 1
+		return if index < 5 { e.words[index] } else { u16(0) }
 	}
-	text, _ := debug.disassemble_risc(m, if processor == .gpu { .gpu } else { .dsp }, pc)
+	text, _ := match processor {
+		.m68k { debug.disassemble_m68k(read, e.pc) }
+		.gpu { debug.disassemble_risc(read, .gpu, e.pc) }
+		.dsp { debug.disassemble_risc(read, .dsp, e.pc) }
+	}
+
 	return text
 }
 
@@ -62,9 +75,7 @@ fn disassemble(m &machine.Machine, read debug.WordReader, processor Processor, p
 fn trace(path string, options ImageOptions, t TraceOptions) ! {
 	mut session := open_session(path, options)!
 	mut m := session.machine
-	// One reader for the whole run: V closures are never freed.
-	read := debug.word_reader(m)
-	mut ring := []string{len: t.tail}
+	mut ring := []Executed{len: t.tail}
 	mut head := 0
 	mut recorded := u64(0)
 	mut reason := 'frame budget reached'
@@ -75,16 +86,20 @@ fn trace(path string, options ImageOptions, t TraceOptions) ! {
 	}
 	deadline := u64(t.frames) * m.config.region.master_clock_hz() / 60
 	for m.tick < deadline {
-		// Decode before executing: the program may be overwritten later.
 		pc_before, _ := program_counter(m, t.processor)
-		text := disassemble(m, read, t.processor, pc_before)
+		mut entry := Executed{
+			pc: pc_before
+		}
+		for i in u32(0) .. 5 {
+			entry.words[i] = (u16(m.peek8(pc_before + i * 2)) << 8) | m.peek8(pc_before + i * 2 + 1)
+		}
 		m.advance(m.tick + 1, false)
 		pc, count := program_counter(m, t.processor)
 		if count == last_count {
 			continue
 		}
 		last_count = count
-		ring[head] = '${pc_before:06x}  ${text}'
+		ring[head] = entry
 		head = (head + 1) % t.tail
 		recorded++
 		if recorded < t.skip {
@@ -125,7 +140,8 @@ fn trace(path string, options ImageOptions, t TraceOptions) ! {
 	println('${t.processor}: ${reason} at tick ${m.tick} after ${recorded} instructions')
 	count := if recorded < u64(t.tail) { int(recorded) } else { t.tail }
 	for i in 0 .. count {
-		println(ring[(head + t.tail - count + i) % t.tail])
+		entry := ring[(head + t.tail - count + i) % t.tail]
+		println('${entry.pc:06x}  ${entry.text(t.processor)}')
 	}
 	match t.processor {
 		.gpu { print(debug.registers_risc(m.gpu)) }

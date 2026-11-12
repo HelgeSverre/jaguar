@@ -170,7 +170,11 @@ const pitch_factor = [u32(1), 2, 4, 3]!
 fn new_window(base u32, flags u32, pixel u32, fpixel u32) Window {
 	mode := (flags >> 16) & 3
 	mut xadd := if mode == xadd_zero { u32(0) } else { u32(0x1_0000) }
-	mut yadd := if flags & (1 << 18) != 0 { u32(0x1_0000) } else { u32(0) }
+	// YADD1 steps Y once per pixel only while X stands still (a vertical
+	// run). Commercial software sets it together with a one-pixel X step and
+	// a line step of one, and expects rectangles: with X advancing, the flag
+	// has no effect on the inner loop. Evidence class: emulator_differential.
+	mut yadd := if mode == xadd_zero && flags & (1 << 18) != 0 { u32(0x1_0000) } else { u32(0) }
 	if flags & (1 << 19) != 0 {
 		xadd = u32(0) - xadd
 	}
