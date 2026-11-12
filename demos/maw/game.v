@@ -62,11 +62,11 @@ const pad_right = 3
 const ship_radius = 44 // tunnel pixels from the centre of the screen to the ship
 const ship_depth = int(depth_scale / ship_radius) // the depth of the wall under it
 // A gate nearer than this is past the corners of the screen, all of it.
-const hidden_depth = int(depth_scale / 100) - gate_rings - 2
+const hidden_depth = int(depth_scale / farthest_radius) - gate_rings - 2
 const ship_angle = 64 // the ship sits at the bottom of the screen
 const ship_margin = 6 // half the ship's width, as an angle
 const first_speed = 0x0180
-const top_speed = 0x0480
+const top_speed = 0x0400
 const speed_gain = 0x000c
 const turn_gain = 0x0040
 const top_turn = 0x0380
@@ -80,9 +80,8 @@ const blip_note = 96
 const gate_ring = 0 // its first texture ring
 const gate_gap = 2 // the angle of the middle of its opening
 const gate_depth = 4 // its depth on the previous frame
-const gate_stage = 6 // how far its repainting for the next pass has come
-const gate_wall = 8 // address of a copy of the wall it and its lane cover
-const gate_lane = 12 // address of the same wall, lit green
+const gate_stage = 6 // 0 as it was, 1 with its old lane gone, 2 with its new lane laid
+const gate_wall = 8 // address of a copy of the wall its lane covers
 
 // Offsets into a video profile.
 const profile_scroller_y = 8
@@ -168,17 +167,17 @@ fn (mut g Game) start_up(gpu_longs int, dsp_longs int, dsp_start u32) {
 	m.moveq(strip_bytes * strip_lines / 4 - 1, d0)
 	m.bsr('clear')
 	m.lea(abs(buffer_a), a0)
-	m.move(.w, imm(tunnel_pixels / 2 - 1), d0)
+	m.move(.w, imm(tunnel_width * tunnel_height / 2 - 1), d0)
 	m.bsr('clear')
 	m.lea(abs(buffer_b), a0)
-	m.move(.w, imm(tunnel_pixels / 2 - 1), d0)
+	m.move(.w, imm(tunnel_width * tunnel_height / 2 - 1), d0)
 	m.bsr('clear')
 
 	m.move(.w, imm(0), abs(jagkit.clut + 10)) // the shadow under the text
 	for gate in ['gate_0', 'gate_1'] {
 		m.lea(lbl(gate), a5)
-		m.bsr('paint_stripes')
-		m.bsr('paint_opening')
+		m.bsr('lay_lane')
+		m.bsr('spark_gate')
 	}
 	m.bsr('enter_title')
 
@@ -191,6 +190,8 @@ fn (mut g Game) start_up(gpu_longs int, dsp_longs int, dsp_start u32) {
 	m.move(.l, ptr('texture'), g.shared_at(shared_texture))
 	m.move(.l, imm(buffer_b), g.shared_at(shared_first))
 	m.move(.l, imm(buffer_a), g.shared_at(shared_second))
+	m.move(.l, ptr('palettes'), g.shared_at(shared_palette))
+	m.move(.l, imm((window_y << 16) | window_x), g.shared_at(shared_window))
 	m.move(.l, imm(jagkit.gpu_ram), abs(jagkit.g_pc))
 	m.move(.l, imm(jagkit.risc_go), abs(jagkit.g_ctrl))
 
@@ -228,6 +229,10 @@ fn (mut g Game) frame_interrupt() {
 	m.b(.ne, 'front_known')
 	m.move(.w, imm(4), lbl('front'))
 	m.label('front_known')
+	m.move(.l, g.shared_at(shared_drawn), d1) // where its window was
+	m.move(.w, d1, lbl('shown_x'))
+	m.swap(d1)
+	m.move(.w, d1, lbl('shown_y'))
 	m.move(.l, imm(0), g.shared_at(shared_finished))
 	m.label('no_new_frame')
 	m.bsr('refresh_list')
@@ -245,7 +250,7 @@ fn (mut g Game) frame_interrupt() {
 	m.b(.eq, 'play')
 	m.bra('dead')
 
-	// Hand the view to the GPU.
+	// Hand the view to the GPU: where the ship is, ...
 	m.label('frame_done')
 	m.moveq(0, d0)
 	m.move(.w, lbl('rotation'), d0)
@@ -255,15 +260,48 @@ fn (mut g Game) frame_interrupt() {
 	m.move(.w, lbl('travel'), d0)
 	m.lsr(.w, imm(8), d0)
 	m.move(.l, d0, g.shared_at(shared_travel))
+	// ... the colours, a phase on every other frame, ...
+	m.moveq(0, d0)
+	m.move(.w, lbl('frame'), d0)
+	m.lsr(.w, imm(1), d0)
+	m.and(.w, imm(palette_phases - 1), d0)
+	m.mulu(imm(palette_bytes), d0)
+	m.add(.l, ptr('palettes'), d0)
+	m.move(.l, d0, g.shared_at(shared_palette))
+	// ... and the window on the table, which wanders on two sines of
+	// different periods so that the tunnel swerves.
+	m.lea(lbl('sway'), a0)
+	m.moveq(0, d0)
+	m.move(.w, lbl('frame'), d0)
+	m.move(.w, d0, d2)
+	m.and(.w, imm(0xff), d0)
+	m.move(.b, idx(0, a0, d0), d1)
+	m.ext(.w, d1)
+	m.muls(imm(sway_x), d1)
+	m.asr(.w, imm(7), d1)
+	m.add(.w, imm(window_x), d1)
+	m.move(.w, d2, d0)
+	m.lsr(.w, imm(2), d2)
+	m.sub(.w, d2, d0) // three quarters of the frame count
+	m.and(.w, imm(0xff), d0)
+	m.move(.b, idx(0, a0, d0), d2)
+	m.ext(.w, d2)
+	m.muls(imm(sway_y), d2)
+	m.asr(.w, imm(7), d2)
+	m.add(.w, imm(window_y), d2)
+	m.swap(d2)
+	m.move(.w, d1, d2)
+	m.move(.l, d2, g.shared_at(shared_window))
 	m.pop(everything)
 	m.rte()
 }
 
 // refresh_list copies the list for the current scene and front buffer into
-// place: the object processor consumed the last copy while drawing.
+// place: the object processor consumed the last copy while drawing. Then it
+// moves what has to move.
 fn (mut g Game) refresh_list() {
 	mut m := g.m
-	scroller_y := abs(list_address + u32(32 + scroller_object * 32 + 6))
+	scroller := list_address + u32(32 + scroller_object * 32)
 	m.label('refresh_list')
 	m.move(.l, lbl('profile'), a0)
 	m.moveq(0, d0)
@@ -275,8 +313,8 @@ fn (mut g Game) refresh_list() {
 	m.label('copy_list')
 	m.move(.l, inc(a1), inc(a2))
 	m.dbra(d1, 'copy_list')
-	m.tst(.w, lbl('scene'))
-	m.b(.ne, 'list_done')
+	m.move(.w, lbl('scene'), d0)
+	m.b(.ne, 'not_title_list')
 	// On the title the scroller bobs: rewrite its YPOS field.
 	m.moveq(0, d0)
 	m.move(.w, lbl('frame'), d0)
@@ -287,10 +325,44 @@ fn (mut g Game) refresh_list() {
 	m.add(.w, d1, d1)
 	m.add(.w, at(profile_scroller_y, a0), d1)
 	m.lsl(.w, imm(3), d1)
-	m.move(.w, scroller_y, d0)
+	m.move(.w, abs(scroller + 6), d0)
 	m.and(.w, imm(0xc007), d0)
 	m.orr(.w, d1, d0)
-	m.move(.w, d0, scroller_y)
+	m.move(.w, d0, abs(scroller + 6))
+	m.rts()
+
+	// In the tunnel the ship, or what is left of it, follows the tunnel as
+	// it swerves: the second object, and in an explosion the third too.
+	m.label('not_title_list')
+	m.cmp(.w, imm(scene_wreck), d0)
+	m.b(.cc, 'list_done')
+	m.move(.w, imm(window_x), d2)
+	m.sub(.w, lbl('shown_x'), d2)
+	m.add(.w, d2, d2) // screen pixels to the right
+	m.move(.w, imm(window_y), d3)
+	m.sub(.w, lbl('shown_y'), d3)
+	m.lsl(.w, imm(5), d3) // half-lines down, in place for the YPOS field
+	m.lea(abs(list_address + 64), a1)
+	m.bsr('follow')
+	m.cmp(.w, imm(scene_blast), lbl('scene'))
+	m.b(.cs, 'list_done')
+	m.lea(abs(list_address + 96), a1)
+	// follow moves the object at a1 by d2 pixels and d3 / 8 half-lines.
+	m.label('follow')
+	m.move(.w, at(14, a1), d0) // XPOS: the low twelve bits
+	m.move(.w, d0, d1)
+	m.and(.w, imm(0xf000), d1)
+	m.add(.w, d2, d0)
+	m.and(.w, imm(0x0fff), d0)
+	m.orr(.w, d1, d0)
+	m.move(.w, d0, at(14, a1))
+	m.move(.w, at(6, a1), d0) // YPOS: bits 3 to 13
+	m.move(.w, d0, d1)
+	m.and(.w, imm(0xc007), d1)
+	m.add(.w, d3, d0)
+	m.and(.w, imm(0x3ff8), d0)
+	m.orr(.w, d1, d0)
+	m.move(.w, d0, at(6, a1))
 	m.label('list_done')
 	m.rts()
 }
@@ -307,34 +379,72 @@ fn (mut g Game) cycle_colours() {
 	m.move(.w, idx(0, a0, d0), abs(jagkit.clut + 2)) // the text
 	m.eor(.w, imm(64), d0)
 	m.move(.w, idx(0, a0, d0), abs(jagkit.clut + 6)) // the scroller
+	// The lightning over a wreck flickers between white and blue.
+	m.move(.w, imm(jagkit.cry(255, 255, 255)), d1)
+	m.move(.w, lbl('frame'), d0)
+	m.btst(1, d0)
+	m.b(.eq, 'zap_colour_known')
+	m.move(.w, imm(jagkit.cry(60, 120, 255)), d1)
+	m.label('zap_colour_known')
+	m.move(.w, d1, abs(jagkit.clut + 14))
 	m.rts()
 }
 
-// music starts the notes of a new step every fourth frame and fades all
-// three voices every frame.
+// music plays one step of the tune every six frames: a kick on the beat,
+// bass on the three steps behind it, a hi-hat half way, and the lead when
+// it has a note. Every frame all three voices fade.
 fn (mut g Game) music() {
 	mut m := g.m
 	m.label('music')
-	m.move(.w, lbl('frame'), d0)
-	m.move(.w, d0, d1)
-	m.and(.w, imm(3), d1)
-	m.b(.ne, 'fade')
+	m.move(.w, lbl('beat_tick'), d6) // frames into the step
+	m.add(.w, imm(1), d6)
+	m.cmp(.w, imm(step_frames), d6)
+	m.b(.cs, 'same_step')
+	m.moveq(0, d6)
+	m.add(.w, imm(1), lbl('step'))
+	m.label('same_step')
+	m.move(.w, d6, lbl('beat_tick'))
 	m.moveq(0, d2)
-	m.move(.w, d0, d2)
-	m.and(.w, imm((song_steps - 1) << 2), d2)
+	m.move(.w, lbl('step'), d2)
+	m.move(.w, d2, d3)
+	m.and(.w, imm(3), d3) // steps into the beat
+	m.and(.w, imm(song_steps - 1), d2)
+	m.lsl(.w, imm(2), d2) // offset into the tables
+	m.tst(.w, d3)
+	m.b(.ne, 'not_kick')
+	// The kick is the bass voice falling in pitch over its first frames.
+	m.cmp(.w, imm(kick_sweep().len), d6)
+	m.b(.cc, 'lead')
+	m.moveq(0, d0)
+	m.move(.w, d6, d0)
+	m.lsl(.w, imm(2), d0)
+	m.lea(lbl('kick_sweep'), a0)
+	m.move(.l, idx(0, a0, d0), g.voice(voice_bass_step))
+	m.tst(.w, d6)
+	m.b(.ne, 'lead')
+	m.move(.l, imm(kick_volume), g.voice(voice_bass_volume))
+	m.bra('lead')
+	m.label('not_kick')
+	m.tst(.w, d6)
+	m.b(.ne, 'lead')
 	m.lea(lbl('bass_line'), a0)
-	m.move(.l, idx(0, a0, d2), d1)
-	m.b(.eq, 'bass_rings')
-	m.move(.l, d1, g.voice(voice_bass_step))
+	m.move(.l, idx(0, a0, d2), g.voice(voice_bass_step))
 	m.move(.l, imm(bass_volume), g.voice(voice_bass_volume))
-	m.label('bass_rings')
+	m.cmp(.w, imm(2), d3)
+	m.b(.ne, 'lead')
+	m.move(.l, imm(hat_volume), g.voice(voice_noise_volume))
+	m.label('lead')
+	m.tst(.w, d6)
+	m.b(.ne, 'fade')
 	m.lea(lbl('lead_line'), a0)
-	m.move(.l, idx(0, a0, d2), g.voice(voice_lead_step))
+	m.move(.l, idx(0, a0, d2), d1)
+	m.b(.eq, 'fade')
+	m.move(.l, d1, g.voice(voice_lead_step))
 	m.move(.l, imm(lead_volume), g.voice(voice_lead_volume))
 	m.label('fade')
-	g.fade(g.voice(voice_bass_volume), 4)
-	g.fade(g.voice(voice_lead_volume), 3)
-	g.fade(g.voice(voice_noise_volume), 4)
+	g.fade(g.voice(voice_bass_volume), 3)
+	g.fade(g.voice(voice_lead_volume), 2)
+	g.fade(g.voice(voice_noise_volume), 1)
 	m.rts()
 }
 
@@ -368,7 +478,7 @@ fn (mut g Game) read_pad() {
 
 fn (mut g Game) states() {
 	mut m := g.m
-	hint := 'FLY THROUGH THE GREEN GAPS'
+	hint := 'FOLLOW THE GREEN LANE'
 
 	// Title: drift down the tunnel until a fire button is pressed.
 	m.label('title')
@@ -430,31 +540,21 @@ fn (mut g Game) states() {
 	m.b(.eq, 'no_grace')
 	m.sub(.w, imm(1), lbl('grace'))
 	m.b(.ne, 'no_grace')
-	g.say(7, 22, ' '.repeat(hint.len)) // the hint has been read
+	g.say(9, 22, ' '.repeat(hint.len)) // the hint has been read
 	m.label('no_grace')
 	m.bsr('gates')
 	m.bra('frame_done')
 
-	// Dead: the ship blows up while the tunnel spins and coasts to a stop.
+	// Dead: the ship is stuck in the gate, which keeps crackling. For the
+	// first moments the gate's hum drowns the music.
 	m.label('dead')
-	m.move(.w, lbl('turn'), d0)
-	m.move(.w, d0, d1)
-	m.asr(.w, imm(4), d1)
-	m.b(.ne, 'still_spinning')
-	m.moveq(0, d0)
-	m.label('still_spinning')
-	m.sub(.w, d1, d0)
-	m.move(.w, d0, lbl('turn'))
-	m.add(.w, d0, lbl('rotation'))
-	m.move(.w, lbl('speed'), d0)
-	m.move(.w, d0, d1)
-	m.lsr(.w, imm(5), d1)
-	m.b(.ne, 'still_coasting')
-	m.moveq(0, d0)
-	m.label('still_coasting')
-	m.sub(.w, d1, d0)
-	m.move(.w, d0, lbl('speed'))
-	m.add(.w, d0, lbl('travel'))
+	m.bsr('gates')
+	m.cmp(.w, imm(24), lbl('timer'))
+	m.b(.cc, 'hum_over')
+	m.move(.l, imm(hertz_step(55)), g.voice(voice_bass_step))
+	m.move(.l, imm(kick_volume), g.voice(voice_bass_volume))
+	m.move(.l, imm(zap_volume), g.voice(voice_noise_volume))
+	m.label('hum_over')
 	m.add(.w, imm(1), lbl('timer'))
 	m.move(.w, lbl('timer'), d0)
 	m.cmp(.w, imm(32), d0)
@@ -483,7 +583,7 @@ fn (mut g Game) states() {
 	m.move(.w, imm(state_play), lbl('state'))
 	m.move(.w, imm(scene_ship), lbl('scene'))
 	m.bsr('clear_text')
-	g.say(7, 22, hint)
+	g.say(9, 22, hint)
 	m.bra('show_status')
 
 	m.label('enter_title')
@@ -492,8 +592,8 @@ fn (mut g Game) states() {
 	m.move(.w, imm(widest_gap), lbl('gap_half'))
 	m.bsr('clear_text')
 	g.say(12, 15, 'PRESS A, B OR C')
-	g.say(10, 18, 'DODGE THE RED GATES')
-	g.say(3, 20, 'LEFT AND RIGHT STEER INTO THE GAP')
+	g.say(3, 18, 'THE GATES ARE LIVE. DO NOT TOUCH.')
+	g.say(5, 20, 'LEFT AND RIGHT TURN THE TUNNEL')
 	m.rts()
 
 	m.label('show_status')
@@ -532,18 +632,18 @@ fn (mut g Game) gates() {
 	m.move(.w, imm(0), at(gate_stage, a5))
 	m.bra('gate_moved')
 	m.label('gate_near')
-	// Out of sight it is repainted for its next pass, a part a frame.
+	// Out of sight it gets the lane for its next pass, in two frames.
 	m.cmp(.w, imm(hidden_depth), d0)
 	m.b(.hi, 'gate_reaches_ship')
-	m.cmp(.w, imm(2), d0)
+	m.cmp(.w, imm(1), d0)
 	m.b(.cs, 'gate_reaches_ship')
 	m.move(.w, at(gate_stage, a5), d1)
-	m.cmp(.w, imm(3), d1)
+	m.cmp(.w, imm(2), d1)
 	m.b(.cc, 'gate_reaches_ship')
 	m.add(.w, imm(1), at(gate_stage, a5))
 	m.move(.w, d0, d7)
 	m.tst(.w, d1)
-	m.b(.ne, 'not_first_part')
+	m.b(.ne, 'second_part')
 	m.bsr('erase_lane') // first the old lane goes, and a new opening is chosen
 	m.bsr('random')
 	m.and(.w, imm(127), d0)
@@ -553,13 +653,8 @@ fn (mut g Game) gates() {
 	m.move(.w, d0, at(gate_gap, a5))
 	m.move(.w, d0, lbl('last_gap'))
 	m.bra('part_done')
-	m.label('not_first_part')
-	m.cmp(.w, imm(1), d1)
-	m.b(.ne, 'last_part')
-	m.bsr('paint_stripes')
-	m.bra('part_done')
-	m.label('last_part')
-	m.bsr('paint_opening')
+	m.label('second_part')
+	m.bsr('lay_lane')
 	m.label('part_done')
 	m.move(.w, d7, d0)
 
@@ -607,18 +702,30 @@ fn (mut g Game) gates() {
 	m.label('wreck')
 	m.move(.w, imm(state_dead), lbl('state'))
 	m.move(.w, imm(0), lbl('timer'))
-	m.move(.l, imm(noise_volume), g.voice(voice_noise_volume))
+	m.move(.w, imm(0), lbl('speed')) // stopped dead, in the gate
+	m.move(.w, imm(0), lbl('turn'))
 	m.move(.w, lbl('score'), d0)
 	m.cmp(.w, lbl('best'), d0)
 	m.b(.ls, 'no_record')
 	m.move(.w, d0, lbl('best'))
 	m.label('no_record')
-	g.say(15, 13, 'GAME OVER')
+	g.say(11, 13, 'ZAPPED BY THE GATE')
 	g.say(15, 16, 'PRESS FIRE')
 	m.bra('show_status')
 
 	m.label('gate_moved')
 	m.move(.w, d0, at(gate_depth, a5))
+	// The lightning changes on every other frame, the two gates in turn;
+	// not while the gate is between its old lane and its new one.
+	m.cmp(.w, imm(1), at(gate_stage, a5))
+	m.b(.eq, 'no_spark')
+	m.move(.w, lbl('frame'), d0)
+	m.move(.w, at(gate_ring, a5), d1)
+	m.lsr(.w, imm(7), d1)
+	m.eor(.w, d1, d0)
+	m.btst(0, d0)
+	m.b(.eq, 'spark_gate')
+	m.label('no_spark')
 	m.rts()
 
 	// random steps a 16-bit shift register and returns it in d0.
@@ -633,13 +740,12 @@ fn (mut g Game) gates() {
 }
 
 // paint_gate holds the routines that draw the gate at a5 into the wall
-// texture. Ahead of the gate runs a lane: a green strip between two rails
-// that leads to the opening and through it.
+// texture: the gate itself, a ring of lightning that changes all the time,
+// and ahead of it the lane, a green strip between two rails that leads to
+// the opening and through it.
 fn (mut g Game) paint_gate() {
 	mut m := g.m
-	ring_bytes := 512
-	lane_bytes := lane_rings * ring_bytes
-	green := jagkit.cry(90, 255, 70)
+	lane_bytes := lane_rings * 256
 
 	// gate_base points a0 at the lane's first ring in the texture and a2
 	// at the copy of the wall it covers.
@@ -648,74 +754,49 @@ fn (mut g Game) paint_gate() {
 	m.move(.w, at(gate_ring, a5), d0)
 	m.sub(.w, imm(lane_rings), d0)
 	m.lsl(.l, imm(8), d0)
-	m.add(.l, d0, d0)
 	m.lea(lbl('texture'), a0)
 	m.add(.l, d0, a0)
 	m.move(.l, at(gate_wall, a5), a2)
 	m.rts()
 
-	// gate_column points a3 at the texel of the first lane ring at angle
-	// d2 and a4 at the wall texel it covers.
-	m.label('gate_column')
+	// copy_arc copies d3 + 1 texels starting at angle d2 from each of
+	// d6 + 1 rings at a4 to the rings at a3. The angle is a byte, so an arc
+	// across angle 0 wraps by itself.
+	m.label('copy_arc')
 	m.moveq(0, d4)
-	m.move(.w, d2, d4)
-	m.and(.w, imm(0xff), d4)
-	m.add(.w, d4, d4)
-	m.lea(idx(0, a0, d4), a3)
-	m.lea(idx(0, a2, d4), a4)
+	m.move(.b, d2, d4)
+	m.move(.w, d3, d5)
+	m.label('copy_texel')
+	m.move(.b, idx(0, a4, d4), idx(0, a3, d4))
+	m.add(.b, imm(1), d4)
+	m.dbra(d5, 'copy_texel')
+	m.lea(at(256, a3), a3)
+	m.lea(at(256, a4), a4)
+	m.dbra(d6, 'copy_arc')
 	m.rts()
 
 	// erase_lane restores the wall under the lane of the current opening.
 	m.label('erase_lane')
 	m.bsr('gate_base')
+	m.move(.l, a0, a3)
+	m.move(.l, a2, a4)
 	m.move(.w, at(gate_gap, a5), d2)
 	m.sub(.w, imm(widest_gap + 2), d2)
 	m.moveq(2 * (widest_gap + 2) - 1, d3)
-	m.label('erase_column')
-	m.bsr('gate_column')
-	m.moveq(lane_rings - 1, d5)
-	m.label('erase_texel')
-	m.move(.w, ind(a4), ind(a3))
-	m.lea(at(ring_bytes, a3), a3)
-	m.lea(at(ring_bytes, a4), a4)
-	m.dbra(d5, 'erase_texel')
-	m.add(.w, imm(1), d2)
-	m.dbra(d3, 'erase_column')
-	m.rts()
+	m.moveq(lane_rings - 1, d6)
+	m.bra('copy_arc')
 
-	// paint_stripes covers the gate's rings with stripes, all the way round.
-	m.label('paint_stripes')
+	// lay_lane draws the lane to the current opening, and its rails.
+	m.label('lay_lane')
 	m.bsr('gate_base')
-	m.lea(at(lane_bytes, a0), a3)
-	m.lea(lbl('gate_texture'), a1)
-	m.move(.w, imm(gate_rings * 256 - 1), d1)
-	m.label('paint_stripe')
-	m.move(.w, inc(a1), inc(a3))
-	m.dbra(d1, 'paint_stripe')
-	m.rts()
-
-	// paint_opening lays the lane: a green strip of wall that runs up to
-	// the gate and through it, between two rails.
-	m.label('paint_opening')
-	m.bsr('gate_base')
-	m.move(.l, at(gate_lane, a5), a2)
-	m.move(.w, at(gate_gap, a5), d2)
-	m.sub(.w, lbl('gap_half'), d2) // first angle of the opening
-	m.move(.w, lbl('gap_half'), d3)
-	m.add(.w, d3, d3)
-	m.sub(.w, imm(1), d3)
-	m.label('open_column')
-	m.bsr('gate_column')
-	m.moveq(lane_rings + gate_rings - 1, d5)
-	m.label('open_texel')
-	m.move(.w, ind(a4), ind(a3))
-	m.lea(at(ring_bytes, a3), a3)
-	m.lea(at(ring_bytes, a4), a4)
-	m.dbra(d5, 'open_texel')
-	m.add(.w, imm(1), d2)
-	m.dbra(d3, 'open_column')
-
-	m.bsr('rail') // two columns right of the opening
+	m.move(.l, a0, a3)
+	m.lea(lbl('lane'), a4)
+	m.bsr('opening')
+	m.moveq(lane_rings - 1, d6)
+	m.bsr('copy_arc')
+	m.move(.w, at(gate_gap, a5), d2) // two columns right of the opening
+	m.add(.w, lbl('gap_half'), d2)
+	m.bsr('rail')
 	m.add(.w, imm(1), d2)
 	m.bsr('rail')
 	m.move(.w, at(gate_gap, a5), d2) // and two left of it
@@ -723,20 +804,49 @@ fn (mut g Game) paint_gate() {
 	m.sub(.w, imm(1), d2)
 	m.bsr('rail')
 	m.sub(.w, imm(1), d2)
-	m.bsr('rail')
-
-	m.rts()
-
-	// rail draws a green line along the lane and through the gate at
-	// angle d2.
 	m.label('rail')
-	m.bsr('gate_column')
-	m.moveq(lane_rings + gate_rings - 1, d5)
+	m.moveq(0, d4)
+	m.move(.b, d2, d4)
+	m.lea(idx(0, a0, d4), a3)
+	m.moveq(lane_rings - 1, d5)
 	m.label('rail_texel')
-	m.move(.w, imm(green), ind(a3))
-	m.lea(at(ring_bytes, a3), a3)
+	m.move(.b, imm(rail_colour), ind(a3))
+	m.lea(at(256, a3), a3)
 	m.dbra(d5, 'rail_texel')
 	m.rts()
+
+	// opening leaves the first angle of the opening in d2 and its width,
+	// less one, in d3.
+	m.label('opening')
+	m.move(.w, at(gate_gap, a5), d2)
+	m.sub(.w, lbl('gap_half'), d2)
+	m.move(.w, lbl('gap_half'), d3)
+	m.add(.w, d3, d3)
+	m.sub(.w, imm(1), d3)
+	m.rts()
+
+	// spark_gate redraws the gate with the next frame of lightning, then
+	// lets the lane through it again.
+	m.label('spark_gate')
+	m.bsr('gate_base')
+	m.lea(at(lane_bytes, a0), a3)
+	m.moveq(0, d0)
+	m.move(.w, lbl('frame'), d0)
+	m.lsr(.w, imm(1), d0)
+	m.and(.w, imm(spark_frames - 1), d0)
+	m.mulu(imm(gate_rings * 256), d0)
+	m.lea(lbl('sparks'), a1)
+	m.add(.l, d0, a1)
+	m.move(.w, imm(gate_rings * 256 / 4 - 1), d1)
+	m.label('spark_long')
+	m.move(.l, inc(a1), inc(a3))
+	m.dbra(d1, 'spark_long')
+	m.lea(at(lane_bytes, a0), a3)
+	m.lea(lbl('lane'), a4)
+	m.add(.l, imm(lane_bytes), a4)
+	m.bsr('opening')
+	m.moveq(gate_rings - 1, d6)
+	m.bra('copy_arc')
 }
 
 // scroller moves the strip one pixel to the left and, every eighth frame,
@@ -867,6 +977,10 @@ fn (mut g Game) variables() {
 	g.variable('noise', 0xace1)
 	g.variable('last_gap', ship_angle)
 	g.variable('scrolled', 0)
+	g.variable('beat_tick', step_frames - 1)
+	g.variable('step', 0xffff)
+	g.variable('shown_x', window_x) // the window of the frame on screen
+	g.variable('shown_y', window_y)
 	m.label('profile')
 	m.long(0)
 	m.label('message_at')
@@ -878,6 +992,5 @@ fn (mut g Game) variables() {
 		m.word(0)
 		m.word(0)
 		m.long_label('wall_${i}')
-		m.long_label('lane_${i}')
 	}
 }

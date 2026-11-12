@@ -168,11 +168,11 @@ just demo                # rebuild the image from the V source first
 ```
 
 <p>
-  <img src="docs/screenshots/maw-title.png" width="49%" alt="The title screen of MAW: a logo and a scroller over a textured tunnel">
-  <img src="docs/screenshots/maw-play.png" width="49%" alt="MAW in play: a ship at the bottom of the tunnel, a red gate ahead and a green lane through it">
+  <img src="docs/screenshots/maw-title.png" width="49%" alt="The title screen of MAW: a logo and a scroller over a fractal tunnel">
+  <img src="docs/screenshots/maw-play.png" width="49%" alt="MAW in play: a ship in a fractal tunnel, an electric gate ahead and a green lane through it">
 </p>
 
-MAW is a tunnel flyer. Left and right turn the world; follow the green lane through each red gate. The GPU draws the tunnel from a lookup table with depth fog, a gate is a few rings of the wall texture painted over, the DSP is a three-voice synthesizer and the 68000 runs the rules and the tune. Its test plays the game: it boots the image in the emulator, reads the game's variables through the assembler's symbol table and steers.
+MAW is a tunnel flyer with a psytrance habit. Left and right turn the tunnel; follow the green lane through each gate, because the rest of the gate is live. The GPU draws the tunnel from a lookup table: a Julia set folded into a kaleidoscope for a wall, a palette that turns while you fly, fog, and a window on the table that wanders so the tunnel swerves. A gate is a few rings of the wall repainted with lightning every other frame. The DSP is a three-voice synthesizer and the 68000 runs the rules and the tune: 150 beats a minute, kick, rolling bass, acid line. Its test plays the game: it boots the image in the emulator, reads the game's variables through the assembler's symbol table and steers.
 
 It has only ever run in this emulator. Real hardware has not seen it.
 

@@ -78,6 +78,10 @@ fn build() !Built {
 	m.bytes(bounce(64, 10))
 	m.label('rainbow')
 	m.bytes(jagkit.big_endian16(rainbow(64)))
+	m.label('sway')
+	m.bytes(sway())
+	m.label('kick_sweep')
+	m.bytes(jagkit.big_endian32(kick_sweep()))
 	m.label('bass_line')
 	m.bytes(jagkit.big_endian32(bass_line()))
 	m.label('lead_line')
@@ -88,21 +92,27 @@ fn build() !Built {
 	m.bytes(dsp_code)
 	m.label('tunnel_table')
 	m.bytes(jagkit.big_endian32(tunnel_table()))
+	m.label('palettes')
+	m.bytes(jagkit.big_endian16(palettes()))
 
-	// The wall, a copy of the rings each gate and its lane cover, and the
-	// gate itself.
+	// The wall, a copy of the rings each gate's lane covers, the lane and
+	// the frames of lightning.
 	texture := wall_texture()
 	m.label('texture')
-	m.bytes(jagkit.big_endian16(texture))
+	m.bytes(texture)
 	for i, ring in gate_rows {
 		m.label('wall_${i}')
-		wall := texture[(ring - lane_rings) * 256..(ring + gate_rings) * 256]
-		m.bytes(jagkit.big_endian16(wall))
-		m.label('lane_${i}')
-		m.bytes(jagkit.big_endian16(lane_texture(wall)))
+		m.bytes(texture[(ring - lane_rings) * 256..ring * 256])
 	}
-	m.label('gate_texture')
-	m.bytes(jagkit.big_endian16(gate_texture()))
+	m.label('lane')
+	m.bytes(lane_texture())
+	m.label('sparks')
+	for frame in 0 .. spark_frames {
+		m.bytes(spark_texture(frame))
+	}
+	m.align(8)
+	m.label('zap')
+	m.bytes(zap())
 
 	title := logo('MAW', 8)
 	// Sprites: the ship level and leaning both ways, then the explosion.
@@ -173,6 +183,19 @@ fn build() !Built {
 						width:       sprite.width
 						height:      sprite.height
 						data:        m.address_of('sprite_${scene - scene_ship / 8}')
+						transparent: true
+					}
+				}
+				if scene >= scene_blast / 8 && scene < scene_wreck / 8 {
+					// Lightning around the wreck.
+					bitmaps << jagkit.Bitmap{
+						x:           left + (320 - zap_size) / 2
+						y:           ship_y - zap_size
+						width:       zap_size
+						height:      zap_size
+						data:        m.address_of('zap')
+						depth:       .bpp1
+						palette:     6
 						transparent: true
 					}
 				}
