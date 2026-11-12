@@ -147,6 +147,7 @@ fn C.SDL_SetAudioStreamFormat(stream voidptr, src &C.SDL_AudioSpec, dst &C.SDL_A
 fn C.SDL_PutAudioStreamData(stream voidptr, data voidptr, len int) bool
 fn C.SDL_GetAudioStreamQueued(stream voidptr) int
 fn C.SDL_ClearAudioStream(stream voidptr) bool
+fn C.SDL_SetAudioStreamFrequencyRatio(stream voidptr, ratio f32) bool
 
 fn C.SDL_OpenGamepad(id u32) voidptr
 fn C.SDL_CloseGamepad(gamepad voidptr)
