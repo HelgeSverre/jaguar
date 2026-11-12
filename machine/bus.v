@@ -3,7 +3,9 @@
 // Map (24-bit addresses):
 //   0x000000..0x3FFFFF  main RAM, 2 MiB mirrored once
 //   0x400000..0x7FFFFF  unpopulated second DRAM bank (reads as ones)
-//   0x800000..0xDFFFFF  cartridge
+//   0x800000..0xDFFFFF  cartridge; a power-of-two ROM repeats through the
+//                       window because the standard board leaves the upper
+//                       address lines undecoded
 //   0xE00000..0xEFFFFF  boot ROM (128 KiB, reads as ones beyond it)
 //   0xF00000..0xF0FFFF  TOM, with its 32-bit window repeated at +0x8000
 //   0xF10000..0xF1FFFF  JERRY
@@ -133,7 +135,7 @@ pub fn (mut m Machine) write32(addr u32, val u32) {
 @[direct_array_access; inline]
 fn (m &Machine) rom_read8(a u32) u8 {
 	if a >= cart_base && a < bios_base {
-		i := a - cart_base
+		i := (a - cart_base) & m.rom_mirror_mask
 		return if i < u32(m.rom.len) { m.rom[i] } else { u8(0xff) }
 	}
 	if a >= bios_base {

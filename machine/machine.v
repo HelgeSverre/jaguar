@@ -51,17 +51,20 @@ pub struct Machine {
 pub:
 	config Config
 pub mut:
-	cpu       &m68k.Cpu    = unsafe { nil }
-	gpu       &risc.Risc   = unsafe { nil }
-	dsp       &risc.Risc   = unsafe { nil }
-	tom       &tom.Tom     = unsafe { nil }
-	jerry     &jerry.Jerry = unsafe { nil }
-	eeprom    cart.Eeprom
-	ram       []u8
-	rom       []u8 // cartridge image, mapped at `cart_base`
-	bios      []u8 // boot ROM, mapped at `bios_base` when present
-	wavetable []u8
-	counters  Counters
+	cpu    &m68k.Cpu    = unsafe { nil }
+	gpu    &risc.Risc   = unsafe { nil }
+	dsp    &risc.Risc   = unsafe { nil }
+	tom    &tom.Tom     = unsafe { nil }
+	jerry  &jerry.Jerry = unsafe { nil }
+	eeprom cart.Eeprom
+	ram    []u8
+	rom    []u8 // cartridge image, mapped at `cart_base`
+	// rom_mirror_mask folds cartridge offsets onto the image: the size
+	// minus one for power-of-two images, all ones (no mirroring) otherwise.
+	rom_mirror_mask u32 = 0xffff_ffff
+	bios            []u8 // boot ROM, mapped at `bios_base` when present
+	wavetable       []u8
+	counters        Counters
 	// Guest timeline, in master ticks. Each processor has its own frontier
 	// because an instruction can overshoot the end of a slice.
 	tick     u64
@@ -107,6 +110,11 @@ pub fn (mut m Machine) load_direct(plan loader.LoadPlan) {
 		if segment.addr >= cart_base {
 			m.map_cartridge(segment.addr - cart_base, segment.data)
 		}
+	}
+	m.rom_mirror_mask = if m.rom.len > 0 && m.rom.len & (m.rom.len - 1) == 0 {
+		u32(m.rom.len - 1)
+	} else {
+		u32(0xffff_ffff)
 	}
 	m.entry = plan.entry
 	m.power_on()

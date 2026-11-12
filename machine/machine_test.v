@@ -164,3 +164,18 @@ fn test_vertical_interrupt_reaches_the_68000() {
 	m.write16(0xf0_00e0, 0x0101) // acknowledge
 	assert m.cpu.irq_level == 0
 }
+
+fn test_power_of_two_cartridge_mirrors_through_its_window() {
+	mut image := []u8{len: 0x2000}
+	image[0] = 0x4e
+	image[1] = 0x71
+	plan := loader.plan(image, loader.Options{
+		format:    .alpine_rom
+		load_addr: 0x80_0000
+	}) or { panic(err) }
+	mut m := new(Config{})
+	m.load_direct(plan)
+	assert m.read16(0x80_0000) == 0x4e71
+	assert m.read16(0x80_2000) == 0x4e71, 'undecoded address lines repeat the ROM'
+	assert m.read16(0xa0_0000) == 0x4e71
+}

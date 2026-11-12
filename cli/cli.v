@@ -24,9 +24,12 @@ common options:
   --screenshot <png>         run: save the final frame
   --dump                     run: print machine state at the end
   --peek <addr[:len]>        run: print memory at the end (repeatable)
-  --cpu gpu|dsp              trace: processor to watch (default dsp)
+  --cpu m68k|gpu|dsp         trace: processor to follow (default dsp)
   --tail <n>                 trace: instructions to print (default 64)
-  --stop-pc <addr>           trace: stop when the processor reaches addr'
+  --stop-pc <addr>           trace: stop when the processor reaches addr
+  --stop-range <lo:hi>       trace: stop when the PC enters lo..hi
+  --watch <addr[:mask]>      trace: stop when the long at addr changes
+  --skip <n>                 trace: instructions before stop conditions apply'
 
 // main_headless runs a headless command and returns the process exit code.
 // `args` excludes the executable name.
@@ -86,6 +89,9 @@ fn run_command(command string, args []string) ! {
 	processor := parser.string('cpu', 0, 'dsp', 'processor to trace')
 	tail := parser.int('tail', 0, 64, 'instructions to print')
 	stop_text := parser.string('stop-pc', 0, '', 'stop address')
+	range_text := parser.string('stop-range', 0, '', 'stop when the PC enters lo:hi')
+	watch_text := parser.string('watch', 0, '', 'stop when the long at addr[:mask] changes')
+	skip := parser.int('skip', 0, 0, 'instructions before stop conditions apply')
 	free := parser.finalize()!
 	if free.len != 1 {
 		return error('${command}: expected exactly one path\n\n${usage}')
@@ -104,11 +110,30 @@ fn run_command(command string, args []string) ! {
 			bench(free[0], options, frames)!
 		}
 		'trace' {
+			mut stop_low := ?u32(none)
+			mut stop_high := u32(0)
+			if range_text != '' {
+				stop_low = parse_address(range_text.all_before(':'))!
+				stop_high = parse_address(range_text.all_after(':'))!
+			}
+			mut watch := ?u32(none)
+			mut watch_mask := u32(0xffff_ffff)
+			if watch_text != '' {
+				watch = parse_address(watch_text.all_before(':'))!
+				if watch_text.contains(':') {
+					watch_mask = parse_address(watch_text.all_after(':'))!
+				}
+			}
 			trace(free[0], options, TraceOptions{
-				processor: if processor == 'gpu' { .gpu } else { .dsp }
-				frames:    frames
-				tail:      tail
-				stop_pc:   if stop_text == '' { none } else { parse_address(stop_text)! }
+				processor:  parse_processor(processor)!
+				frames:     frames
+				tail:       tail
+				skip:       u64(skip)
+				stop_pc:    if stop_text == '' { none } else { parse_address(stop_text)! }
+				stop_low:   stop_low
+				stop_high:  stop_high
+				watch:      watch
+				watch_mask: watch_mask
 			})!
 		}
 		else {
@@ -140,7 +165,7 @@ fn run_headless(path string, options ImageOptions, frames int, screenshot string
 	print_counters(m)
 	if dump_state {
 		print(debug.processors(m))
-		print(debug.hex_dump(m, (m.cpu.pc - 32) & 0xff_fffe, 96))
+		print(debug.m68k_listing(m, m.cpu.pc, 12))
 		if m.gpu.running {
 			print(debug.registers_risc(m.gpu))
 			print(debug.risc_listing(m, .gpu, m.gpu.pc - 24, 28))

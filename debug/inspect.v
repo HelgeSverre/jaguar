@@ -92,3 +92,24 @@ pub fn object_list(m &machine.Machine, vc u32) string {
 	}
 	return out.str()
 }
+
+// word_reader returns a side-effect-free word reader over machine memory,
+// in the form the 68000 disassembler takes.
+pub fn word_reader(m &machine.Machine) WordReader {
+	return fn [m] (addr u32) u16 {
+		return (u16(m.peek8(addr)) << 8) | m.peek8(addr + 1)
+	}
+}
+
+// m68k_listing disassembles `count` 68000 instructions starting at `addr`.
+pub fn m68k_listing(m &machine.Machine, addr u32, count int) string {
+	read := word_reader(m)
+	mut out := strings.new_builder(1024)
+	mut pc := addr
+	for _ in 0 .. count {
+		text, length := disassemble_m68k(read, pc)
+		out.writeln('${pc:06x}  ${text}')
+		pc += length
+	}
+	return out.str()
+}
