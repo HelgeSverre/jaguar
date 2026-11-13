@@ -45,6 +45,16 @@ demo name="maw": release
     v run demos/{{ name }}
     ./bin/vjag demos/{{ name }}.jag
 
+# Rewrite docs/jagkit-reference.md from the comments in jagkit/.
+[group('check')]
+reference:
+    JAGKIT_WRITE_REFERENCE=1 v test jagkit/reference_test.v
+
+# Run the demos (or given images) in a second emulator, for comparison.
+[group('check')]
+crosscheck *args: release
+    sh scripts/crosscheck/run.sh "$@"
+
 # Run the headless runner, e.g. `just headless inspect image.jag --json`.
 [group('run')]
 headless *args: release

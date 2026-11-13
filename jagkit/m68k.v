@@ -40,8 +40,8 @@ enum EaKind {
 	label_ptr // #label
 }
 
-// Ea is one operand of a 68000 instruction. Build them with the register
-// constants and the functions below.
+// Ea is one operand of a 68000 instruction. The registers are the constants
+// d0..d7, a0..a6 and sp; the functions below build the rest.
 pub struct Ea {
 	kind  EaKind
 	reg   int

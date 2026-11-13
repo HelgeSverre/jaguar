@@ -2,9 +2,9 @@
 
 `jagkit` is a V module that turns a V program into an Atari Jaguar image. There is no assembler, linker or C toolchain: you write V, run it, and a `.jag` file comes out that the emulator loads.
 
-This guide walks through [`demos/hello`](../demos/hello/main.v), the smallest complete program, then covers what the larger demos add.
+This guide walks through [`demos/hello`](../demos/hello/main.v), the smallest complete program, and [`demos/plasma`](../demos/plasma/main.v), a first program for the GPU, then covers what the larger demos add. [`jagkit-reference.md`](jagkit-reference.md) lists every public name.
 
-Everything here has run in this emulator only. Real hardware has not seen any of it.
+Everything here has run in this emulator and in Virtual Jaguar. Real hardware has not seen any of it.
 
 ## Contents
 
@@ -12,6 +12,7 @@ Everything here has run in this emulator only. Real hardware has not seen any of
 - [How a jagkit program is built](#how-a-jagkit-program-is-built)
 - [The 68000 assembler](#the-68000-assembler)
 - [Start-up](#start-up)
+- [Memory map](#memory-map)
 - [The frame interrupt](#the-frame-interrupt)
 - [Pictures and the display list](#pictures-and-the-display-list)
 - [Colour](#colour)
@@ -33,6 +34,8 @@ just run demos/hello.jag     # play it
 just demo hello              # both steps
 v -prod test demos/hello/    # boot it in the emulator and check it works
 ```
+
+New to the Jaguar? `hello` uses only the 68000 and the object processor; start there. `plasma`, later in this guide, adds the GPU.
 
 Two lines of text and a ball on a dark blue screen. The arrow keys move the ball; Z, X or C beep.
 
@@ -112,7 +115,7 @@ m.label('skip')
 
 **Labels** are strings. A label may be used before it is defined. `m.unique('skip')` returns a fresh name, which a macro needs so that two calls do not define the same label. `m.address_of(name)` returns the address of a label that is already defined; use it to hand addresses to other builders, such as the display list.
 
-**Errors** are collected, not thrown one at a time. `assemble()` returns one error listing every problem: unknown labels, labels defined twice, values out of range, operands an instruction does not accept. A handful of misuses that have no sensible recovery (passing a data register where an address register is required) panic at the call.
+**Errors** are collected, not thrown one at a time. `assemble()` returns one error listing every problem: unknown labels, labels defined twice, values out of range, and forms the 68000 does not have (`and` from an address register, `lea` of a data register, a byte move to an address register). An accepted instruction is one the processor has: a test assembles every combination of instruction, size and addressing mode and reads the accepted ones back through the emulator's disassembler. A handful of misuses that have no sensible recovery (passing a data register where an address register is required) panic at the call.
 
 **Data** goes in the same buffer as code. A variable is a label followed by `m.word(initial)`. Keep data out of the path of execution: the example puts it after the last `rts`.
 
@@ -148,7 +151,25 @@ m.bra('sleep')
 
 **Both television standards.** Bit 4 of `joybuts` is set on an NTSC machine. The example builds a *profile* for each standard (the display window values, where the middle of the picture starts, the address of a display list built for that standard) and copies the right one into its variables at start-up. Everything after that reads the variables.
 
-**Memory.** The Jaguar has 2 MB of RAM from address 0. The demos load at `0x4000`, let the stack grow down from there, and place buffers at round addresses above the image (`0x80000` and up). Nothing on the Jaguar stops a program from drawing over its own code, so check the layout at build time with `jagkit.check_regions`. It reports regions that overlap or run past the end of memory:
+## Memory map
+
+| Addresses | What is there |
+|---|---|
+| `0x000000`..`0x1fffff` | main memory, 2 MB |
+| `0x000100` | the vector every interrupt arrives through (`interrupt_vector`) |
+| `0x004000` | where the demos load their image; the 68000's stack grows down from here |
+| `0x080000` and up | where the demos keep display lists, text screens and picture buffers |
+| `0xf00000`..`0xf003ff` | TOM's registers: video, the object processor (`olp`, `vmode`, `bg`, `int1` …) |
+| `0xf00400`..`0xf005ff` | the colour table, 256 words (`clut`) |
+| `0xf02100`.. | the GPU's control registers (`g_flags`, `g_pc`, `g_ctrl`) |
+| `0xf03000`..`0xf03fff` | the GPU's RAM, 4 KB (`gpu_ram`): its program and variables |
+| `0xf14000`.. | the pad (`joystick`, `joybuts`) |
+| `0xf1a100`.. | the DSP's control registers and the sound outputs (`d_flags`, `d_pc`, `d_ctrl`, `l_dac`, `r_dac`) |
+| `0xf1b000`..`0xf1cfff` | the DSP's RAM, 8 KB (`dsp_ram`) |
+
+The names in brackets are constants of the kit (`jagkit/hardware.v`).
+
+The loader puts the image where its header says and nothing else is arranged for you: where buffers go is your choice. Nothing on the Jaguar stops a program from drawing over its own code, so check the layout at build time with `jagkit.check_regions`. It reports regions that overlap or run past the end of memory:
 
 ```v
 payload := m.assemble()!
@@ -218,6 +239,7 @@ Rules the builder checks and reports:
 Things the builder cannot check:
 
 - **`y` is in half-lines from the top of the frame.** Line `n` of the visible picture is `video.vdb + 2 * n`.
+- **A scaled bitmap takes more room in the list** (three phrases, not two), which is why the builder gives every object 32 bytes.
 - **`x` is in pixels from the left of the display window**, which is `video.width` wide (352 on NTSC, 345 on PAL). Televisions, and this emulator, show roughly the middle 320, so the demos centre their picture: `left := (video.width - 320) / 2`.
 - **Later objects are drawn over earlier ones.**
 - **The list is used up as it is drawn.** The object processor rewrites the objects while it works. Keep a master copy in the image and copy it to the list address every frame, in the interrupt. Skip this and the picture is gone after one frame.
@@ -385,6 +407,64 @@ g.addqt(4, target)           // delay slot: runs before the jump takes effect
 
 The destination is always the second operand.
 
+### A first GPU program
+
+[`demos/plasma`](../demos/plasma/main.v) is the smallest program that uses the GPU: `just demo plasma`. The 68000 keeps three numbers moving; the GPU turns them into a 160×100 picture every frame, which is shown at double size.
+
+<img src="screenshots/plasma.png" width="320" alt="The plasma example: bands of colour">
+
+The two processors talk through a block of longs at the end of the GPU program. Its offsets are V constants that both sides use:
+
+```v
+const shared_go = 4      // set by the 68000 when the GPU may draw
+const shared_across = 8  // where on the wave the left edge is, 0..255
+// ...
+g.align_long()
+g.label('shared')
+for _ in 0 .. 8 {
+	g.long(0)
+}
+```
+
+The GPU points `r14` at the block, so that `load_r14` and `store_r14` reach every value in one instruction. It waits for the word, takes it back and draws:
+
+```v
+g.label('wait')
+g.load_r14(shared_go, colour)
+g.cmpq(0, colour)
+g.jr(.eq, 'wait')
+g.nop() // every jump runs the instruction after it; here there is nothing to do
+g.moveq(0, colour)
+g.store_r14(colour, shared_go)
+```
+
+The inner loop is ten instructions a pixel. The last two show the delay slot earning its keep: `subq` sets the flags, the jump tests them, and the instruction after the jump advances the pointer either way without disturbing them.
+
+```v
+g.label('pixel')
+g.loadb(across, colour)
+g.addqt(1, across)
+g.loadb(slant, other)
+g.addqt(1, slant)
+g.add(other, colour)
+g.add(row_wave, colour)
+g.storeb(colour, target)
+g.subq(1, left)
+g.jr(.ne, 'pixel')
+g.addqt(1, target)
+```
+
+The 68000 learns the block's address at build time with `gpu.address_of('shared')` and writes to it in the frame interrupt:
+
+```v
+m.move(.l, d0, abs(mailbox + shared_across))
+m.move(.l, imm(1), abs(mailbox + shared_go))
+```
+
+Plasma gets away with one buffer because the GPU starts at the top right after the last visible line and draws faster than the television does. A picture that takes longer than a frame needs two buffers: see [Drawing without tearing](#drawing-without-tearing).
+
+Its test works out in V what every pixel should be from the values in the block and compares the buffer with that, so the GPU program is checked instruction for instruction, not by eye.
+
 ### Rules of the RISC processors
 
 | Rule | Consequence |
@@ -483,7 +563,11 @@ Notes:
 - The emulator's picture is the middle of the display window, a few pixels in from the edges, like a television. Compare positions by difference, not absolutely.
 - Use `v -prod test`; the emulator is several times slower without it.
 
-For looking at a picture, `./bin/vjag_test run game.jag --frames 120 --screenshot out.png` runs headless and saves the last frame; `--wav` saves the sound and `--press b@30+5` holds a button.
+For looking at a picture, `./bin/vjag_test run game.jag --frames 120 --screenshot out.png` runs headless and saves the last frame; `--wav` saves the sound and `--press b@30+5` holds a button. [`headless.md`](headless.md) has the rest.
+
+### A second emulator
+
+A test in this emulator proves that the program and the emulator agree, not that either is right. `sh scripts/crosscheck/run.sh` runs the demos in the Virtual Jaguar libretro core as well and leaves a picture from each emulator in `out/crosscheck`. It is worth running on anything new: MAW passed every test here while reading its lookup table from an unaligned address, and looked like noise there.
 
 ## V traps
 
@@ -505,8 +589,10 @@ Found with V 0.5.2 while writing the kit and the demos.
 | To learn | Read |
 |---|---|
 | The whole flow in one file | [`demos/hello/main.v`](../demos/hello/main.v) |
+| The GPU, in one file | [`demos/plasma/main.v`](../demos/plasma/main.v) |
 | Text, PAL and NTSC, a GPU renderer, the buffer handshake | [`demos/wirewing`](../demos/wirewing) |
 | Lookup-table rendering, palette animation, a sequencer | [`demos/maw`](../demos/maw) |
 | Many scaled sprites, a display list rebuilt every frame, a full DSP synthesizer | [`demos/hero`](../demos/hero) |
-| Every function, with its comment | `v doc jagkit`, or the files in [`jagkit/`](../jagkit) |
+| Every function, with its comment | [`jagkit-reference.md`](jagkit-reference.md) |
+| The headless runner's options | [`headless.md`](headless.md) |
 | How each instruction is encoded, checked against the emulator's disassemblers | [`jagkit/asm_test.v`](../jagkit/asm_test.v) |

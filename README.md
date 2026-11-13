@@ -3,7 +3,7 @@
 An Atari Jaguar emulator written in [V](https://vlang.io).
 
 <p align="center">
-  <img src="docs/screenshots/hero.png" width="720" alt="vjag playing Tempest 2000 inside its console shell">
+  <img src="docs/screenshots/hero.png" width="720" alt="vjag playing Jaguar Hero, a homebrew rhythm game, inside its console shell">
 </p>
 
 ![V 0.5.2](https://img.shields.io/badge/V-0.5.2-5d87bf)
@@ -141,13 +141,16 @@ vjag_test run game.j64 --watch-io 0xf1a100:0xf1a120          # every write to th
 vjag_test run game.j64 --frames 900 --press b@600 --press left@700+30 --screenshot shot.png   # scripted pad input
 ```
 
+[`docs/headless.md`](docs/headless.md) lists every command and option.
+
 ## Write your own
 
 `jagkit` is a small V module for making Jaguar programs without an assembler: you write V, and V emits the image.
 
-- **Two assemblers.** One for the 68000, one for the GPU and DSP. An instruction is a method call, a label is a string, a register can have a name that means something, and V itself is the macro language.
+- **Two assemblers.** One for the 68000, one for the GPU and DSP. An instruction is a method call, a label is a string, a register can have a name that means something, and V itself is the macro language. Mistakes the processors would not forgive (a form the 68000 does not have, a `movei` in a delay slot, a program too large for its RAM) are reported when the image is built.
 - **Display lists.** Describe the bitmaps; the list comes out laid out, linked and guarded for NTSC or PAL.
-- **The dull parts.** The hardware register map, nearest-colour matching into CRY, and a `.jag` writer.
+- **Ready-made routines.** A pad reader, text printing with a font, a three-voice DSP synthesizer.
+- **The dull parts.** The hardware register map, nearest-colour matching into CRY, a memory layout check and a `.jag` writer.
 
 ```v
 mut gpu := jagkit.new_risc(jagkit.gpu_ram)
@@ -160,40 +163,24 @@ gpu.jr(.ne, 'next')
 gpu.addqt(2, target)           // delay slot
 ```
 
-[`docs/jagkit.md`](docs/jagkit.md) is the guide. It walks through [`demos/hello`](demos/hello/main.v), a ball you move with the pad that beeps when you press fire: the smallest program with a picture, text, input, sound and a test.
-
-`demos/maw`, `demos/wirewing` and `demos/hero` are whole games built this way, and the `.jag` files next to them are their output, so there is something to run out of the box:
+| Read | For |
+|---|---|
+| [`docs/jagkit.md`](docs/jagkit.md) | the guide: two small programs explained, then the display list, pad, sound, text, GPU, testing |
+| [`docs/jagkit-reference.md`](docs/jagkit-reference.md) | every public name, generated from the source comments |
+| [`demos/`](demos/README.md) | two examples and three games, each with its `.jag` and a test that plays it |
 
 ```sh
-just run demos/maw.jag        # play one
-just run demos/wirewing.jag
-just run demos/hero.jag
-just demo maw                 # rebuild an image from its V source first, then play
-just demo hello               # the example from the guide
+just demo hello               # build an image from its V source, then run it
+just run demos/hero.jag       # or run one that is already built
 ```
 
 <p>
-  <img src="docs/screenshots/maw-title.png" width="49%" alt="The title screen of MAW: a logo and a scroller over a fractal tunnel">
-  <img src="docs/screenshots/maw-play.png" width="49%" alt="MAW in play: a ship in a fractal tunnel, an electric gate ahead and a green lane through it">
+  <img src="docs/screenshots/maw-play.png" width="32%" alt="MAW in play: a ship in a fractal tunnel, an electric gate ahead and a green lane through it">
+  <img src="docs/screenshots/wirewing-play.png" width="32%" alt="WIREWING in a banked turn over a green wireframe landscape">
+  <img src="docs/screenshots/jaguar-hero-play.png" width="32%" alt="Jaguar Hero mid-song: a 150 note streak on a neon highway">
 </p>
 
-MAW is a tunnel flyer with a psytrance habit. Left and right turn the tunnel; follow the green lane through each gate, because the rest of the gate is live. The GPU draws the tunnel from a lookup table: a Julia set folded into a kaleidoscope for a wall, a palette that turns while you fly, fog, and a window on the table that wanders so the tunnel swerves. A gate is a few rings of the wall repainted with lightning every other frame. The DSP is a three-voice synthesizer and the 68000 runs the rules and the tune: 150 beats a minute, kick, rolling bass, acid line. Its test plays the game: it boots the image in the emulator, reads the game's variables through the assembler's symbol table and steers.
-
-WIREWING (`demos/wirewing`, an 8 KB image) is a wireframe flying game. Bank with left and right, pull back to climb, fly through the spinning beacons before the tank is dry. The GPU projects the corners of a rolling landscape around the eye, with perspective, bank and distance shading, and joins them with lines it draws itself, sixty pictures a second. Fly into a hill and the onboard computer has a remark ready. Its test flies it: an autopilot collects beacons, a dive ends in the ground, an empty tank ends the flight.
-
-<p>
-  <img src="docs/screenshots/wirewing-play.png" width="49%" alt="WIREWING in a banked turn over a green wireframe landscape">
-  <img src="docs/screenshots/wirewing-crash.png" width="49%" alt="WIREWING after a crash: WHERE DID YOU LEARN TO FLY?">
-</p>
-
-Jaguar Hero (`demos/hero`) is a five-lane rhythm game. Five original songs, from a 113 BPM synthwave anthem to a 180 BPM finale, are written as patterns in `songs.v` and played by a ten-voice DSP synthesizer with drums, bass, distorted rhythm guitar, keys, twin leads and a stereo echo. Each chart is derived from the song's lead guitar, so what you press is what you hear: miss a note and the guitar drops out. Play the lanes with keys 1 to 5 (or Left, Up, Right, B, A on a pad), pause with Enter. Its test has a robot read the chart out of memory and play the finale perfectly inside the frame budget.
-
-<p align="center">
-  <img src="docs/screenshots/jaguar-hero-title.png" width="49%" alt="Jaguar Hero title screen">
-  <img src="docs/screenshots/jaguar-hero-play.png" width="49%" alt="Jaguar Hero mid-song: a 150 note streak on a neon highway">
-</p>
-
-The games have only ever run in this emulator. Real hardware has not seen them.
+The demos run in this emulator and, checked with `scripts/crosscheck/run.sh`, in Virtual Jaguar. Real hardware has not seen them.
 
 ## How it is put together
 
@@ -231,6 +218,8 @@ just test
 - **Devices:** the object processor, blitter, RISC cores, EEPROM, controller matrix and timers have unit tests that check exact memory and register results.
 - **Whole machine:** small hand-assembled programs boot through the real loader, run on the 68000, hand work to the GPU and publish a result word.
 - **Loader:** synthetic fixtures for every format and every way a file can be truncated or lie about itself.
+- **jagkit:** every instruction form the assemblers accept is read back through the emulator's disassemblers, and every demo is built, booted (as NTSC and as PAL) and played by its test.
+- **A second emulator:** `just crosscheck` runs the demos in Virtual Jaguar and leaves pictures to compare. Not part of `just test`: it fetches and builds that emulator.
 
 ## Credits
 

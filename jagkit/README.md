@@ -15,10 +15,10 @@ A V module for writing Atari Jaguar programs in V: you call it from an ordinary 
 | `synth.v` | a three-voice DSP synthesizer |
 
 - **Guide:** [`docs/jagkit.md`](../docs/jagkit.md) walks through a complete program and covers the display list, the pad, sound, the GPU and testing.
-- **Smallest example:** [`demos/hello`](../demos/hello/main.v). Run `just demo hello`.
-- **Reference:** `v doc jagkit`, or the comments in the files above.
+- **Smallest examples:** [`demos/hello`](../demos/hello/main.v) for the 68000 and [`demos/plasma`](../demos/plasma/main.v) for the GPU. Run `just demo hello`.
+- **Reference:** [`docs/jagkit-reference.md`](../docs/jagkit-reference.md), generated from the comments in the files above.
 - **Larger examples:** `demos/wirewing`, `demos/maw`, `demos/hero`.
 
 `image.v` uses the emulator's `tom` module for colour conversion, so the kit is used from inside this repository.
 
-Programs built with it have only run in this emulator, never on real hardware.
+Programs built with it have run in this emulator and in Virtual Jaguar, never on real hardware.
