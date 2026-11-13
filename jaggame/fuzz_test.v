@@ -299,8 +299,17 @@ fn (mut f Fuzzer) gen(t Type, depth int) Expr {
 				return binary(ops[f.r.below(ops.len)], f.gen(f.narrower(t), d), f.gen(t, d))
 			}
 			2 {
-				ops := [Op.div, .mod, .mul]
-				return binary(ops[f.r.below(ops.len)], f.gen(t, d), f.operand(t, d))
+				ops := [Op.div, .mod, .mul, .add, .sub, .min, .max]
+				op := ops[f.r.below(ops.len)]
+				if f.r.chance(50) {
+					// A bare literal on the left takes the type of the right.
+					return binary(op, lit(f.literal(t)), f.gen(t, d))
+				}
+				if t == .fix && f.r.chance(50) {
+					// A float literal makes an integer side fix.
+					return binary(op, f.gen(f.r.pick_integer(), d), fix_value(f.r.raw_value(.fix)))
+				}
+				return binary(op, f.gen(t, d), f.operand(t, d))
 			}
 			3 {
 				if t.is_integer() {
@@ -467,10 +476,11 @@ fn (mut f Fuzzer) statement(mut c Code, depth int, own Expr, own_type Type, own_
 		}
 		8 {
 			if depth > 0 {
-				t := f.r.pick_integer()
+				t := if f.r.chance(15) { Type.fix } else { f.r.pick_integer() }
 				f.serial++
 				v := c.local('i${f.serial}', t)
-				c.for_(v, f.r.below(3), f.gen(t, 1).and(7))
+				to := if t == .fix { f.gen(t, 1).min(5) } else { f.gen(t, 1).and(7) }
+				c.for_(v, f.r.below(3), to)
 				f.loop_body(mut c, depth, own, own_type, own_records)
 				return
 			}
@@ -488,7 +498,12 @@ fn (mut f Fuzzer) statement(mut c Code, depth int, own Expr, own_type Type, own_
 		}
 		10 {
 			if depth > 0 {
-				c.repeat(f.gen(f.r.pick_integer(), 1).and(3))
+				t := f.r.pick_integer()
+				mut count := f.gen(t, 1).and(3)
+				if t.is_signed() {
+					count = count.sub(1) // -1 runs no times
+				}
+				c.repeat(count)
 				f.loop_body(mut c, depth, own, own_type, own_records)
 				return
 			}
@@ -517,9 +532,14 @@ fn (mut f Fuzzer) statement(mut c Code, depth int, own Expr, own_type Type, own_
 			}
 		}
 		13 {
-			if f.r.chance(20) && c.prog.funcs[c.func].ret == .void {
+			if f.r.chance(20) {
+				ret := c.prog.funcs[c.func].ret
 				c.if_(f.gen(.bool, 1))
-				c.ret_void()
+				if ret == .void {
+					c.ret_void()
+				} else {
+					c.ret(f.value(ret, 2))
+				}
 				c.end()
 				return
 			}

@@ -78,6 +78,24 @@ fn (img &Image) slot_value(ram []u8, var int, slot int) i64 {
 	return read_raw(ram, base + u32(slot * v.typ.size()), v.typ)
 }
 
+// differences compares every variable, parameter and local of a program
+// that has run in an interpreter with the same program run as this image,
+// and lists those that differ. Both must have started from the beginning
+// and done the same work.
+pub fn (img &Image) differences(it &Interpreter, ram []u8) []string {
+	mut found := []string{}
+	for var, v in img.low.vars {
+		for slot in 0 .. img.low.slots(v) {
+			want := it.memory[var][slot]
+			got := img.slot_value(ram, var, slot)
+			if want != got {
+				found << '`${v.label}` value ${slot}: interpreter ${want}, 68000 ${got}'
+			}
+		}
+	}
+	return found
+}
+
 // value is the raw value of a global variable, read from the machine's
 // memory.
 pub fn (img &Image) value(ram []u8, name string) !i64 {
