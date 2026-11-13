@@ -12,7 +12,7 @@ v -prod test demos/maw/       # its test
 |---|---|---|---|
 | [`hello`](hello/main.v) | the smallest complete program: text, a ball, a beep | 4 KB | arrows move; Z, X, C beep |
 | [`hello2`](hello2/main.v) | `hello` again, written with [jaggame](../docs/jaggame/guide.md) and no assembly, plus a spinning coin, a scaled and a flipped sprite, and counting numbers | 13 KB | arrows move; Z, X, C beep |
-| [`ghostgrid`](ghostgrid/main.v) | **in progress.** The start of GHOSTGRID, a stealth trainer written with [jaggame](../docs/jaggame/guide.md) and no assembly: two rooms drawn from text (one bigger than the screen, one smaller), a figure that walks, runs and slides along walls, a camera that follows, chips to pick up and an exit pad that loads the next room. Art is made by [a small program](ghostgrid/art/make_art.v) and imported from PNG. No guards yet | 24 KB | arrows move; Z, X, C run |
+| [`ghostgrid`](ghostgrid/main.v) | **first mission.** GHOSTGRID, a stealth trainer written with [jaguar](../docs/jaggame/guide.md) and no assembly: sneak through a depot bigger than the screen to the exit pad past four guards. Each guard has a state machine (patrol, suspicious, alert, search, return), a cone of amber light on the floor that walls cut and that is exactly what sees you, and ears. You walk, run (guards hear it), crouch behind cover (they cannot see you there) and knock on a wall (one comes to look). A clock, an alert indicator and an end screen with the time and the times seen. Art is made by [a small program](ghostgrid/art/make_art.v) and imported from PNG | 95 KB | arrows move; Z run, X crouch, C knock; Z or Enter after the mission plays again |
 | [`plasma`](plasma/main.v) | a first GPU program: three waves, one picture a frame | 2 KB | none |
 | [`wirewing`](wirewing) | a wireframe flying game | 8 KB | left and right bank, Down climbs, Up dives; Z, X, C start |
 | [`maw`](maw) | a tunnel flyer | 438 KB | left and right turn the tunnel; Z, X, C start |
@@ -25,11 +25,11 @@ All of them handle NTSC and PAL, and all run in this emulator and in Virtual Jag
 ## GHOSTGRID
 
 <p>
-  <img src="../docs/screenshots/ghostgrid-room.png" width="49%" alt="GHOSTGRID's second room: a glowing grid floor, block walls, purple cover blocks, a chip, an exit pad and the player">
-  <img src="../docs/screenshots/ghostgrid-scrolled.png" width="49%" alt="GHOSTGRID's first room scrolled to the exit pad in its south east corner">
+  <img src="../docs/screenshots/ghostgrid-guards.png" width="49%" alt="GHOSTGRID in the west hall: two guards in teal, each with an amber patch of lit floor in front of him that shows where he looks, the red and white figure at the bottom, purple cover blocks and the word CALM">
+  <img src="../docs/screenshots/ghostgrid-alert.png" width="49%" alt="A guard with a red exclamation mark over his head chasing the figure, the word ALERT! in red at the top right">
 </p>
 
-GHOSTGRID is an original stealth trainer, built one slice at a time on jaggame. So far there is a player and two training rooms: walk with the arrows, hold Z, X or C to run, pick up the four chips (a counter at the top left) and step on the green pad to go to the other room. [Chapter 3 of the guide](../docs/jaggame/guide.md#chapter-3-assets-rooms-and-collision) walks through it. Its test is a robot that finds a route through the room's text and plays it on NTSC and PAL, and the movement then runs again in the interpreter with the same pad. It also runs in Virtual Jaguar with the same output.
+GHOSTGRID is an original stealth trainer, built one slice at a time on jaggame. The first mission is done: start in the south west of the depot, reach the green pad in the north east. The red and white figure is you; the broad teal ones with the red lens are guards, the lens is on the side they look to, and the amber floor is what they see. Waiting, a place to crouch behind cover and one knock on a wall are what the way through needs (a robot that searches for an unseen way says so). [Chapter 3 of the guide](../docs/jaggame/guide.md#chapter-3-assets-rooms-and-collision) walks through the figure and the room, [chapter 4](../docs/jaggame/guide.md#chapter-4-state-machines-actors-and-guards) through the guards. Its tests: that robot plays the mission unseen on NTSC and PAL with the interpreter alongside, and a test for each rule (caught, heard, knocked, hidden, never stuck). It runs in Virtual Jaguar with the same picture, frame for frame.
 
 ## MAW
 

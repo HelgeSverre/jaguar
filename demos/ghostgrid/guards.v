@@ -34,6 +34,7 @@ const post_facing = [jaggame.angle_right, jaggame.angle_down, jaggame.angle_up, 
 
 // guard_fields are what a guard's record holds besides what every actor has.
 fn guard_fields() []jaggame.Field {
+	// guide:gg_fields
 	return [jaggame.Field{'wp', .u8}, jaggame.Field{'first', .u8},
 		jaggame.Field{'count', .u8}, jaggame.Field{'dir', .u8},
 		jaggame.Field{'mleft', .u8}, jaggame.Field{'pause', .u8},
@@ -43,6 +44,7 @@ fn guard_fields() []jaggame.Field {
 		jaggame.Field{'spot_x', .i16}, jaggame.Field{'spot_y', .i16},
 		jaggame.Field{'cone_x', .i16}, jaggame.Field{'cone_y', .i16},
 		jaggame.Field{'cone_f', .u8}, jaggame.Field{'cone_n', .u8}]
+	// guide:end
 }
 
 // passable is whether a guard can walk on a character of the map.
@@ -242,6 +244,7 @@ fn (mut m Mission) define_guard_functions() {
 	c = p.define(m.around)
 	i = m.around.arg('i')
 	look := m.gf(i, 'look')
+
 	c.if_(look.eq(0))
 
 	c.if_(m.chase.call(i, m.gf(i, 'spot_x').as_(.i32), m.gf(i, 'spot_y').as_(.i32),
@@ -280,6 +283,7 @@ fn (mut m Mission) define_cone() {
 	// turned? Then the cone is stale and the update will do it again.
 	mut c := p.define(m.moved)
 	mi := m.moved.arg('i')
+
 	c.if_(m.gcx(mi).shr(4).ne(m.gf(mi, 'cone_x').as_(.i32)).either(m.gcy(mi).shr(4).ne(m.gf(mi,
 		'cone_y').as_(.i32))).either(m.guards.face(mi).shr(6).ne(m.gf(mi, 'cone_f'))))
 	c.set(m.gf(mi, 'stale'), true)

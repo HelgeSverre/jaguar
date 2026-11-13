@@ -959,11 +959,38 @@ fn test_the_mission_needs_waiting_cover_and_one_knock() {
 	assert to_knock['wait'] > 0, 'the way to the knock includes waiting for a guard to go by'
 	assert to_knock['hide'] > 0, 'and hiding behind a cover block while he does'
 	assert to_knock['knock'] == 3 && to_exit['knock'] == 0, 'one knock'
+	if path := os.getenv_opt('GHOSTGRID_PAD') {
+		// the robot's pad as `button@frame+frames` for `vjag_test run --press` and the second emulator
+		os.write_file(path, pad_script(plans.pad_log)) or { panic(err) }
+	}
 	println('robot: ${plans.to_knock.len} steps to the knock (${to_knock}), ${plans.to_exit.len} from it to the exit (${to_exit}), ${plans.pad_log.len} frames in all')
 	// Without crouching behind cover there is no way at all.
 	if _ := make_plans(Options{ hide: false, creep: false }) {
 		assert false, 'the mission can be done without the cover'
 	}
+}
+
+// pad_script writes a pad log as runs of held buttons: `up@120+36 a@130+5`.
+fn pad_script(log []u32) string {
+	mut parts := []string{}
+	for i, button in robot_masks {
+		name := robot_buttons[i].str()
+		mut start := -1
+		for n, mask in log {
+			held := mask & jaggame.button_mask(button) != 0
+			if held && start < 0 {
+				start = n
+			}
+			if !held && start >= 0 {
+				parts << '${name}@${start}+${n - start}'
+				start = -1
+			}
+		}
+		if start >= 0 {
+			parts << '${name}@${start}+${log.len - start}'
+		}
+	}
+	return parts.join(' ')
 }
 
 // the robot's run is checked frame by frame on the machine
@@ -979,6 +1006,7 @@ fn test_a_robot_completes_the_mission_without_being_seen() {
 		mut it := new_rig(pal)
 		mut knocked := false
 		mut woke := false
+		// guide:gg_robot
 		for n, mask in plans.pad_log {
 			s.frame(mask)
 			it.frame(mask)
@@ -1011,6 +1039,7 @@ fn test_a_robot_completes_the_mission_without_being_seen() {
 				break
 			}
 		}
+		// guide:end
 		assert b.value('phase') == 1, 'the mission is done'
 		assert knocked && woke, 'the knock drew the sentinel'
 		assert b.value('seen') == 0 && b.value('missed_frames') == 0
@@ -1075,6 +1104,7 @@ fn test_the_interpreter_does_what_the_machine_did_while_guards_chase_and_search(
 			if b.value('phase') != 0 {
 				mask = pad(.a) // play again
 			}
+			// guide:gg_compare
 			s.frame(mask)
 			it.frame(mask)
 			for name in ['px', 'py', 'phase', 'seen', 'level', 'secs', 'camera_x', 'camera_y'] {
@@ -1090,11 +1120,12 @@ fn test_the_interpreter_does_what_the_machine_did_while_guards_chase_and_search(
 						i, field)}, interpreter ${it.field('guards', i, field)}'
 				}
 			}
+			// guide:end
 		}
 		assert visited.len == 5, 'every state was visited: ${visited.keys()}'
 		mut differences := b.img.differences(it.it, b.p.m.ram)
 		differences = differences.filter(!it.contains('_dirty') && !it.contains('_stale'))
-		assert differences.len <= 12, differences.join('\n')
+		assert differences.len == 0, differences.join('\n')
 		assert b.value('missed_frames') == 0
 	}
 }

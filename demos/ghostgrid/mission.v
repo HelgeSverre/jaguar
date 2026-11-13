@@ -112,6 +112,7 @@ fn new_mission(mut game jaggame.Game, room jaggame.Room) &Mission {
 	// can stand on and every facing, the tiles it sees. A cone on the screen
 	// is then a table look-up.
 	rows := depot.trim('\n').split('\n')
+	// guide:gg_views
 	mut view_at := []int{}
 	mut view_len := []int{}
 	mut pool_x := []int{}
@@ -131,12 +132,15 @@ fn new_mission(mut game jaggame.Game, room jaggame.Room) &Mission {
 			}
 		}
 	}
+	// guide:end
 	assert pool_x.len < 65536
 	mut fields := []int{}
 	for f in r.fields {
 		fields << f
 	}
+	// guide:gg_actors
 	guards := game.actors('guards', guard_fields(), guard_count, 1)
+	// guide:end
 	mut m := &Mission{
 		game:      game
 		room:      room
@@ -405,6 +409,7 @@ fn (mut m Mission) define_figure(mut c jaggame.Code) {
 	dy := c.local_fix('dy')
 	probe_x := c.local_i32('probe_x')
 	probe_y := c.local_i32('probe_y')
+	// guide:gg_figure
 	c.set(m.crouched, game.held(.b))
 	c.set(speed, walk_speed)
 
@@ -440,7 +445,10 @@ fn (mut m Mission) define_figure(mut c jaggame.Code) {
 	c.set(m.pcell, m.pcy().shr(4).mul(room_cols).add(m.pcx().shr(4)).as_(.u16))
 	moving := dx.ne(0).either(dy.ne(0))
 
+	// guide:end
+
 	// Running is heard: a noise at the figure every eighth frame.
+	// guide:gg_noise
 	c.if_(moving.both(speed.eq(run_speed)).both(game.frame.and(7).eq(0)))
 	game.noise(mut c, m.pcx(), m.pcy(), run_hearing)
 	c.end() // running
@@ -465,6 +473,7 @@ fn (mut m Mission) define_figure(mut c jaggame.Code) {
 	c.set(m.flash, 40)
 	c.end() // a wall to knock on
 	c.end() // C pressed
+	// guide:end
 
 	// guide:gg_animate
 	// The figure walks while it moves, and stands when it does not; a

@@ -178,6 +178,9 @@ Every public name in `jaggame`, with the comment from its source. This file is g
 | `fn (it &Interpreter) element(name string, index int) !i64` | element is the raw value of an element of a global array or table. |
 | `fn (mut it Interpreter) set_value(name string, raw i64) !` | set_value changes a global variable, as a test feeds the program an input (the pad, say). The raw value is cut to the variable's type. |
 | `fn (it &Interpreter) field(name string, index int, field string) !i64` | field is the raw value of a field of an element of an array of records. |
+| `fn (mut it Interpreter) set_element(name string, index int, raw i64) !` | set_element changes an element of a global array, as a test feeds the program an input or moves something by hand. The raw value is cut to the element's type. |
+| `fn (mut it Interpreter) set_field(name string, index int, field string, raw i64) !` | set_field changes a field of an element of an array of records, as `set_element` does. |
+| `fn (it &Interpreter) array(name string) ![]i64` | array is a copy of the raw values of a global array or table, for a test that looks at all of it at once. |
 
 ## The code generator
 
@@ -201,6 +204,8 @@ Every public name in `jaggame`, with the comment from its source. This file is g
 | `fn (img &Image) element(ram []u8, name string, index int) !i64` | element is the raw value of an element of a global array or table. |
 | `fn (img &Image) field(ram []u8, name string, index int, field string) !i64` | field is the raw value of a field of an element of an array of records. |
 | `fn (img &Image) field_address(name string, index int, field string) !u32` | field_address is the address in memory of a field of an element of an array of records, for a test that sets one by hand. |
+| `fn (img &Image) address_of_element(name string, index int) !(u32, int)` | address_of_element is the address in memory of an element of a global variable or array, and its size in bytes, for a test that sets one by hand (the bytes are big-endian). |
+| `fn (img &Image) field_size(name string, field string) !int` | field_size is the size in bytes of a field of an array of records. |
 
 ## The runtime: games
 
@@ -296,6 +301,7 @@ Every public name in `jaggame`, with the comment from its source. This file is g
 | `fn (mut g Game) load_room(mut c Code, room Room)` | load_room starts loading a room (see `room`). The tile layer and the sprites are not drawn until it is done, `loading` is true meanwhile, and the game's update goes on running: leave the room alone while `loading`. The room's size (`room_width`, `room_height`) and its markers are right at once; `tile_at` and the tiles are not until the room is loaded. |
 | `fn (mut g Game) load_room_number(mut c Code, number Val)` | load_room_number is `load_room` for a room number that is not known when the game is built: an expression, from 0. A number past the last room loads the last one. |
 | `fn (mut g Game) set_tile(mut c Code, column Val, row Val, tile Val)` | set_tile puts a tile at a column and a row of the room (in tiles) and redraws it. Up to 64 changes can be drawn in one frame; more are counted in `rt_tile_lost` and not drawn. A place outside the room is ignored. |
+| `fn (mut g Game) set_cell(mut c Code, cell Val, tile Val)` | set_cell is `set_tile` for a cell number: the tile at `cell` (row * room width + column) of the loaded room becomes `tile`, drawn this frame like `set_tile`. A cell outside the room is ignored. |
 | `fn (mut g Game) tile_at(x Val, y Val) Expr` | tile_at is the tile number at a world position in pixels, as a `u8` expression: `tile_none` (255) outside the room. The position is an `i32` or narrower; turn a `fix` into pixels with `as_(.i32)`. |
 | `fn (mut g Game) flags_at(x Val, y Val) Expr` | flags_at is the flags of the tile at a world position (the `flag_` constants, added together), as a `u8` expression; outside the room it is `flag_solid`. |
 | `fn (mut g Game) solid_at(x Val, y Val) Expr` | solid_at is true when the tile at a world position blocks movement. |

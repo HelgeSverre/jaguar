@@ -246,8 +246,8 @@ fn test_a_normal_game_misses_no_frames_and_a_slow_one_does() {
 	slow.art_cry('box', 8, 8, 1, []u16{len: 64, init: 1})
 	x := slow.p.u32('x')
 	mut c := slow.define_update()
-	c.repeat(1200) // about 260,000 cycles; a frame is 221,000
-	c.set(x, x.add(1))
+	c.repeat(1200) // about 400,000 cycles; a frame is 221,000
+	c.set(x, x.mul(7).add(1))
 	c.end()
 	slow_img := slow.build() or { panic(err) }
 	mut p := emulated.boot(slow_img.bytes, false) or { panic(err) }

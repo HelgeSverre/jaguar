@@ -137,6 +137,78 @@ fn statements() string {
 	return ''
 }
 
+// door is a state machine with two states: it stays closed for three frames
+// and open for two, and logs where it has been.
+fn door() (&jaggame.Program, jaggame.Func) {
+	// guide:machine
+	mut p := jaggame.new_program()
+	log := p.array_u8('log', 12)
+	n := p.u8('n')
+	mut door := p.machine_global('door')
+
+	mut c := door.state('closed')
+	c.set(log.at(n), 0)
+	c.inc(n)
+
+	c.if_(c.time_in_state().ge(2))
+	c.to('open') // the state changes now; the body of `open` runs from the next frame
+	c.end()
+
+	c = door.state('open')
+	c.set(log.at(n), 1)
+	c.inc(n)
+
+	c.if_(c.time_in_state().ge(1))
+	c.to('closed')
+	c.end()
+
+	c = door.on_enter('open') // runs at the transition, with time_in_state 0
+	c.set(log.at(n), 9)
+	c.inc(n)
+
+	tick := p.func('tick', [], .void)
+	c = p.define(tick)
+	door.run(mut c, 0) // one frame of the machine, for the record 0
+	// guide:end
+	return p, tick
+}
+
+fn machine_log() string {
+	p, tick := door()
+	mut it := p.interpreter() or { panic(err) }
+	for _ in 0 .. 10 {
+		it.run('tick') or { panic(err) }
+	}
+	mut line := []string{}
+	for i in 0 .. 10 {
+		line << (it.element('log', i) or { panic(err) }).str()
+	}
+	_ = tick
+	return line.join(' ')
+}
+
+// machine_mistakes is a machine with the three mistakes a machine can make.
+fn machine_mistakes() string {
+	// guide:machine_mistakes
+	mut p := jaggame.new_program()
+	mut guard := p.machine_global('guard')
+	mut c := guard.state('patrol')
+	c.to('chase') // there is no such state
+	guard.state('patrol') // a state is declared once
+	p.machine_global('camera') // a machine needs states
+	p.check() or { return err.msg() }
+	// guide:end
+	return ''
+}
+
+fn test_the_machine_examples() {
+	p, _ := door()
+	p.check()!
+	// closed, closed, closed (then it opens: on_enter logs 9), open, open (closes), closed ...
+	assert machine_log() == '0 0 0 9 1 1 0 0 0 9'
+	assert machine_mistakes().count('\n') == 3
+}
+
 // asset_mistakes is a game whose files and map are wrong, and what the
 // build says about it, without the folder the files are in.
 fn asset_mistakes() string {
@@ -199,7 +271,7 @@ fn game_mistakes() string {
 // texts are the ```text blocks the guide may show.
 fn texts() []string {
 	return [mistakes(), listing(), expressions(), game_mistakes(),
-		asset_mistakes()]
+		asset_mistakes(), machine_mistakes(), machine_log()]
 }
 
 struct Region {
@@ -231,7 +303,9 @@ fn guide_sources() []string {
 	}
 	files << os.join_path(dir, '..', '..', 'demos', 'hello2', 'main.v')
 	files << os.join_path(dir, '..', '..', 'demos', 'hello2', 'hello2_test.v')
-	files << os.join_path(dir, '..', '..', 'demos', 'ghostgrid', 'main.v')
+	for name in ['main.v', 'mission.v', 'guards.v'] {
+		files << os.join_path(dir, '..', '..', 'demos', 'ghostgrid', name)
+	}
 	files << os.join_path(dir, '..', '..', 'demos', 'ghostgrid', 'ghostgrid_test.v')
 	return files
 }

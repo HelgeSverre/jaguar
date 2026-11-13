@@ -153,16 +153,28 @@ Changed in slice 1: `p.define(f)` returns the `Code` instead of taking a closure
 First-class, because guards, scenes and missions are all state machines.
 
 ```v
-m := p.machine('guard_ai', guards)            // one state variable per record, or a single global one
-m.state('patrol', fn (mut c jaggame.Code, self jaggame.Expr) { … c.go('suspicious') … })
-m.state('suspicious', …)
-m.on_enter('alert', …)
-m.run(c, guards.at(i))                        // dispatch through a jump table
+mut m := p.machine('guard_ai', guards.records)   // one state for each record; p.machine_global(name) for a single one
+mut c := m.state('patrol')                       // returns the Code of the body, as p.define does
+c.if_(c.time_in_state().gt(120))
+c.to('suspicious')                               // the transition
+…
+c = m.on_enter('alert')                          // optional
+m.run(mut update, i)                             // one frame of record i
 ```
 
-`go` to an unknown state is a build error. Each state has an implicit `time_in_state` counter (frames).
+An unknown state in `to`, a machine with no states and a state declared twice are build errors; each state has the implicit `time_in_state` counter (frames).
 
-Note for slice 4: `go` is a V keyword, so `c.go(…)` will not compile; the method needs another name (`go_to`, or `switch_to`).
+Decided in slice 4 (guide chapter 4 shows it working; `jaggame/machine_test.v`, the differential fuzzer and the `guide_test.v` examples check it):
+
+- **The statement is `c.to(name)`.** `go` is a V keyword. `c.me()` is the index of the record, `c.time_in_state()` the frames in the state, `m.start(c, index, state)` a transition from outside the machine's bodies (a spawn), `m.state_of`, `m.time_of` and `m.in_state` expressions.
+- **A machine is written out in the language**, not compiled by a new statement: `m_state`, `m_time` and `m_fresh` arrays (a hidden *array* next to the records, not a hidden field of them: a record's layout is fixed when it is declared, before the machine is), a function for each state and each `on_enter`, one transition function `m_to_<state>` for each state that is gone to, and `m_run`, which dispatches and counts the frame. The interpreter and the machine therefore cannot disagree about it, and no code generator work was needed. The functions are written when the program is checked (`finish_machines`), which is why a state can be named before it is declared.
+- **Dispatch is an if chain**, not a jump table: with five states a table is not faster, and a table would have needed a native routine and a twin. Revisit it for a machine with many states.
+- **The first frame in a state sees `time_in_state` 0**: a transition sets the time to 0 and marks the record fresh, `run` does not count the frame it was entered in. The body that made the transition goes on running after `to`; follow it with `ret_void()`. `on_enter` runs at the transition, before the new state's first frame, and sees time 0.
+- **Fuzzing:** the differential fuzzer makes state machines (2 to 5 states over 2 or 3 records, random bodies that read `me()` and `time_in_state()`, random transitions on time and on conditions, some followed by a return and some not, some to the state itself, `on_enter` bodies and `start`s): about 2,000 of the 20,800 programs. It still fails on a planted bug in the new code generator paths.
+
+### Actors
+
+`game.actors(name, extra_fields, count, first_sprite)` is an array of records with the fields `x`, `y` (`fix`), `face` (`u8`, an angle) and `live`, plus the game's, tied to sprites `first_sprite + i`: `spawn(x, y)` (a call: clears the record, sets position, shows the sprite, gives the number or 65535), `remove`, `each(c, i)` (a loop over the live ones, one `end()`), `show`. It is records plus sprites plus, if the game wants one, a machine over `actors.records`.
 
 ## Code generation
 
@@ -170,7 +182,7 @@ Correctness first, speed second.
 
 - Globals, locals, parameters: static addresses in a data area after the code, laid out by size (longs, words, bytes), then arrays, tables and records, each long-aligned.
 - Labels are the names: function `f` at `f`, global `score` at `score`, a parameter or local `f.x`. The compiler's own labels start with `jaggame.`, which no name can.
-- Expressions: every value is evaluated into `d0` as a whole long, sign- or zero-extended from its type; the left operand of a binary operation waits on the stack. Operations work on longs and cut the result back to the type, which is how the interpreter wraps. No optimiser at all in slice 1, not even constant folding; quick and immediate forms only where jagkit chooses them.
+- Expressions: every value is evaluated into `d0` as a whole long, sign- or zero-extended from its type; the left operand of a binary operation waits on the stack. Operations work on longs and cut the result back to the type, which is how the interpreter wraps. No optimiser at all in slice 1, not even constant folding; quick and immediate forms only where jagkit chooses them. Slice 4 added three cheap and safe improvements (below), no more.
 - Registers `a5`/`a6`/`d7` are reserved for the runtime; compiled code uses `d0`..`d5` and `a0`, and nothing lives in a register across statements. A compiled function is called with `jsr` after its arguments are stored at its parameters' labels; it may change `d0`..`d5` and `a0`..`a4`.
 - Helper routines emitted only when used: `jaggame.mul32` (from three `mulu`), `jaggame.divu32` and `jaggame.divs32` (shift-and-subtract, quotient and remainder), `jaggame.fix_mul` (bits 16..47 of the signed 64-bit product, from four `mulu`) and `jaggame.fix_div` (a 64 by 32 bit division). The 68000's `divu`/`divs` divide 32 by 16 bits and trap on zero, so they are not used; narrow multiplications use `mulu`, whose low word is all an 8- or 16-bit result keeps.
 - Every accepted program must assemble without `jagkit` reporting a problem; a jagkit problem is a compiler bug, and `plain_image` reports it as one.
@@ -197,7 +209,7 @@ As built in slice 1: `p.plain_image(main)` is that image, `jaggame.emulated.Runn
 - **Sprites:** up to N live objects with x, y, frame, visible, flip, scale, layer; the runtime builds the display list from them every frame, sorted by layer. Animation: named sequences with per-frame durations.
 - **Tilemap and camera:** tile sets and maps from assets; rooms larger than the screen; camera follows a target with clamping. Approach to decide in slice 3 and verify in both emulators (a pre-rendered room bitmap scrolled by the object's data pointer and position is the expected one).
 - **Collision:** tile flags (solid, hides, exit, item) queried by position; box against box between sprites; a `move_and_slide(x, y, dx, dy, box)` helper.
-- **Line of sight and cones:** `can_see(from, facing, to, range, half_angle)` stepping through tiles; sine and arctangent tables.
+- **Line of sight and cones:** `can_see(from, facing, to, range, half_angle)` stepping through tiles; sine and arctangent tables. Built in slice 4, see below.
 - **Text:** fixed font, `print`, numbers, a HUD layer; briefings with word wrap done at build time.
 - **Sound:** effects by name with priority; a pattern sequencer for music with at least four voices and the ability to switch pattern sets on a game event (calm, alert). Tempo independent of the television standard.
 - **Scenes:** named scenes with `enter`, `update`, `leave`; `go_scene`; transitions (fade through the colour table).
@@ -239,15 +251,30 @@ Decided in slice 3 (`docs/jaggame/guide.md`, chapter 3, shows each one working; 
 - **Memory:** the picture buffer starts at 0x100000 (up to 1 MB); the display lists and text pictures stay at 0x80000. The image must stay below 0x80000 as before (GHOSTGRID is 24 KB).
 - **Not in this slice:** more than one tile set or tile layer, tile sizes other than 16 by 16, animated tiles, a parallax layer, scaled sprites in collision (a box is whole pixels), rooms that scroll while they load, saving a room's changed tiles across `load_room`.
 
+Decided in slice 4 (`docs/jaggame/guide.md`, chapter 4, shows each one working; `jaggame/rt_sight_test.v`, `machine_test.v`, `fuzz_test.v` and `demos/ghostgrid/ghostgrid_test.v` check them):
+
+- **Angles** are `u8`, 256 to the turn, 0 right, 64 down, 128 left, 192 up (`angle_right` and the others are constants). `game.sine`, `cosine` (-127..127, `i8`) and `direction(dx, dy)` (the arctangent: a table of 64 steps, one division, within one 256th of a turn of `atan2`) are expressions.
+- **`can_see(from_x, from_y, facing, to_x, to_y, range, half_angle)`** is a `bool` expression: within `range` pixels (at most 255), within `half_angle` (0..64) of the facing (a dot product against the sine table, squares compared, no division), and no wall on the line. `can_see_crouched` is the same for a crouching target, and `line_clear` is the third test alone. **Cover:** a tile with `flag_cover` blocks sight only for a crouching target; walls block sight for everyone. There are two tables of what blocks (`rt_sight_stand`, `rt_sight_low`), built from the legend.
+- **The walk is a `native` routine** (`rt_line_clear`, machine code and a V twin): the tile under every 8th pixel along the line's longer axis, not the two end tiles; positions as 16.16 numbers and the step as 128ths of a pixel from one `divu`; a line longer than 255 pixels along an axis is blocked, one with fewer than two steps is clear. A wall the line crosses for 10 pixels or more is never missed, a graze can be. It is tested against a plain V model on random rooms, machine against interpreter against model (3,640 queries), and the model against a one-pixel walk. The cone test itself stays language code (about 3,000 of the 5,400 cycles of a 15-place look): it is the part that rejects most calls early.
+- **Hearing:** `game.noise(c, x, y, radius)` and `game.hears(x, y)`: a circle, walls do not stop it, heard in the frame it was made and the next (so that whoever runs before the maker hears it), a later noise replaces the one before. Who reacts is the game's: GHOSTGRID's guards react on patrol and on the way back.
+- **Showing a cone: highlighted floor tiles**, not a GPU overlay. The object processor has no blending, so an overlay would be a stipple, and it would be a second layer to keep in step with the walls; tiles need nothing new, they are drawn in place (slice 3) and what is lit is then the same list that decides what sees. The cost is the tile redraw (about 1,700 cycles a tile, at most a dozen or two a move) and the walks, so the lists are worked out when the game is built: `game.view_cells(room, tile_x, tile_y, facing, range, half_angle, crouched)` returns what `can_see` says yes to from the middle of a tile to the middle of each floor tile (a test asks the machine's `can_see` about 20,410 tiles in six random rooms and the lists agree), and the game keeps one list for each tile and facing in tables (GHOSTGRID's are 12,360 cells in 4,160 lists, one for each of the room's 1,040 tiles and each of four facings, 37 KB). Detection is a look-up in the byte of the figure's tile (which guards' cones are on it); a crouching figure is only asked `can_see_crouched` when it is in a lit tile. One cone is worked out a frame. `Game.tile_cell` (the map's element) is the expression that reads a cell.
+- **`set_tile` and the new `set_cell`** (a cell number instead of a column and a row) are machine code now, with V twins: a cone changes up to 30 tiles at once and the language version cost 1,000 or more cycles a change. The existing tile tests pass unchanged; a new test fills the queue past 64 and checks the map, the queue and the count of what is lost on both sides.
+- **The code generator** got three cheap improvements, in `codegen.v`, with the differential fuzzer green (20,800 programs, state machines included) and shown to catch a planted bug in each: a comparison in an `if_` or a loop branches on the flags of its `cmp` instead of making a 0 or a 1 and testing it; the right operand of an operation that is a constant or a plain variable is loaded into `d1` without going through the stack; a variable set to a constant, or to itself plus or minus a constant, is one instruction on the variable, and an element is set from a constant or a variable without the stack. A loop that cleared a byte went from 415 to 250 cycles a turn. There is no constant folding and no register allocation; nothing else was done.
+- **Test support:** `Image.address_of_element`, `Image.field_size`, `Interpreter.set_element`, `set_field` and `array`, for tests that put the figure somewhere by hand.
+- **Memory:** the image is 95 KB (below 0x80000, as before); the tables of cones are 37 KB of it.
+- **Not in this slice:** sweeping cameras (the design's "cameras that sweep"), cones at angles other than the four ways (the tables and `can_see` are general; the display lists are for four facings), a cone that changes with the crouch (the display is the view of a standing target; crouching hides you by the cover rule), pathfinding to an arbitrary tile (guards follow fields of directions to the waypoints, and walk straight, with `move_and_slide`, to a spot), sound.
+
 ## The demo: GHOSTGRID
 
 An original top-down stealth trainer. Simulated training rooms: glowing grid floors, block walls, simple geometric figures. No characters, names, levels, music or visual design from any existing game.
 
-- **Player:** walk, run (louder, guards hear it), press against cover, knock on a wall to draw a guard.
-- **Guards:** patrol routes; a visible vision cone blocked by walls; states patrol → suspicious → alert → search → return. Cameras that sweep.
+- **Player:** walk, run (louder, guards hear it), crouch behind cover, knock on a wall to draw a guard. (Built in slice 4: A runs, B crouches, C knocks on the wall the figure faces.)
+- **Guards:** patrol routes; a visible vision cone blocked by walls; states patrol → suspicious → alert → search → return. Cameras that sweep (not yet). Built in slice 4: four guards in the first mission; a guard that is alert and touches the figure ends the mission (the alert does not time out: a guard that has lost the figure for 50 frames searches and returns).
 - **Missions:** about ten, of four kinds: reach the exit, collect every chip, never be seen, beat the clock. A rank per mission from time and times seen.
 - **Scenes:** title, mission select (with best rank and time), briefing, play, pause, results.
 - **Uses:** every runtime feature above.
+
+Slice 4 replaced the two training rooms and their chips with the first mission, a depot of 40 by 26 tiles: the chips, the annex and the room switch are no longer in the demo (`flag_item`, `set_tile` and `load_room_number` are still tested by `rt_tiles_test.v` and `rt_collide_test.v`). The mission has a clock, an alert indicator, an end screen and a restart; ranks, several missions, scenes, sound and the saving of best times are slices 5 and 6.
 
 ## Slices and gates
 
@@ -258,6 +285,6 @@ Each slice ends with the suite green, a guide chapter, and commits on `main` (ne
 | 1 | Language core: types, expressions, statements, functions, tables, arrays, records; interpreter; code generator; helpers | `v -prod test jaggame/` passes, including differential fuzzing of at least 20,000 random cases across all types, and four program tests |
 | 2 | Runtime core: loop, video profiles, sprites, pad, text, timers; `demos/hello2` (hello rewritten with no assembly). **Done** | its test passes on NTSC and PAL; runs in the second emulator |
 | 3 | Assets, tilemap, camera, collision; a player walking a scrolling room. **Done** | robot walks a route, cannot pass walls, camera clamps |
-| 4 | State machines, arrays of actors, line of sight; one complete mission with guards | robot completes it unseen; idle-in-view player is caught |
+| 4 | State machines, arrays of actors, line of sight; one complete mission with guards. **Done** | robot completes it unseen; idle-in-view player is caught |
 | 5 | Scenes, sound and music, save data, GPU backdrop | menu flow test; music switches on alert; save survives restart |
 | 6 | GHOSTGRID complete: all missions, ranks, PAL, cross-check, final docs | every mission completed by a robot; full suite green |

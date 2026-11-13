@@ -8,6 +8,7 @@ fn test_a_machine_walks_through_its_states() {
 	mut c := m.state('red')
 	c.set(log.at(n), 1)
 	c.inc(n)
+
 	c.if_(c.time_in_state().eq(2))
 	c.to('green')
 	c.end()
@@ -36,12 +37,14 @@ fn test_actors_spawn_and_are_visited() {
 	got := g.p.u16('got')
 	mut c := g.define_update()
 	i := c.local_u16('i')
+
 	c.if_(g.frame.eq(1))
 	c.set(got, a.spawn(10, 20))
 	c.set(got, a.spawn(30.5, 40))
 	c.set(a.field(1, 'hp'), 7)
 	a.remove(mut c, 0)
 	c.end()
+
 	a.each(mut c, i)
 	c.add_to(total, a.field(i, 'hp').as_(.u16).add(i).add(1))
 	c.end()
