@@ -219,27 +219,52 @@ a.vlink:hover { background: none; color: #ffffff; }
   text-align: center; line-height: 1.6; margin-top: 2px;
 }
 
-/* THE PLAYER BAR. one row, bottom of the screen, like a skin from 1999 */
-body.playing { padding-bottom: calc(40px + env(safe-area-inset-bottom, 0px)); }
+/* THE PLAYER BAR: a jaguar console stretched into a strip. art: img/player/, generated in the style of the emulator's shell */
+body.playing { padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px)); }
 #playerbar {
+  --h: 56px;
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 1500;
-  display: flex; align-items: center; gap: 4px;
-  padding: 4px 6px calc(4px + env(safe-area-inset-bottom, 0px)) 6px;
-  background: #c0c0c0; border: 3px outset #ffffff;
-  font-family: Tahoma, Verdana, sans-serif;
+  display: flex; height: var(--h);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: #000;
 }
-#playerbar button { width: 30px; height: 24px; padding: 0; font-size: 11px; flex: none; }
-#playerbar .pb-lcd {
-  background: #000; border: 2px inset #808080; color: #33ff33; height: 20px; line-height: 20px;
-  font-family: "Press Start 2P", monospace; font-size: 8px; padding: 0 6px; white-space: nowrap; overflow: hidden;
+.pb-seg { position: relative; height: var(--h); flex: none; background-size: 100% 100%; background-repeat: no-repeat; }
+.pb-stretch { flex: 1 1 0; min-width: 0; }
+.pb-a { width: calc(var(--h) * 513 / 134); background-image: url("img/player/a.png"); }
+.pb-b { background-image: url("img/player/b.png"); }
+.pb-c { width: calc(var(--h) * 462 / 134); background-image: url("img/player/c.png"); }
+.pb-d { background-image: url("img/player/d.png"); }
+.pb-e { width: calc(var(--h) * 22 / 134); background-image: url("img/player/e.png"); }
+.pb-f { flex-grow: 4; min-width: 120px; background-image: url("img/player/f.png"); }
+.pb-g { width: calc(var(--h) * 186 / 134); background-image: url("img/player/g.png"); }
+
+.pb-btn {
+  position: absolute; top: 36.6%; width: 9%; height: 34.3%; padding: 0;
+  background: transparent; border: none; border-radius: 50%; cursor: pointer;
 }
-#playerbar .pb-title { flex: 0 1 300px; min-width: 60px; }
-#playerbar .pb-title span { display: inline-block; padding-left: 100%; animation: pbscroll 14s linear infinite; }
+.pb-btn i {
+  font-style: normal; font-family: "Press Start 2P", monospace; font-size: 6px; color: #3a0000;
+  text-shadow: 0 1px 0 rgba(255,140,140,0.6);
+}
+.pb-btn:hover { box-shadow: 0 0 8px 2px rgba(255,60,40,0.8); }
+.pb-btn:active, .pb-btn.on { background: rgba(0,0,0,0.35); box-shadow: inset 0 2px 4px rgba(0,0,0,0.8); }
+
+.pb-eye {
+  position: absolute; top: 41%; width: 26%; height: 22%; transform: translateX(-50%);
+  background: radial-gradient(ellipse at center, rgba(255,90,60,1) 0%, rgba(255,0,0,0.6) 35%, rgba(255,0,0,0) 70%);
+  mix-blend-mode: screen; opacity: 0.15; pointer-events: none;
+}
+
+.pb-lcd {
+  position: absolute; left: 0; right: 0; top: 41%; height: 30%;
+  display: flex; align-items: center; gap: 6px; padding: 0 4px;
+  font-family: "Press Start 2P", monospace; font-size: 7px; color: #b8e04a;
+  text-shadow: 0 0 4px rgba(184,224,74,0.7);
+}
+.pb-title { flex: 1 1 50%; min-width: 0; overflow: hidden; white-space: nowrap; }
+.pb-title span { display: inline-block; padding-left: 100%; animation: pbscroll 14s linear infinite; }
 @keyframes pbscroll { from { transform: translateX(0); } to { transform: translateX(-100%); } }
-#playerbar .pb-time { flex: none; color: #ffd700; }
-#pb-seek { flex: 1 1 auto; min-width: 60px; }
-#pb-vol { flex: 0 0 70px; }
-#playerbar input[type=range] { -webkit-appearance: none; appearance: none; height: 10px; background: #808080; border: 2px inset #808080; padding: 0; }
-#playerbar input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 18px; background: #c0c0c0; border: 2px outset #ffffff; }
-#playerbar input[type=range]::-moz-range-thumb { width: 10px; height: 16px; background: #c0c0c0; border: 2px outset #ffffff; border-radius: 0; }
-@media (max-width: 560px) { #pb-vol, #pb-prev, #pb-next { display: none; } }
+.pb-seek { flex: 1 1 35%; min-width: 40px; height: 6px; border: 1px solid #5a7020; cursor: pointer; touch-action: none; }
+#pb-fill { height: 100%; width: 0; background: repeating-linear-gradient(to right, #b8e04a 0 3px, transparent 3px 4px); }
+.pb-time { flex: none; }
+@media (max-width: 700px) { #playerbar { --h: 48px; } .pb-c, .pb-d { display: none; } .pb-g { width: calc(var(--h) * 60 / 134); background-position: left; background-size: auto 100%; } }

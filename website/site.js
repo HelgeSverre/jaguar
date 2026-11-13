@@ -119,32 +119,77 @@ function playerBar() {
   bar = document.createElement("div");
   bar.id = "playerbar";
   bar.hidden = true;
+  // the console strip: fixed caps, stretchy plastic, the LCD stretches with the window
   bar.innerHTML =
-    '<button id="pb-prev" title="previous track">|&#9664;</button>' +
-    '<button id="pb-play" title="play / pause">&#10074;&#10074;</button>' +
-    '<button id="pb-next" title="next track">&#9654;|</button>' +
-    '<div class="pb-lcd pb-title"><span id="pb-name"></span></div>' +
-    '<input id="pb-seek" type="range" min="0" max="1000" value="0" title="seek">' +
-    '<div class="pb-lcd pb-time" id="pb-time">0:00/0:00</div>' +
-    '<input id="pb-vol" type="range" min="0" max="100" value="60" title="volume">' +
-    '<button id="pb-stop" title="stop and close">X</button>';
+    '<div class="pb-seg pb-a">' +
+      '<button class="pb-btn" style="left:36.5%" id="pb-prev" title="previous track"><i>|&lt;</i></button>' +
+      '<button class="pb-btn" style="left:49.1%" id="pb-play" title="play / pause"><i>||</i></button>' +
+      '<button class="pb-btn" style="left:62.0%" id="pb-next" title="next track"><i>&gt;|</i></button>' +
+      '<button class="pb-btn" style="left:74.9%" id="pb-mute" title="mute"><i>M</i></button>' +
+      '<button class="pb-btn" style="left:87.7%" id="pb-stop" title="power off"><i>X</i></button>' +
+    '</div>' +
+    '<div class="pb-seg pb-b pb-stretch"></div>' +
+    '<div class="pb-seg pb-c"><span class="pb-eye" style="left:27.5%"></span><span class="pb-eye" style="left:79.4%"></span></div>' +
+    '<div class="pb-seg pb-d pb-stretch"></div>' +
+    '<div class="pb-seg pb-e"></div>' +
+    '<div class="pb-seg pb-f pb-stretch"><div class="pb-lcd">' +
+      '<div class="pb-title"><span id="pb-name"></span></div>' +
+      '<div class="pb-seek" id="pb-seek" title="seek"><div id="pb-fill"></div></div>' +
+      '<div class="pb-time" id="pb-time">0:00/0:00</div>' +
+    '</div></div>' +
+    '<div class="pb-seg pb-g"></div>';
   document.body.appendChild(bar);
-  var seeking = false, seek = document.getElementById("pb-seek");
+  var seek = document.getElementById("pb-seek");
   document.getElementById("pb-play").onclick = function () { if (!bgm) return; if (bgm.paused) bgm.play(); else bgm.pause(); };
   document.getElementById("pb-prev").onclick = function () { playTrack((bgmIndex + TRACKS.length - 1) % TRACKS.length); };
   document.getElementById("pb-next").onclick = function () { playTrack((bgmIndex + 1) % TRACKS.length); };
+  document.getElementById("pb-mute").onclick = function () { if (bgm) { bgm.muted = !bgm.muted; this.classList.toggle("on", bgm.muted); } };
   document.getElementById("pb-stop").onclick = stopTrack;
-  seek.oninput = function () { seeking = true; if (bgm && bgm.duration) setTime(seek.value / 1000 * bgm.duration, bgm.duration); };
-  seek.onchange = function () { if (bgm && bgm.duration) bgm.currentTime = seek.value / 1000 * bgm.duration; seeking = false; };
-  document.getElementById("pb-vol").oninput = function () { if (bgm) bgm.volume = this.value / 100; };
+  function seekTo(e) {
+    if (!bgm || !bgm.duration) return;
+    var r = seek.getBoundingClientRect(), f = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+    bgm.currentTime = f * bgm.duration;
+    bar._tick();
+  }
+  seek.addEventListener("pointerdown", function (e) {
+    seekTo(e); seek.setPointerCapture(e.pointerId);
+    seek.onpointermove = seekTo;
+    seek.onpointerup = function () { seek.onpointermove = null; };
+  });
   bar._tick = function () {
     if (!bgm) return;
     var d = bgm.duration || 0;
-    if (!seeking && d) seek.value = Math.round(bgm.currentTime / d * 1000);
-    if (!seeking) setTime(bgm.currentTime, d);
-    document.getElementById("pb-play").innerHTML = bgm.paused ? "&#9654;" : "&#10074;&#10074;";
+    document.getElementById("pb-fill").style.width = (d ? bgm.currentTime / d * 100 : 0) + "%";
+    setTime(bgm.currentTime, d);
+    document.getElementById("pb-play").innerHTML = bgm.paused ? "<i>&gt;</i>" : "<i>||</i>";
+  };
+  // the eyes flare with the sound, like the emulator's shell
+  var eyes = bar.querySelectorAll(".pb-eye");
+  bar._glow = function () {
+    var lvl = 0;
+    if (bar._analyser && bgm && !bgm.paused) {
+      var buf = bar._buf; bar._analyser.getByteTimeDomainData(buf);
+      for (var i = 0; i < buf.length; i++) { var v = Math.abs(buf[i] - 128); if (v > lvl) lvl = v; }
+      lvl = Math.min(1, lvl / 90);
+    }
+    for (var k = 0; k < eyes.length; k++) eyes[k].style.opacity = String(0.15 + lvl * 0.85);
+    if (!bar.hidden) requestAnimationFrame(bar._glow);
   };
   return bar;
+}
+
+function hookEyes(bar, audio) {
+  try {
+    if (!bar._ctx) {
+      bar._ctx = new (window.AudioContext || window.webkitAudioContext)();
+      bar._analyser = bar._ctx.createAnalyser();
+      bar._analyser.fftSize = 512;
+      bar._buf = new Uint8Array(bar._analyser.fftSize);
+      bar._analyser.connect(bar._ctx.destination);
+    }
+    bar._ctx.resume();
+    bar._ctx.createMediaElementSource(audio).connect(bar._analyser);
+  } catch (e) {}
 }
 
 function clock(sec) {
@@ -158,13 +203,16 @@ function playTrack(i) {
   if (bgm) { bgm.pause(); bgm = null; }
   bgm = new Audio(TRACKS[i][0]);
   bgm.loop = true;
-  bgm.volume = document.getElementById("pb-vol").value / 100;
+  bgm.volume = 0.6;
+  hookEyes(bar, bgm);
   ["timeupdate", "play", "pause", "loadedmetadata"].forEach(function (ev) { bgm.addEventListener(ev, bar._tick); });
   bgm.play();
   bgmIndex = i;
   document.getElementById("pb-name").textContent = "♫ " + TRACKS[i][1] + " — " + TRACKS[i][2] + " — rendered by the emulated DSP ♫";
+  var wasHidden = bar.hidden;
   bar.hidden = false;
   document.body.classList.add("playing");
+  if (wasHidden) requestAnimationFrame(bar._glow);
   var np = document.getElementById("nowplaying");
   if (np) np.innerHTML = '<span class="rainbow">NOW PLAYING</span><br>' + TRACKS[i][1];
 }
