@@ -15,13 +15,14 @@ body.mv { margin: 0; background: #000; overflow-x: hidden; }
 @keyframes burst { to { transform: rotate(360deg); } }
 .spots { position: fixed; inset: 0; z-index: -1; background: url("img/spots.png"); opacity: 0.55; animation: spots 6s linear infinite; }
 @keyframes spots { to { background-position: 160px 160px; } }
-body.flash .burst { filter: brightness(2.2) saturate(1.5); }
+body.flash .burst { filter: brightness(2.6) saturate(1.6); }
+body.flash .spots { opacity: 0.9; }
 
 .mvtop { display: flex; justify-content: space-between; align-items: center; padding: 6px 12px; background: #000; border: 3px ridge #c00000; position: relative; z-index: 2; }
 .mvtop a { font-family: "Press Start 2P", monospace; font-size: 10px; }
 
 .fire {
-  font-family: Impact, "Arial Black", sans-serif; font-size: clamp(48px, 11vw, 150px); line-height: 0.95; letter-spacing: 4px;
+  font-family: Impact, "Arial Black", sans-serif; font-size: clamp(48px, 9.5vw, 128px); line-height: 0.95; letter-spacing: 4px;
   color: #ffd700; text-align: center; margin: 10px 0 0 0; position: relative; z-index: 1;
   text-shadow: 0 0 10px #ff8000, 0 -6px 20px #ff3000, 0 -14px 34px #ff0000, 5px 5px 0 #600000, -3px 0 0 #00ffff, 3px 0 0 #ff00ff;
 }
@@ -36,31 +37,54 @@ body.flash .burst { filter: brightness(2.2) saturate(1.5); }
 @keyframes colup { from { transform: translateY(0); } to { transform: translateY(-50%); } }
 @keyframes coldown { from { transform: translateY(-50%); } to { transform: translateY(0); } }
 
-.stage { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; padding: 0 110px; }
-.telly { position: relative; width: 100%; aspect-ratio: 1536 / 1024; }
-.telly .skin { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
-.telly video {
-  position: absolute; left: 28.3%; top: 22.2%; width: 43.1%; height: 38.7%; z-index: 3;
-  object-fit: cover; background: #000; border-radius: 1.5%;
+.stage { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; padding: 0 110px; }
+.beast { position: relative; width: min(100%, calc((100vh - 215px) * 1.5)); min-width: min(100%, 560px); margin: 0 auto; aspect-ratio: 1536 / 1024; transform-origin: 50% 70%; }
+.beast > * { position: absolute; }
+.beast .skin { left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
+.beast video { z-index: 1; object-fit: contain; background: #000; }
+/* searchlights behind the crest */
+.beam {
+  z-index: 0; bottom: 78%; width: 18%; height: 70%; margin-left: -9%; pointer-events: none; opacity: 0.16;
+  background: linear-gradient(to top, rgba(255,40,0,0.95), rgba(255,150,0,0.7) 60%, rgba(255,0,0,0));
+  clip-path: polygon(40% 100%, 60% 100%, 100% 0, 0 0); transform-origin: 50% 100%;
+  animation: sway 3.75s ease-in-out infinite alternate;
 }
-.woofer {
-  position: absolute; width: 16.28%; aspect-ratio: 1; border-radius: 50%; z-index: 4; pointer-events: none;
-  background: url("img/tvskin.webp") no-repeat; background-size: 614.4% auto;
-  transform: translate(-50%, -50%); top: 47.85%;
+.beam.b1 { left: 22%; } .beam.b2 { left: 78%; animation-direction: alternate-reverse; }
+.beam.b3 { left: 50%; animation-duration: 1.875s; }
+@keyframes sway { from { transform: rotate(-32deg); } to { transform: rotate(32deg); } }
+/* speaker cones: the same picture again, cut round, scaled by the bass */
+.cone {
+  z-index: 3; pointer-events: none; border-radius: 50%; background: url("img/beastskin.webp") no-repeat;
+  -webkit-mask-image: radial-gradient(closest-side, #000 86%, transparent 100%); mask-image: radial-gradient(closest-side, #000 86%, transparent 100%);
 }
-.woofer.l { left: 13.87%; background-position: 6.84% 47.16%; }
-.woofer.r { left: 84.96%; background-position: 91.76% 47.16%; }
-.vuglow {
-  position: absolute; left: 29.4%; top: 66.7%; width: 42.2%; height: 4.6%; z-index: 4; pointer-events: none;
-  background: radial-gradient(ellipse at center, rgba(255,200,80,0.9), rgba(255,120,0,0.3) 60%, rgba(0,0,0,0) 80%);
-  mix-blend-mode: screen; opacity: 0;
+/* everything that is red and lit, as its own picture, laid back on top */
+.lit { z-index: 4; pointer-events: none; background: url("img/beastglow.webp") no-repeat; mix-blend-mode: screen; opacity: 0; }
+.bloom {
+  z-index: 4; pointer-events: none; mix-blend-mode: screen; opacity: 0; border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(255,235,190,0.95) 0%, rgba(255,60,0,0.8) 22%, rgba(255,0,0,0.35) 48%, rgba(255,0,0,0) 70%);
 }
-#eq { position: absolute; left: 51%; top: 75.2%; width: 27%; height: 12.2%; z-index: 4; pointer-events: none; mix-blend-mode: screen; }
+.beast:not(.live) #eyes { animation: breathe 2.4s ease-in-out infinite alternate; }
+.beast:not(.live) .bloom { animation: breathe2 2.4s ease-in-out infinite alternate; }
+@keyframes breathe { from { opacity: 0.05; } to { opacity: 0.75; } }
+@keyframes breathe2 { from { opacity: 0; } to { opacity: 0.28; } }
+.led { z-index: 4; pointer-events: none; background: #ff2000; opacity: 0; box-shadow: 0 0 6px 2px #ff2000; }
+.led.hot { background: #ffd700; box-shadow: 0 0 7px 2px #ffa000; }
+#eq { z-index: 4; pointer-events: none; }
+.rb { z-index: 5; background: transparent; border: none; padding: 0; margin: 0; cursor: pointer; border-radius: 50%; }
+.rb span { position: absolute; left: 0; top: 0; width: 100%; height: 100%; background: url("img/beastglow.webp") no-repeat; mix-blend-mode: screen; opacity: 0; pointer-events: none; }
+.rb:hover { outline: 2px dotted #ffff00; }
+.rb:active { transform: scale(0.9); }
+.shock { z-index: 3; pointer-events: none; border: 4px solid #ff2000; border-radius: 50%; animation: shock 0.45s ease-out forwards; }
+@keyframes shock { from { transform: scale(0.8); opacity: 0.9; } to { transform: scale(1.7); opacity: 0; } }
+.osd { z-index: 5; font-family: "Press Start 2P", monospace; font-size: clamp(7px, 1.3vw, 16px); color: #33ff33; text-shadow: 2px 2px 0 #000; pointer-events: none; opacity: 0; transition: opacity 0.4s; }
 
-.press { text-align: center; font-family: "Press Start 2P", monospace; font-size: 14px; color: #ff3030; margin: 6px 0 16px 0; position: relative; z-index: 1; }
-.mvtext { position: relative; z-index: 1; max-width: 760px; margin: 0 auto 30px auto; padding: 14px; background: #000; border: 5px ridge #c00000; line-height: 1.45; }
+.press { text-align: center; font-family: "Press Start 2P", monospace; font-size: 14px; color: #ff3030; margin: 6px 0 10px 0; position: relative; z-index: 1; }
+.mvtext { position: relative; z-index: 1; max-width: 760px; margin: 10px auto 30px auto; padding: 14px; background: #000; border: 5px ridge #c00000; line-height: 1.45; }
 .mvtext h2 { margin-top: 6px; }
-@media (max-width: 760px) { .cols { display: none; } .stage { padding: 0 8px; } .mvtext { margin: 0 8px 30px 8px; } }
+@media (max-width: 760px) {
+  .cols { display: none; } .stage { padding: 0 2px; } .mvtext { margin: 10px 8px 30px 8px; }
+  .press { font-size: 9px; } .mvtop a { font-size: 7px; } .mvtop { padding: 6px 4px; }
+}
 </style>
 </head>
 <body class="mv">
@@ -75,20 +99,32 @@ body.flash .burst { filter: brightness(2.2) saturate(1.5); }
 </div>
 
 <div class="fire" id="fire">DO THE MATH</div>
-<p class="press blink" id="press">&gt;&gt; PRESS PLAY ON THE TELLY &lt;&lt;</p>
+<p class="press blink" id="press">&gt;&gt; PRESS PLAY. WAKE THE BEAST. &lt;&lt;</p>
 
 <div class="stage">
-<div class="telly">
-<img class="skin" src="img/tvskin.webp" alt="">
-<div class="woofer l"></div><div class="woofer r"></div>
-<div class="vuglow" id="vuglow"></div>
-<canvas id="eq" width="270" height="96"></canvas>
+<div class="beast" id="beast">
+<div class="beam b1"></div><div class="beam b2"></div><div class="beam b3"></div>
 <video id="mv" src="media/dothemath.mp4" poster="media/dothemath-poster.jpg" controls preload="none" playsinline></video>
+<img class="skin" src="img/beastskin.webp" alt="A monstrous black console with a ribbed crest, two furious red eyes, four speakers and a screen for a mouth">
+<div class="cone" id="wl"></div><div class="cone" id="wr"></div>
+<div class="cone" id="tl"></div><div class="cone" id="tr"></div>
+<div class="lit" id="body"></div>
+<div class="lit" id="eyes"></div>
+<div class="lit" id="ringl"></div><div class="lit" id="ringr"></div>
+<div class="bloom" id="bl"></div><div class="bloom" id="br"></div>
+<canvas id="eq" width="347" height="50"></canvas>
+<button class="rb" onclick="bPlay()" title="PLAY / PAUSE"><span></span></button>
+<button class="rb" onclick="bSeek(-10)" title="BACK 10 SECONDS"><span></span></button>
+<button class="rb" onclick="bSeek(10)" title="FORWARD 10 SECONDS"><span></span></button>
+<button class="rb" onclick="bMute()" title="MUTE (WHY)"><span></span></button>
+<button class="rb" onclick="bBig()" title="BIG SCREEN"><span></span></button>
+<div class="osd" id="osd"></div>
 </div>
 </div>
 
 <div class="mvtext">
-<h2>WHAT IS ON THE TELLY</h2>
+<h2>WHAT THE BEAST IS PLAYING</h2>
+<p class="small">The five red buttons work: <b>play/pause</b>, <b>back ten</b>, <b>forward ten</b>, <b>mute</b> and <b>big screen</b>. While the song runs they light up with it, low notes on the left and high notes on the right. The eyes flare on the bass, the woofers pump, and the little ladders beside the screen are the left and right VU meters.</p>
 <p>A song cut to the bar, and two minutes forty-seven of Jaguar: attract modes, gameplay, the <a href="demos.html">homebrew from this repo</a>, and the console shell with its eyes flaring on the beat. 854&times;480, 11.7 MB.</p>
 <p>Every frame of footage came out of <code>vjag_test</code>. A script runs it with a stream of PPM frames into a fifo, ffmpeg reads the other end, and nothing raw touches the disk. Jaguar Hero and WIREWING are played on camera by their own test robots. The cuts land on a beat grid tracked from the song's stems.</p>
 <p class="small grey">Commercial games appear as footage only. No ROMs here.</p>
@@ -115,54 +151,140 @@ body.flash .burst { filter: brightness(2.2) saturate(1.5); }
   });
 })();
 
-// the boombox listens to the video: woofers pump, VU meters glow, the EQ dances, the sky flashes on the kick.
-// over http(s) it hears the real soundtrack; from a local file Web Audio would only get zeros
+// THE BEAST listens to the video. Eyes flare and woofers pump with the bass, tweeters twitch with
+// the highs, the five red buttons are five frequency bands, the ladders beside the screen are
+// left and right VU meters, the LCD is an EQ, and the sky flashes on the kick.
+// Over http(s) it hears the real soundtrack; from a local file Web Audio would only get zeros
 // (and silence the video), so it fakes a 128 BPM pulse instead.
+var mv = document.getElementById("mv");
+function osd(t) { var o = document.getElementById("osd"); o.textContent = t; o.style.opacity = 1; clearTimeout(osd.t); osd.t = setTimeout(function () { o.style.opacity = 0; }, 900); }
+function bPlay() { if (mv.paused) mv.play(); else mv.pause(); }
+function bSeek(d) { mv.currentTime = Math.max(0, mv.currentTime + d); osd((d > 0 ? ">> +" : "<< -") + Math.abs(d) + "s"); }
+function bMute() { mv.muted = !mv.muted; osd(mv.muted ? "MUTED. WHY." : "LOUD AGAIN"); }
+function bBig() { if (mv.requestFullscreen) mv.requestFullscreen(); else if (mv.webkitEnterFullscreen) mv.webkitEnterFullscreen(); }
 (function () {
-  var v = document.getElementById("mv"), ctx = null, an = null, freq, wave, live = /^https?:$/.test(location.protocol);
-  var wl = document.querySelector(".woofer.l"), wr = document.querySelector(".woofer.r");
-  var vu = document.getElementById("vuglow"), eq = document.getElementById("eq"), ex = eq.getContext("2d");
-  var press = document.getElementById("press"), avg = 0, lastFlash = 0;
-  v.addEventListener("play", function () {
+  var W = 1536, H = 1024, beast = document.getElementById("beast");
+  function $(id) { return document.getElementById(id); }
+  // everything is placed in pixels of the 1536x1024 skin and turned into percentages
+  function place(el, x, y, w, h) {
+    el.style.left = (x / W * 100) + "%"; el.style.top = (y / H * 100) + "%";
+    el.style.width = (w / W * 100) + "%"; el.style.height = (h / H * 100) + "%";
+  }
+  function crop(el, x, y, w, h) { // show that region of a full-size background picture
+    el.style.backgroundSize = (W / w * 100) + "% " + (H / h * 100) + "%";
+    el.style.backgroundPosition = (x / (W - w) * 100) + "% " + (y / (H - h) * 100) + "%";
+  }
+  function both(el, x, y, w, h) { place(el, x, y, w, h); crop(el, x, y, w, h); }
+  place(mv, 419, 365, 693, 432);
+  place($("osd"), 440, 386, 400, 30);
+  var wl = $("wl"), wr = $("wr"), tl = $("tl"), tr = $("tr");
+  both(wl, 208 - 124, 640 - 156, 248, 312); both(wr, 1320 - 124, 640 - 156, 248, 312);
+  both(tl, 266 - 42, 366 - 42, 84, 84); both(tr, 1264 - 42, 366 - 42, 84, 84);
+  var body = $("body"), eyes = $("eyes"), ringl = $("ringl"), ringr = $("ringr"), bl = $("bl"), br = $("br");
+  both(body, 0, 0, W, H);
+  both(eyes, 380, 150, 776, 210);
+  both(ringl, 30, 290, 350, 550); both(ringr, 1156, 290, 350, 550);
+  place(bl, 517 - 230, 284 - 130, 460, 260); place(br, 1013 - 230, 284 - 130, 460, 260);
+  bl.style.transform = "rotate(19deg)"; br.style.transform = "rotate(-19deg)";
+  var eq = $("eq"), ex = eq.getContext("2d");
+  place(eq, 765, 849, 347, 50);
+  var rbs = [].slice.call(document.querySelectorAll(".rb")), rbx = [431.5, 501.5, 572.5, 642.5, 711.5];
+  rbs.forEach(function (b, i) { place(b, rbx[i] - 40, 835, 80, 80); crop(b.firstChild, rbx[i] - 40, 835, 80, 80); });
+  // VU ladders: nine LEDs each side, bottom one first
+  var lx = [359.7, 361.7, 364, 366.7, 369.7, 372.3, 374, 375.3, 375.7], rx = [1171.7, 1169.3, 1166.7, 1163.3, 1160.7, 1157.3, 1155.3, 1153.7, 1153.7];
+  var ly = [425, 448.3, 471.7, 495.3, 519, 543.3, 567.3, 592, 617], ledL = [], ledR = [];
+  for (var n = 8; n >= 0; n--) {
+    [[lx, ledL], [rx, ledR]].forEach(function (p) {
+      var d = document.createElement("div"); d.className = "led" + (n < 2 ? " hot" : "");
+      place(d, p[0][n] - 8, ly[n] - 4.5, 16, 9); beast.appendChild(d); p[1].push(d);
+    });
+  }
+  function lcd(t) {
+    ex.clearRect(0, 0, eq.width, eq.height);
+    ex.font = '16px "Press Start 2P", monospace'; ex.textAlign = "center"; ex.textBaseline = "middle";
+    ex.fillStyle = "#33ff33"; ex.shadowColor = "#33ff33"; ex.shadowBlur = 6; ex.fillText(t, eq.width / 2, eq.height / 2 + 1); ex.shadowBlur = 0;
+  }
+  lcd("FEED ME BASS");
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { if (mv.paused) lcd("FEED ME BASS"); });
+
+  var ctx = null, an = null, anL = null, anR = null, freq, wave, waveR, live = /^https?:$/.test(location.protocol);
+  var press = $("press"), avg = 0, lastFlash = 0, eye = 0, vl = 0, vr = 0, beams = [].slice.call(document.querySelectorAll(".beam"));
+  mv.addEventListener("play", function () {
     press.hidden = true;
     if (live && !ctx) {
       try {
         ctx = new (window.AudioContext || window.webkitAudioContext)();
-        an = ctx.createAnalyser(); an.fftSize = 256;
-        ctx.createMediaElementSource(v).connect(an); an.connect(ctx.destination);
-        freq = new Uint8Array(an.frequencyBinCount); wave = new Uint8Array(an.fftSize);
+        var src = ctx.createMediaElementSource(mv), sp = ctx.createChannelSplitter(2);
+        an = ctx.createAnalyser(); an.fftSize = 512; an.smoothingTimeConstant = 0.55;
+        anL = ctx.createAnalyser(); anR = ctx.createAnalyser(); anL.fftSize = anR.fftSize = 256;
+        src.connect(an); an.connect(ctx.destination);
+        src.connect(sp); sp.connect(anL, 0); sp.connect(anR, 1);
       } catch (e) { an = null; }
     }
     if (ctx) ctx.resume();
-    if (!freq) { freq = new Uint8Array(128); wave = new Uint8Array(256); }
-    requestAnimationFrame(tick);
+    if (!freq) { freq = new Uint8Array(256); wave = new Uint8Array(256); waveR = new Uint8Array(256); }
+    if (!beast.classList.contains("live")) { beast.classList.add("live"); requestAnimationFrame(tick); }
   });
-  v.addEventListener("pause", function () { press.hidden = false; press.innerHTML = "&gt;&gt; PAUSED. COWARD. &lt;&lt;"; });
+  mv.addEventListener("pause", function () { press.hidden = false; press.innerHTML = "&gt;&gt; PAUSED. COWARD. &lt;&lt;"; });
   function fake(now) {
-    var beat = (now / 468.75) % 1, kick = Math.pow(1 - beat, 4);
-    for (var i = 0; i < freq.length; i++) freq[i] = Math.min(255, (i < 6 ? 120 + 135 * kick : 60 + 120 * Math.random() * (1 - i / freq.length)));
-    for (var j = 0; j < wave.length; j++) wave[j] = 128 + Math.round(70 * kick * Math.sin(j));
+    var beat = (now / 468.75) % 1, kick = Math.pow(1 - beat, 4), hat = Math.pow(1 - (now / 234.375) % 1, 3);
+    for (var i = 0; i < freq.length; i++) freq[i] = Math.min(255, i < 4 ? 105 + 150 * kick : (60 + 130 * Math.random()) * (1 - i / freq.length) + (i > 50 ? 70 * hat : 0));
+    for (var j = 0; j < wave.length; j++) { wave[j] = 128 + Math.round((18 + 80 * kick) * Math.sin(j) * Math.random()); waveR[j] = 128 + Math.round((18 + 80 * kick) * Math.sin(j) * Math.random()); }
+  }
+  // every signal is measured against its own recent quietest and loudest, so the loud
+  // middle of the song still has somewhere to go
+  function agc() { var lo = 1, hi = 0; return function (v) { lo = Math.min(v, lo + 0.0025); hi = Math.max(v, hi - 0.0025); return hi - lo < 0.03 ? 0 : (v - lo) / (hi - lo); }; }
+  var nBass = agc(), nMid = agc(), nHigh = agc(), nBand = [agc(), agc(), agc(), agc(), agc()];
+  function band(a, b) { var t = 0; for (var i = a; i < b; i++) t += freq[i]; return t / ((b - a) * 255); }
+  function peak(w) { var p = 0; for (var i = 0; i < w.length; i++) p = Math.max(p, Math.abs(w[i] - 128)); return Math.min(1, p / 95); }
+  function rest() {
+    beast.classList.remove("live"); beast.style.transform = ""; document.body.classList.remove("flash");
+    [wl, wr, tl, tr].forEach(function (c) { c.style.transform = ""; });
+    [body, eyes, ringl, ringr, bl, br].concat(ledL, ledR, beams).forEach(function (g) { g.style.opacity = ""; });
+    rbs.forEach(function (b) { b.firstChild.style.opacity = ""; });
+    lcd("PAUSED. COWARD.");
   }
   function tick(now) {
-    if (v.paused) { wl.style.transform = wr.style.transform = "translate(-50%,-50%)"; vu.style.opacity = 0; ex.clearRect(0, 0, eq.width, eq.height); document.body.classList.remove("flash"); return; }
-    if (an) { an.getByteFrequencyData(freq); an.getByteTimeDomainData(wave); } else fake(now);
-    var bass = (freq[1] + freq[2] + freq[3] + freq[4]) / 1020;
-    var peak = 0; for (var i = 0; i < wave.length; i++) peak = Math.max(peak, Math.abs(wave[i] - 128));
-    var s = 1 + Math.pow(bass, 3) * 0.16;
-    wl.style.transform = wr.style.transform = "translate(-50%,-50%) scale(" + s.toFixed(3) + ")";
-    vu.style.opacity = String(Math.min(1, peak / 100));
+    if (mv.paused || mv.ended) { rest(); return; }
+    if (an) { an.getByteFrequencyData(freq); anL.getByteTimeDomainData(wave); anR.getByteTimeDomainData(waveR); } else fake(now);
+    var raw = band(1, 4), bass = nBass(raw), mid = nMid(band(4, 40)), high = nHigh(band(60, 130)), punch = Math.pow(bass, 2.2);
+    // woofers and tweeters
+    wl.style.transform = wr.style.transform = "scale(" + (1 + punch * 0.12).toFixed(3) + ")";
+    tl.style.transform = tr.style.transform = "scale(" + (1 + high * high * 0.15).toFixed(3) + ")";
+    ringl.style.opacity = ringr.style.opacity = Math.min(1, 0.1 + punch).toFixed(3);
+    // the eyes: quick to flare, slow to cool
+    var target = Math.min(1, punch * 0.9 + mid * 0.15);
+    eye = target > eye ? target : eye * 0.84 + target * 0.16;
+    eyes.style.opacity = Math.min(1, 0.12 + eye).toFixed(3);
+    bl.style.opacity = br.style.opacity = Math.pow(eye, 1.6).toFixed(3);
+    body.style.opacity = (mid * 0.85).toFixed(3);
+    // five buttons, five bands
+    var edges = [1, 4, 9, 22, 55, 130];
+    rbs.forEach(function (b, i) { b.firstChild.style.opacity = Math.pow(nBand[i](band(edges[i], edges[i + 1])), 2).toFixed(3); });
+    // VU ladders
+    var pl = peak(wave), pr = peak(waveR);
+    vl = pl > vl ? pl : vl * 0.9; vr = pr > vr ? pr : vr * 0.9;
+    for (var k = 0; k < 9; k++) { ledL[k].style.opacity = vl * 9.5 > k + 0.5 ? 1 : 0; ledR[k].style.opacity = vr * 9.5 > k + 0.5 ? 1 : 0; }
+    // kick: shake the beast, flash the sky, throw a shockwave off each woofer
+    beast.style.transform = "scale(" + (1 + punch * 0.022).toFixed(4) + ") rotate(" + (punch * 0.7 * (Math.floor(now / 469) % 2 ? 1 : -1)).toFixed(2) + "deg)";
+    beams.forEach(function (b) { b.style.opacity = (0.12 + punch * 0.8).toFixed(3); });
     avg = avg * 0.95 + bass * 0.05;
-    if (bass > avg * 1.25 && bass > 0.55 && now - lastFlash > 180) lastFlash = now;
+    if (bass > avg * 1.25 && bass > 0.6 && now - lastFlash > 200) {
+      lastFlash = now;
+      [208, 1320].forEach(function (cx) {
+        var sh = document.createElement("div"); sh.className = "shock"; place(sh, cx - 141, 640 - 174, 282, 348);
+        sh.addEventListener("animationend", function () { sh.remove(); }); beast.appendChild(sh);
+      });
+    }
     document.body.classList.toggle("flash", now - lastFlash < 70);
-    // EQ: fourteen columns of LED segments
+    // LCD: an EQ in LED segments
     ex.clearRect(0, 0, eq.width, eq.height);
-    var cols = 14, seg = 9, cw = eq.width / cols;
+    var cols = 24, seg = 6, cw = eq.width / cols, sh2 = eq.height / seg;
     for (var c = 0; c < cols; c++) {
-      var bin = Math.floor(Math.pow(c / cols, 1.6) * (freq.length * 0.7)) + 1;
-      var lvl = Math.round(freq[bin] / 255 * seg);
-      for (var k = 0; k < lvl; k++) {
-        ex.fillStyle = k >= seg - 2 ? "#ff2020" : k >= seg - 4 ? "#ffcc00" : "#40ff40";
-        ex.fillRect(c * cw + 3, eq.height - (k + 1) * (eq.height / seg) + 2, cw - 6, eq.height / seg - 4);
+      var bin = Math.floor(Math.pow(c / cols, 1.7) * 150) + 1, lvl = Math.round(freq[bin] / 255 * seg);
+      for (var q = 0; q < lvl; q++) {
+        ex.fillStyle = q >= seg - 1 ? "#ff2020" : q >= seg - 3 ? "#ffcc00" : "#40ff40";
+        ex.fillRect(c * cw + 2, eq.height - (q + 1) * sh2 + 1.5, cw - 4, sh2 - 3);
       }
     }
     requestAnimationFrame(tick);
