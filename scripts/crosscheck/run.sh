@@ -6,6 +6,18 @@
 #
 # Without images it runs the four demos. The core is fetched and built on
 # first use, into out/crosscheck/core. Needs git, make and a C compiler.
+# Images may be .jag or .j64.
+#
+# For anything beyond a plain run, use the pieces directly. run.sh leaves the
+# frontend at out/crosscheck/front:
+#
+#     out/crosscheck/front out/crosscheck/core/virtualjaguar_libretro.dylib \
+#         game.j64 300 out/final.bmp out/crosscheck/scratch \
+#         --holds-file holds.txt --eeprom-in in.eep --eeprom-out out.eep \
+#         --shot 120:out/a.bmp --shot 200:out/b.bmp [--pal] [--var key=value]
+#     v run scripts/crosscheck/compare.v out/a.bmp out/a-vjag.png --offset 16,3 --tolerance 2
+#
+# See docs/headless.md, "A second opinion".
 set -eu
 cd "$(dirname "$0")/../.."
 frames="${1:-120}"
@@ -27,7 +39,7 @@ cc -O1 -I "$core_dir/libretro-common/include" -o "$out/front" scripts/crosscheck
 [ -x bin/vjag_test ] || just release
 
 for image in "$@"; do
-    name=$(basename "$image" .jag)
+    name=$(basename "${image%.*}")
     printf '%s: ' "$name"
     "$out/front" "$core" "$image" "$frames" "$out/$name-other.bmp" "$out/scratch" 2>/dev/null
     ./bin/vjag_test run "$image" --frames "$frames" --screenshot "$out/$name-vjag.png" >/dev/null

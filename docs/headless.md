@@ -38,6 +38,8 @@ Addresses are written with `0x` for hexadecimal; a bare number is decimal.
 | `--video <ppm>` | save every frame as one stream of binary PPM images |
 | `--video-from <n>` | first frame saved by `--video`; the `--wav` starts there too, so the two stay in step |
 | `--press <button@frame[+n]>` | hold a pad button from a frame, for `n` frames (6 if left out); repeatable |
+| `--eeprom-in <file>` | load a 128-byte EEPROM image before the first frame |
+| `--eeprom-out <file>` | write the 128-byte EEPROM image after the last frame |
 | `--dump` | print the processors, the video registers and the display list at the end |
 | `--peek <addr[:len]>` | print memory at the end; repeatable |
 | `--list <addr[:count]>` | disassemble 68000 code at the end; repeatable |
@@ -93,3 +95,30 @@ sh scripts/crosscheck/run.sh 600 game.jag     # one image, 600 frames
 ```
 
 It has found one bug in each direction so far: a table the GPU read from an unaligned address in a demo, and the emulator letting it.
+
+`run.sh` runs the images plainly. For a game that needs input or a save, use its two parts directly; `run.sh` leaves the frontend at `out/crosscheck/front`, and `compare.v` needs only `v`.
+
+| `front` option | Meaning |
+|---|---|
+| `--holds-file <file>` | pad holds, whitespace separated, in the form of `--press`: `up@120+36 a@130+5` (6 frames if the length is left out); no limit on the number |
+| `--hold <run>` | one such run on the command line; repeatable |
+| `--eeprom-in <file>` | 128 bytes put into the core's save RAM before the first frame |
+| `--eeprom-out <file>` | the 128 bytes of save RAM after the last frame |
+| `--shot <n>:<bmp>` | the picture after `n` frames, as `--frames n --screenshot` would give it; repeatable |
+| `--pal` | PAL console (the core option `virtualjaguar_pal`) |
+| `--var key=value` | any other core option |
+
+The buttons are those of `--press`, except `7`, `8`, `9`, `star` and `hash`: the core reaches them only through a keypad device, and `front` refuses them. The EEPROM files are the same 128 big-endian bytes as the core's save RAM and as vjag's save file, so one file goes to both sides; `vjag_test run` takes `--eeprom-in` and `--eeprom-out` for that. The core exposes the EEPROM for every cartridge image, `.jag` and `.j64` alike (it needs no particular extension). A `.j64` of the same game starts one frame later in the core than in vjag: compare the core at frame n with vjag at n+1. Its chip starts out zeroed, vjag's erased to `0xffff`; a game that checks a record, as ghostgrid does, sees no good record either way.
+
+`compare.v` takes pixel (x, y) of vjag's picture against (x+dx, y+dy) of the other, over the area both cover, and tells how many pixels it compared, how many differ by more than the tolerance in any channel, and the largest difference. The offset between the two pictures is (16, 3) and the colours agree to within 2 or so.
+
+```sh
+# Ghostgrid: pass the title, load a saved best time, look at the mission select.
+echo 'a@5+3' > out/holds.txt
+cc -I out/crosscheck/core/libretro-common/include -o out/crosscheck/front scripts/crosscheck/front.c
+out/crosscheck/front out/crosscheck/core/virtualjaguar_libretro.dylib demos/ghostgrid.jag 120 \
+    out/pick-other.bmp out/crosscheck/scratch --holds-file out/holds.txt --eeprom-in save.eep --eeprom-out after.eep
+vjag_test run demos/ghostgrid.jag --frames 120 --press a@5+3 --eeprom-in save.eep --screenshot out/pick-vjag.png
+v run scripts/crosscheck/compare.v out/pick-other.bmp out/pick-vjag.png --offset 16,3 --tolerance 2
+# compared 77025 pixels, 0 differ by more than 2, max channel difference 1
+```

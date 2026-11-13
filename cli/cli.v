@@ -31,6 +31,8 @@ common options:
   --peek <addr[:len]>        run: print memory at the end (repeatable)
   --list <addr[:count]>      run: disassemble 68000 code at the end (repeatable)
   --press <btn@frame[+n]>    run: hold a pad button for n frames (repeatable)
+  --eeprom-in <file>         run: load a 128-byte EEPROM image before the first frame
+  --eeprom-out <file>        run: write the 128-byte EEPROM image after the last frame
   --watch-io <lo:hi>         run: log writes to TOM/JERRY addresses in lo..hi
   --cpu m68k|gpu|dsp         trace: processor to follow (default dsp)
   --tail <n>                 trace: instructions to print (default 64)
@@ -97,6 +99,8 @@ fn run_command(command string, args []string) ! {
 	peeks := parser.string_multi('peek', 0, 'memory range to print')
 	listings := parser.string_multi('list', 0, '68000 code range to disassemble')
 	presses := parser.string_multi('press', 0, 'hold a pad button: button@frame[+frames]')
+	eeprom_in := parser.string('eeprom-in', 0, '', 'load a 128-byte EEPROM image before running')
+	eeprom_out := parser.string('eeprom-out', 0, '', 'write the EEPROM image after running')
 	io_range := parser.string('watch-io', 0, '', 'log register writes in lo:hi')
 	wav := parser.string('wav', 0, '', 'write the generated audio as WAV')
 	video := parser.string('video', 0, '', 'write every frame as a stream of PPM images')
@@ -127,6 +131,8 @@ fn run_command(command string, args []string) ! {
 				video:      video
 				video_from: video_from
 				presses:    presses.map(parse_press(it)!)
+				eeprom_in:  eeprom_in
+				eeprom_out: eeprom_out
 			})!
 		}
 		'compat' {
@@ -190,6 +196,8 @@ struct RunOptions {
 	listings   []string // 68000 code ranges `addr[:count]` to disassemble
 	io_range   string   // `lo:hi` register range whose writes are logged
 	presses    []Press  // scripted controller input
+	eeprom_in  string   // EEPROM image loaded before the first frame
+	eeprom_out string   // EEPROM image written after the last frame
 }
 
 // run_headless runs an image for a fixed number of frames and produces the
@@ -197,6 +205,9 @@ struct RunOptions {
 fn run_headless(path string, options ImageOptions, run RunOptions) ! {
 	mut session := open_session(path, options)!
 	mut m := session.machine
+	if run.eeprom_in != '' {
+		m.eeprom.load_bytes(os.read_bytes(run.eeprom_in)!)!
+	}
 	if run.io_range != '' {
 		m.watch_io(parse_address(run.io_range.all_before(':'))!,
 			parse_address(run.io_range.all_after(':'))!)
@@ -228,6 +239,9 @@ fn run_headless(path string, options ImageOptions, run RunOptions) ! {
 	}
 	if run.wav != '' {
 		recording.save(run.wav)!
+	}
+	if run.eeprom_out != '' {
+		os.write_file_array(run.eeprom_out, m.eeprom.to_bytes())!
 	}
 	print_counters(m)
 	if run.dump_state {
