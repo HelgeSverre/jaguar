@@ -127,3 +127,18 @@ pub fn (img &Image) field(ram []u8, name string, index int, field string) !i64 {
 	}
 	return img.slot_value(ram, var, index * r.fields.len + f)
 }
+
+// field_address is the address in memory of a field of an element of an
+// array of records, for a test that sets one by hand.
+pub fn (img &Image) field_address(name string, index int, field string) !u32 {
+	var := img.low.var_named(name)
+	if var < 0 || img.low.vars[var].kind != .records {
+		return error('there is no array of records `${name}`')
+	}
+	r := img.low.records[img.low.vars[var].record]
+	f := r.field_index(field)
+	if f < 0 || index < 0 || index >= img.low.vars[var].len {
+		return error('`${name}` has no element ${index} with a field `${field}`')
+	}
+	return img.symbols[img.low.vars[var].label] + u32(index * r.size + r.offsets[f])
+}

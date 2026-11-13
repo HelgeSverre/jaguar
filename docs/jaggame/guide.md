@@ -27,6 +27,7 @@ Every V block in this guide is quoted from a test in [`jaggame/tests`](../../jag
 
 ### A first program
 
+<!-- guide:first -->
 ```v
 mut p := jaggame.new_program()
 score := p.u16('score')
@@ -39,6 +40,7 @@ c.ret(bonus.arg('level').mul(100).add(50))
 main := p.func('main', [], .void)
 c = p.define(main)
 level := c.local_u8('level')
+
 c.for_(level, 1, 4)
 c.add_to(score, bonus.call(level))
 c.end()
@@ -54,6 +56,7 @@ Read it as a program, not as V: `score` is a 16-bit variable of the Jaguar progr
 
 ### Running it twice
 
+<!-- guide:run -->
 ```v
 mut it := p.interpreter()!
 it.run('main')!
@@ -103,6 +106,7 @@ The rules:
 
 ### Expressions
 
+<!-- guide:expressions -->
 ```v
 mut p := jaggame.new_program()
 score := p.u16('score')
@@ -151,20 +155,37 @@ An index is any integer expression. A literal index is checked at build time; an
 
 ### Statements
 
+<!-- guide:statements -->
 ```v
 mut p := jaggame.new_program()
-score := p.u16('score')
-lives := p.u8('lives', 3)
+x := p.i16('x')
+alert := p.bool('alert')
+steps := p.u16('steps')
+walk := p.func('walk', [jaggame.Param{'far', .i16}], .void)
+mut c := p.define(walk)
+i := c.local_u8('i')
 
-bonus := p.func('bonus', [jaggame.Param{'level', .u16}], .u16)
-mut c := p.define(bonus)
-c.ret(bonus.arg('level').mul(100).add(50))
+c.if_(walk.arg('far').gt(100))
+c.set(alert, true)
+c.else_if(walk.arg('far').gt(50))
+c.inc(steps)
+c.else_()
+c.ret_void()
+c.end()
 
-main := p.func('main', [], .void)
-c = p.define(main)
-level := c.local_u8('level')
-c.for_(level, 1, 4)
-c.add_to(score, bonus.call(level))
+c.for_(i, 0, 8) // i is 0..7
+c.if_(x.ge(walk.arg('far')))
+c.break_()
+c.end()
+c.add_to(x, 10)
+c.end()
+
+c.while_(x.gt(0).both(alert))
+c.sub_from(x, 3)
+c.end()
+
+c.repeat(3)
+c.inc(steps)
 c.end()
 ```
 
@@ -185,6 +206,7 @@ c.end()
 
 ### Functions
 
+<!-- guide:records -->
 ```v
 clamp := p.func('clamp', [jaggame.Param{'v', .fix}, jaggame.Param{'lo', .fix},
 	jaggame.Param{'hi', .fix}], .fix)
@@ -203,6 +225,7 @@ c.ret(clamp.arg('v').max(clamp.arg('lo')).min(clamp.arg('hi')))
 
 The interpreter defines what every operation means, and the compiled code must do the same. These cases are worked out by hand and run both ways in `jaggame/tests/semantics_test.v`:
 
+<!-- guide:semantics -->
 ```v
 cases := [
 	Case{'u8 wraps', .u8, u8_200.add(100), 44},
@@ -260,6 +283,7 @@ In words:
 
 ### Mistakes are reported together
 
+<!-- guide:mistakes -->
 ```v
 mut p := jaggame.new_program()
 speed := p.fix('speed', 1.5)
@@ -268,6 +292,7 @@ hits := p.u8('hits')
 update := p.func('update', [], .void)
 mut c := p.define(update)
 c.set(x, x.add(speed))
+
 c.if_(hits)
 c.set(hits, hits.add(x))
 c.end()
@@ -291,95 +316,106 @@ Each is in `jaggame/tests/programs_test.v`, run by the interpreter and on the em
 
 **An insertion sort.** `both` is what keeps `data.at(j.sub(1))` from being read when `j` is 0: the interpreter would stop on the index 65535.
 
+<!-- guide:sort -->
 ```v
 mut p := jaggame.new_program()
-score := p.u16('score')
-lives := p.u8('lives', 3)
+input := p.table_i16('input', values)
+data := p.array_i16('data', 32)
+sort := p.func('sort', [], .void)
+mut c := p.define(sort)
+i := c.local_u16('i')
+j := c.local_u16('j')
+key := c.local_i16('key')
 
-bonus := p.func('bonus', [jaggame.Param{'level', .u16}], .u16)
-mut c := p.define(bonus)
-c.ret(bonus.arg('level').mul(100).add(50))
-
-main := p.func('main', [], .void)
-c = p.define(main)
-level := c.local_u8('level')
-c.for_(level, 1, 4)
-c.add_to(score, bonus.call(level))
+c.for_(i, 0, 32)
+c.set(data.at(i), input.at(i))
 c.end()
+
+c.for_(i, 1, 32)
+c.set(key, data.at(i))
+c.set(j, i)
+
+// both() does not look at data.at(j - 1) once j is 0.
+c.while_(j.gt(0).both(data.at(j.sub(1)).gt(key)))
+c.set(data.at(j), data.at(j.sub(1)))
+c.dec(j)
+c.end()
+c.set(data.at(j), key)
+c.end() // for each element
 ```
 
 **The primes below 2000**, by sieving:
 
+<!-- guide:primes -->
 ```v
 mut p := jaggame.new_program()
-score := p.u16('score')
-lives := p.u8('lives', 3)
+composite := p.array('composite', .bool, limit)
+primes := p.array_u16('primes', 400)
+count := p.u16('count')
+sieve := p.func('sieve', [], .void)
+mut c := p.define(sieve)
+n := c.local_u16('n')
+multiple := c.local_u32('multiple')
 
-bonus := p.func('bonus', [jaggame.Param{'level', .u16}], .u16)
-mut c := p.define(bonus)
-c.ret(bonus.arg('level').mul(100).add(50))
+c.for_(n, 2, limit)
+c.if_(composite.at(n).invert())
+c.set(primes.at(count), n)
+c.inc(count)
+// n * n would wrap as a u16: square it as a u32.
+c.set(multiple, n)
+c.set(multiple, multiple.mul(n))
 
-main := p.func('main', [], .void)
-c = p.define(main)
-level := c.local_u8('level')
-c.for_(level, 1, 4)
-c.add_to(score, bonus.call(level))
-c.end()
+c.while_(multiple.lt(limit))
+c.set(composite.at(multiple), true)
+c.add_to(multiple, n)
+c.end() // for each multiple of n
+c.end() // if n is prime
+c.end() // for each n
 ```
 
 **A walk along a sine table.** The table is computed in V at build time. The angle is a `u16` whose high byte indexes the table, so adding to it wraps around the circle for free.
 
+<!-- guide:sine -->
 ```v
 mut p := jaggame.new_program()
-score := p.u16('score')
-lives := p.u8('lives', 3)
+sines := p.table_fix('sines', sine_table())
+path := p.array_fix('path', 64)
+angle := p.u16('angle') // 256 steps to a turn in the high byte
+x := p.fix('x')
+speed := p.fix('speed', 2.5)
+walk := p.func('walk', [], .void)
+mut c := p.define(walk)
+step := c.local_u8('step')
 
-bonus := p.func('bonus', [jaggame.Param{'level', .u16}], .u16)
-mut c := p.define(bonus)
-c.ret(bonus.arg('level').mul(100).add(50))
-
-main := p.func('main', [], .void)
-c = p.define(main)
-level := c.local_u8('level')
-c.for_(level, 1, 4)
-c.add_to(score, bonus.call(level))
+c.for_(step, 0, 64)
+c.add_to(angle, 1000) // wraps around at 65536
+c.add_to(x, sines.at(angle.shr(8)).mul(speed))
+c.set(path.at(step), x)
 c.end()
 ```
 
 **Records, and functions that call functions.** Eight guards walk back and forth for 150 steps; then `find` asks `distance` about each of them.
 
+<!-- guide:records -->
 ```v
-mut p := jaggame.new_program()
-guard := p.record('Guard', [jaggame.Field{'x', .fix}, jaggame.Field{'y', .fix},
-	jaggame.Field{'state', .u8}, jaggame.Field{'timer', .u16}])
-guards := p.array_of('guards', guard, 8)
-nearest := p.u8('nearest')
-
-clamp := p.func('clamp', [jaggame.Param{'v', .fix}, jaggame.Param{'lo', .fix},
-	jaggame.Param{'hi', .fix}], .fix)
-mut c := p.define(clamp)
-c.ret(clamp.arg('v').max(clamp.arg('lo')).min(clamp.arg('hi')))
-
-distance := p.func('distance', [jaggame.Param{'dx', .fix},
-	jaggame.Param{'dy', .fix}], .fix)
-c = p.define(distance)
-c.ret(distance.arg('dx').abs().add(distance.arg('dy').abs()))
-
 // step moves guard i right until x is 100, then left until it is 0.
 step := p.func('step', [jaggame.Param{'i', .u8}], .void)
 c = p.define(step)
 g := guards.at(step.arg('i'))
+
 c.if_(g.field('state').eq(0))
 c.set(g.field('x'), clamp.call(g.field('x').add(1.5), 0, 100))
+
 c.if_(g.field('x').eq(100))
 c.set(g.field('state'), 1)
 c.end()
 c.else_()
 c.set(g.field('x'), clamp.call(g.field('x').sub(0.75), 0, 100))
+
 c.if_(g.field('x').eq(0))
 c.set(g.field('state'), 0)
 c.end()
-c.end()
+c.end() // moving right or left
 c.inc(g.field('timer'))
 ```
 

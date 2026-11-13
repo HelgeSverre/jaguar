@@ -5,10 +5,11 @@ import jaggame.emulated
 import os
 
 // docs/jaggame/guide.md shows only code that is tested. Every ```v block in
-// it must be a run of lines from a region of a test in this directory
-// between `// guide:NAME` and `// guide:end`, and every ```text block must
-// be text that a test here produces. This file also holds the guide's own
-// examples.
+// it is named by an HTML comment on the line above it, `<!-- guide:NAME -->`,
+// and must be a run of lines from the region of that name: the lines of a
+// test in this directory (or of the hello2 demo) between `// guide:NAME` and
+// `// guide:end`. Every ```text block must be text that a test here
+// produces. This file also holds the guide's own examples.
 
 fn first_program() (&jaggame.Program, jaggame.Func) {
 	// guide:first
@@ -23,6 +24,7 @@ fn first_program() (&jaggame.Program, jaggame.Func) {
 	main := p.func('main', [], .void)
 	c = p.define(main)
 	level := c.local_u8('level')
+
 	c.for_(level, 1, 4)
 	c.add_to(score, bonus.call(level))
 	c.end()
@@ -56,6 +58,7 @@ fn mistakes() string {
 	update := p.func('update', [], .void)
 	mut c := p.define(update)
 	c.set(x, x.add(speed))
+
 	c.if_(hits)
 	c.set(hits, hits.add(x))
 	c.end()
@@ -106,6 +109,7 @@ fn statements() string {
 	walk := p.func('walk', [jaggame.Param{'far', .i16}], .void)
 	mut c := p.define(walk)
 	i := c.local_u8('i')
+
 	c.if_(walk.arg('far').gt(100))
 	c.set(alert, true)
 	c.else_if(walk.arg('far').gt(50))
@@ -143,6 +147,7 @@ fn texts() []string {
 }
 
 struct Region {
+	name  string
 	file  string
 	lines []string
 }
@@ -158,37 +163,50 @@ fn dedent(lines []string) []string {
 	return lines.map(if it.trim_space() == '' { '' } else { it[least..] })
 }
 
-fn regions() []Region {
+// guide_sources are the files that hold guide regions: the tests of this
+// directory and the demos the guide walks through.
+fn guide_sources() []string {
 	dir := os.dir(@FILE)
-	mut found := []Region{}
+	mut files := []string{}
 	for name in os.ls(dir) or { [] } {
-		if !name.ends_with('_test.v') {
-			continue
+		if name.ends_with('_test.v') {
+			files << os.join_path(dir, name)
 		}
-		mut inside := false
+	}
+	files << os.join_path(dir, '..', '..', 'demos', 'hello2', 'main.v')
+	return files
+}
+
+fn regions() []Region {
+	mut found := []Region{}
+	for path in guide_sources() {
+		mut name := ''
 		mut lines := []string{}
-		for line in os.read_lines(os.join_path(dir, name)) or { [] } {
+		for line in os.read_lines(path) or { panic(err) } {
 			t := line.trim_space()
 			if t.starts_with('// guide:') {
 				if t == '// guide:end' {
-					found << Region{name, dedent(lines)}
+					assert name != '', '${path}: // guide:end without a region'
+					found << Region{name, os.file_name(path), dedent(lines)}
+					name = ''
 					lines = []string{}
-					inside = false
 				} else {
-					inside = true
+					name = t['// guide:'.len..]
 				}
 				continue
 			}
-			if inside {
+			if name != '' {
 				lines << line
 			}
 		}
+		assert name == '', '${path}: the region ${name} is not closed'
 	}
 	return found
 }
 
 struct Block {
 	kind  string
+	name  string // from the comment above a ```v block
 	lines []string
 	at    int // line number in the guide
 }
@@ -199,20 +217,27 @@ fn guide_blocks() []Block {
 	mut kind := ''
 	mut lines := []string{}
 	mut at := 0
+	mut name := ''
+	mut last_comment := ''
 	for n, line in os.read_lines(path) or { panic(err) } {
 		if line.starts_with('```') {
 			if kind == '' {
 				kind = line[3..].trim_space()
 				at = n + 1
 				lines = []string{}
+				name = last_comment
 			} else {
-				blocks << Block{kind, lines, at}
+				blocks << Block{kind, name, lines, at}
 				kind = ''
 			}
 			continue
 		}
 		if kind != '' {
 			lines << line
+		} else if line.starts_with('<!-- guide:') && line.ends_with(' -->') {
+			last_comment = line['<!-- guide:'.len..line.len - ' -->'.len]
+		} else if line.trim_space() != '' {
+			last_comment = '' // the comment must come right before the block
 		}
 	}
 	return blocks
@@ -239,7 +264,10 @@ fn test_every_code_block_in_the_guide_is_tested() {
 		match b.kind {
 			'v' {
 				code := dedent(b.lines)
-				assert all.any(contains_run(it.lines, code)), 'guide.md line ${b.at}: this V block is not in a guide region of a test'
+				assert b.name != '', 'guide.md line ${b.at}: a V block needs a <!-- guide:NAME --> comment on the line above it'
+				named := all.filter(it.name == b.name)
+				assert named.len == 1, 'guide.md line ${b.at}: there must be exactly one guide region called ${b.name}, there are ${named.len}'
+				assert contains_run(named[0].lines, code), 'guide.md line ${b.at}: this V block is not a run of lines from the region ${b.name} in ${named[0].file}'
 			}
 			'text' {
 				assert b.lines.join('\n') in made, 'guide.md line ${b.at}: this text is not produced by a test:\n${b.lines.join('\n')}'
