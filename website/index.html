@@ -35,11 +35,8 @@
 <p>Also in the repo: a <a href="jagkit.html">toolchain for writing Jaguar programs in V</a>, a <a href="jaggame.html">game engine that compiles V descriptions to 68000 code</a>, <a href="demos.html">five homebrew games</a>, robots that play them in the tests, and a <a href="video.html">music video</a>.</p>
 </td>
 <td valign="top" align="center">
-<div class="applet">
-<canvas id="applet" width="256" height="192" style="display:block;background:#000"></canvas>
-<div class="status" id="appletstatus">Loading Java applet...</div>
-</div>
-<p class="tiny grey">PLASMA.CLASS<br>(fake. <a href="demos.html">the real plasma runs<br>on the emulated GPU</a>)</p>
+<a href="demos.html"><img src="media/wirewing.png" width="320" height="240" alt="WIREWING running in vjag: green wireframe terrain and a beacon" class="tv"></a>
+<p class="small grey"><b class="gold">WIREWING</b><br>Wireframe flight, written in V.<br><a href="demos.html">See the homebrew games &gt;&gt;</a></p>
 </td>
 </tr></table>
 
@@ -90,43 +87,6 @@
 <p class="pixel rainbow">THANKS FOR VISITING! COME BACK SOON!</p>
 <p><a href="badges.html"><span class="wordart" style="font-size:24px">&gt;&gt; GRAB A BADGE &lt;&lt;</span></a></p>
 </center>
-
-<script>
-// PLASMA.CLASS - a fake java applet, now with 100% less java
-(function () {
-  var c = document.getElementById("applet"), st = document.getElementById("appletstatus");
-  var x = c.getContext("2d");
-  var W = 128, H = 96, img = x.createImageData(W, H);
-  var off = document.createElement("canvas"); off.width = W; off.height = H;
-  var ox = off.getContext("2d");
-  x.imageSmoothingEnabled = false;
-  var t0 = null, loaded = false;
-  function frame(ts) {
-    if (t0 === null) t0 = ts;
-    var t = (ts - t0) / 1000;
-    if (t < 1.6) {
-      x.fillStyle = "#c0c0c0"; x.fillRect(0, 0, 256, 192);
-      x.fillStyle = "#000"; x.font = "12px Tahoma, sans-serif"; x.fillText("Java", 110, 90);
-      x.fillStyle = "#000080"; x.fillRect(40, 110, Math.min(176, t * 120), 10);
-      x.strokeRect(40, 110, 176, 10);
-      requestAnimationFrame(frame); return;
-    }
-    if (!loaded) { st.textContent = "Applet PLASMA started"; loaded = true; }
-    for (var j = 0; j < H; j++) for (var i = 0; i < W; i++) {
-      var v = Math.sin(i / 9 + t) + Math.sin(j / 7 - t * 1.3) + Math.sin((i + j) / 13 + t * 0.7) + Math.sin(Math.sqrt(i * i + j * j) / 8 - t);
-      var k = (j * W + i) * 4;
-      img.data[k] = 128 + 127 * Math.sin(v * Math.PI);
-      img.data[k + 1] = 40 + 40 * Math.sin(v * Math.PI + 2);
-      img.data[k + 2] = 20 + 20 * Math.cos(v * Math.PI);
-      img.data[k + 3] = 255;
-    }
-    ox.putImageData(img, 0, 0);
-    x.drawImage(off, 0, 0, 256, 192);
-    requestAnimationFrame(frame);
-  }
-  requestAnimationFrame(frame);
-})();
-</script>
 
 <script>finish();</script>
 </body>

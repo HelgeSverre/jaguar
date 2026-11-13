@@ -162,13 +162,6 @@ marquee { font-family: "Press Start 2P", monospace; font-size: 11px; }
   font-family: "Press Start 2P", monospace; font-size: 14px; padding: 4px 0;
 }
 
-.applet {
-  background: #c0c0c0; border: 2px outset #fff; padding: 3px; display: inline-block; color: #000;
-}
-.applet .status {
-  font-family: Tahoma, Verdana, sans-serif; font-size: 11px; border: 1px inset #808080; padding: 1px 4px; margin-top: 3px; text-align: left;
-}
-
 hr.groove { border: 3px groove #c00000; }
 .sparkle { position: fixed; pointer-events: none; font-size: 14px; z-index: 999; }
 
