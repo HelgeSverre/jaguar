@@ -518,7 +518,7 @@ Once started, the machine does nothing but wait for the vertical interrupt, whic
 1. the object processor is pointed at the display list that was finished last time;
 2. the pad is read into `pad` and `pad_pressed`;
 3. `rt_frame` runs: it counts the frame, moves the timers, calls the game's update, moves the animations and fades the beep;
-4. the rows of text that changed are drawn, and the layers' colours are copied into the colour table;
+4. the rows of text that changed are drawn, the layers' colours are copied into the colour table and the beep's note and volume into the synthesizer;
 5. a new display list is built from the visible sprites;
 6. if another interrupt is already waiting, `missed_frames` goes up by one.
 
