@@ -423,6 +423,21 @@ Every public name in `jaggame`, with the comment from its source. This file is g
 | `fn (s Save) load(mut c Code)` | load starts reading the record. When `busy` is false again, `loaded` says whether there was a good record, and if there was, the fields hold it. |
 | `fn (s Save) store(mut c Code)` | store starts writing the fields as the record. When `busy` is false again, `failed` says whether the chip took it. A store that is asked for while another operation is going on is ignored. |
 
+## The runtime: the backdrop
+
+`jaggame/rt_backdrop.v`
+
+| Declaration | |
+|---|---|
+| `struct Rgb` | Rgb is a colour for the backdrop, each part 0..255. |
+| `struct Backdrop` | Backdrop is what the backdrop looks like: the colours of its gradient, from the top of the screen down and round again, blended. |
+| `struct BackdropParams` | BackdropParams are the four numbers that say where everything is in a frame, each 0..255. |
+| `fn backdrop_params(frame u32) BackdropParams` | backdrop_params is where the grid, the bar and the gradient are in a frame. |
+| `fn (mut g Game) backdrop(look Backdrop)` | backdrop gives the game a backdrop. It starts hidden. |
+| `fn (mut g Game) backdrop_show(mut c Code)` | backdrop_show makes the backdrop visible from the next picture on. |
+| `fn (mut g Game) backdrop_hide(mut c Code)` | backdrop_hide hides the backdrop: the GPU is left alone and the picture shows what is behind it. |
+| `fn (mut g Game) backdrop_shown() Expr` | backdrop_shown is true while the backdrop is visible. |
+
 ## The runtime: cartridge images
 
 `jaggame/rt_cartridge.v`

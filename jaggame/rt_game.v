@@ -83,6 +83,9 @@ mut:
 	sfxs            []SfxInfo
 	tracks          []TrackInfo
 	save_info       []SaveInfo // the game's record, if it has one
+	backdrop_used   bool
+	backdrop_look   Backdrop
+	bd              &BackdropVars = unsafe { nil } // the backdrop's variables, once `backdrop_used`
 	init_func       Func
 	update_func     Func
 	// The tile layer: see assets_map.v and rt_tiles.v.
@@ -194,10 +197,15 @@ fn (g &Game) objects() int {
 	return g.slots() + g.texts.len
 }
 
-// slots is the places in a display list before the text: the tile layer's
-// object if there is one, the sprites and the jump to the text.
+// slots is the places in a display list before the text: the backdrop's
+// object and the tile layer's if there are any, the sprites and the jump to
+// the text.
 fn (g &Game) slots() int {
 	return g.config.sprites + 1 + if g.has_tileset {
+		1
+	} else {
+		0
+	} + if g.backdrop_used {
 		1
 	} else {
 		0

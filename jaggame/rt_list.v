@@ -72,6 +72,18 @@ fn (g &Game) emit_build_list(mut m jagkit.M68k) {
 	m.label('rt.build_list')
 	m.move(.l, lbl('rt.back'), a6)
 	m.lea(at(32, a6), a1)
+	if g.backdrop_used {
+		// The backdrop is the first object, when it is shown.
+		m.tst(.b, lbl('rt_backdrop_on'))
+		m.b(.eq, 'rt.no_backdrop')
+		m.move(.l, lbl('rt.back_template'), a2)
+		m.lea(at(40 + 32 * g.texts.len, a2), a2)
+		m.moveq(7, d0)
+		m.label('rt.copy_backdrop')
+		m.move(.l, jagkit.inc(a2), jagkit.inc(a1))
+		m.dbra(d0, 'rt.copy_backdrop')
+		m.label('rt.no_backdrop')
+	}
 	if g.has_tileset {
 		m.bsr('rt.tile_object')
 		// While a room loads the sprites wait too.

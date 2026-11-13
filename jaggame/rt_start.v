@@ -23,7 +23,7 @@ const all_registers = [d0, d1, d2, d3, d4, d5, d6, d7, a0, a1, a2, a3, a4, a5, a
 
 // emit_start writes the entry of the program: video, colours, the lists,
 // the sound, `rt_init`, the first list, then the interrupt.
-fn (g &Game) emit_start(mut m jagkit.M68k, layout Layout, dsp_longs int, dsp_start u32) {
+fn (g &Game) emit_start(mut m jagkit.M68k, layout Layout, dsp_longs int, dsp_start u32, gpu_longs int, gpu_mailbox u32) {
 	m.label('rt.start')
 	m.move_to_sr(imm(0x2700))
 	m.lea(abs(load_address), jagkit.sp)
@@ -93,6 +93,10 @@ fn (g &Game) emit_start(mut m jagkit.M68k, layout Layout, dsp_longs int, dsp_sta
 		m.move(.l, imm(jagkit.risc_go), abs(jagkit.d_ctrl))
 	}
 
+	if g.backdrop_used {
+		g.emit_backdrop_start(mut m, gpu_longs, gpu_mailbox)
+	}
+
 	// The game's variables, then the first picture.
 	m.jsr(lbl('rt_init'))
 	m.bsr('rt.render_text')
@@ -125,6 +129,9 @@ fn (g &Game) emit_handler(mut m jagkit.M68k) {
 
 	m.bsr('rt.read_pad')
 	m.jsr(lbl('rt_frame'))
+	if g.backdrop_used {
+		m.bsr('rt.send_backdrop')
+	}
 	if g.has_tileset {
 		m.bsr('rt.render_tiles')
 	}
@@ -245,6 +252,9 @@ fn (g &Game) profile(video jagkit.Video, layout Layout) !Profile {
 			width:  4
 			height: 1
 		}}
+		if g.backdrop_used {
+			maps[0] = backdrop_bitmap(left, top)
+		}
 		for i, t in g.texts {
 			maps << jagkit.Bitmap{
 				x:           left + t.x
@@ -267,6 +277,9 @@ fn (g &Game) profile(video jagkit.Video, layout Layout) !Profile {
 			blob << u8(jump >> u32(shift))
 		}
 		blob << list.bytes[text_at..]
+		if g.backdrop_used {
+			blob << list.bytes[32..64] // the backdrop's slot, ready to copy
+		}
 		blobs[k] = blob
 	}
 	return Profile{

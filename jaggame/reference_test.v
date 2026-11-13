@@ -33,6 +33,7 @@ const reference_files = {
 	'rt_menu.v':           'The runtime: menus'
 	'rt_sound.v':          'The runtime: sound and music'
 	'rt_save.v':           'The runtime: save data'
+	'rt_backdrop.v':       'The runtime: the backdrop'
 	'rt_cartridge.v':      'The runtime: cartridge images'
 	'rt_build.v':          'The runtime: building a game'
 	'rt_interp.v':         'The runtime: running a game in the interpreter'

@@ -84,6 +84,9 @@ fn (mut g Game) define_runtime() {
 	if g.scene_set {
 		c.call(g.scene_ref.tick)
 	}
+	if g.backdrop_used {
+		g.define_backdrop(mut c)
+	}
 	if g.save_info.len > 0 {
 		c.call(g.save_info[0].tick)
 	}

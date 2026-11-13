@@ -23,10 +23,15 @@ pub fn (mut g Game) build() !Image {
 		}
 	}
 	voices := if g.sounds { dsp.address_of('voices') } else { u32(0) }
+	mut gpu_code := []u8{}
+	mut gpu_mailbox := u32(0)
+	if g.backdrop_used {
+		gpu_code, gpu_mailbox = backdrop_code()!
+	}
 
 	mut m := jagkit.new_m68k(load_address)
 	g.emit_start(mut m, layout, dsp_code.len / 4,
-		if g.sounds { dsp.address_of('start') } else { 0 })
+		if g.sounds { dsp.address_of('start') } else { 0 }, gpu_code.len / 4, gpu_mailbox)
 	g.emit_handler(mut m)
 	g.emit_read_pad(mut m)
 	g.emit_text_routines(mut m, layout)
@@ -36,12 +41,18 @@ pub fn (mut g Game) build() !Image {
 	if g.save_info.len > 0 {
 		g.emit_save_routines(mut m)
 	}
+	if g.backdrop_used {
+		g.emit_backdrop_send(mut m, gpu_mailbox)
+	}
 	g.emit_tile_routines(mut m)
 	g.emit_build_list(mut m)
 	low := g.p.emit_lowered(mut m)!
 
 	g.emit_art_data(mut m)
 	g.emit_runtime_data(mut m, dsp_code)!
+	if g.backdrop_used {
+		g.emit_backdrop_data(mut m, gpu_code)
+	}
 	g.emit_profiles(mut m, layout)!
 	payload := m.assemble() or { return error('jaggame compiler bug: ${err.msg()}') }
 
@@ -53,6 +64,9 @@ pub fn (mut g Game) build() !Image {
 	]
 	if g.has_tileset {
 		regions << jagkit.Region{'tile buffer', tile_buffer, g.tile_buffer_bytes()}
+	}
+	if g.backdrop_used {
+		regions << jagkit.Region{'backdrop picture', backdrop_buffer, backdrop_width * backdrop_height * 2}
 	}
 	for i, t in g.texts {
 		regions << jagkit.Region{'text layer `${t.name}`', layout.text[i], t.columns * t.rows * 8}
