@@ -1,9 +1,10 @@
 // make_art draws GHOSTGRID's pictures and writes them as PNG files next to
 // this file: tiles.png (six tiles of 16x16), player.png (the figure, four
 // frames in each of four directions: standing, two steps, crouching),
-// guard.png (the guard, three frames in each of four directions) and
+// guard.png (the guard, three frames in each of four directions),
 // mark.png (the question mark and the exclamation mark that show above a
-// guard). They are made here, in code, so that they can be tweaked and made
+// guard), cam.png (the camera, looking right, down and up, calm and
+// alarmed) and medal.png (the ranks, 24 by 24 pixels in 16-bit colour). They are made here, in code, so that they can be tweaked and made
 // again:
 //
 //     v run demos/ghostgrid/art
@@ -56,6 +57,22 @@ const guard_cap = Colour{26, 32, 46}
 const guard_lens = Colour{255, 64, 40}
 const guard_belt = Colour{250, 204, 60}
 
+const chip_edge = Colour{30, 170, 190}
+const chip_body = Colour{20, 90, 110}
+const chip_core = Colour{210, 250, 255}
+
+const door_edge = Colour{250, 170, 40}
+const door_body = Colour{86, 56, 24}
+const door_arrow = Colour{255, 232, 160}
+
+const cam_shell = Colour{136, 140, 168}
+const cam_shine = Colour{206, 210, 232}
+const cam_dark = Colour{40, 44, 66}
+const cam_calm = Colour{80, 240, 130}
+const cam_alarm = Colour{255, 60, 50}
+
+const medal_ink = Colour{255, 255, 255}
+
 const mark_ask = Colour{255, 196, 40}
 const mark_shout = Colour{255, 70, 56}
 const mark_edge = Colour{20, 12, 12}
@@ -85,7 +102,15 @@ fn main() {
 		eprintln(err)
 		exit(1)
 	}
-	println('${dir}: tiles.png, player.png, guard.png and mark.png written')
+	cams().save(os.join_path(dir, 'cam.png')) or {
+		eprintln(err)
+		exit(1)
+	}
+	medals().save(os.join_path(dir, 'medal.png')) or {
+		eprintln(err)
+		exit(1)
+	}
+	println('${dir}: tiles.png, player.png, guard.png, mark.png, cam.png and medal.png written')
 }
 
 fn dot(mut img jaggame.Canvas, x int, y int, col Colour) {
@@ -159,16 +184,139 @@ fn pad(mut img jaggame.Canvas, ox int, oy int, lit bool) {
 	rect(mut img, ox + 7, oy + 10, 2, 1, pad_arrow)
 }
 
+// chip draws a data chip on the floor: a small cyan square with contacts.
+fn chip(mut img jaggame.Canvas, ox int, oy int, lit bool) {
+	if lit {
+		floor_lit(mut img, ox, oy)
+	} else {
+		floor(mut img, ox, oy)
+	}
+	rect(mut img, ox + 4, oy + 4, 8, 8, chip_edge)
+	rect(mut img, ox + 5, oy + 5, 6, 6, chip_body)
+	rect(mut img, ox + 7, oy + 7, 2, 2, chip_core)
+	for k in 0 .. 3 {
+		dot(mut img, ox + 5 + k * 2, oy + 3, chip_edge)
+		dot(mut img, ox + 5 + k * 2, oy + 12, chip_edge)
+	}
+}
+
+// door draws a door on the floor: a frame with an arrow that points the way
+// it leads, to the next room (right) or back to the last (left).
+fn door(mut img jaggame.Canvas, ox int, oy int, forward bool, lit bool) {
+	if lit {
+		floor_lit(mut img, ox, oy)
+	} else {
+		floor(mut img, ox, oy)
+	}
+	rect(mut img, ox + 1, oy + 1, 14, 14, door_edge)
+	rect(mut img, ox + 2, oy + 2, 12, 12, door_body)
+	if forward {
+		rect(mut img, ox + 4, oy + 7, 6, 2, door_arrow)
+		rect(mut img, ox + 9, oy + 5, 1, 6, door_arrow)
+		rect(mut img, ox + 10, oy + 6, 1, 4, door_arrow)
+		rect(mut img, ox + 11, oy + 7, 1, 2, door_arrow)
+	} else {
+		rect(mut img, ox + 6, oy + 7, 6, 2, door_arrow)
+		rect(mut img, ox + 6, oy + 5, 1, 6, door_arrow)
+		rect(mut img, ox + 5, oy + 6, 1, 4, door_arrow)
+		rect(mut img, ox + 4, oy + 7, 1, 2, door_arrow)
+	}
+}
+
 // tiles is the tile set: floor, wall, cover, exit pad, floor in a cone, exit
-// pad in a cone, in that order.
+// pad in a cone, chip, chip in a cone, door onward, that in a cone, door
+// back, that in a cone, in that order.
 fn tiles() jaggame.Canvas {
-	mut img := jaggame.new_canvas(96, 16)
+	mut img := jaggame.new_canvas(192, 16)
 	floor(mut img, 0, 0)
 	wall(mut img, 16, 0)
 	cover(mut img, 32, 0)
 	pad(mut img, 48, 0, false)
 	floor_lit(mut img, 64, 0)
 	pad(mut img, 80, 0, true)
+	chip(mut img, 96, 0, false)
+	chip(mut img, 112, 0, true)
+	door(mut img, 128, 0, true, false)
+	door(mut img, 144, 0, true, true)
+	door(mut img, 160, 0, false, false)
+	door(mut img, 176, 0, false, true)
+	return img
+}
+
+// cams is the camera's sheet: three frames across (looking right, down,
+// up; left is the right one flipped) and two rows (calm with a green lens,
+// alarmed with a red one). The housing is a dome on a bracket, so it stands
+// on the wall tile the map marks.
+fn cams() jaggame.Canvas {
+	mut img := jaggame.new_canvas(48, 32)
+	for row, lens in [cam_calm, cam_alarm] {
+		for k, facing in [Facing.right, .down, .up] {
+			camera_head(mut img, k * 16, row * 16, facing, lens)
+		}
+	}
+	return img
+}
+
+// camera_head draws the camera in the cell at (ox, oy).
+fn camera_head(mut img jaggame.Canvas, ox int, oy int, facing Facing, lens Colour) {
+	rect(mut img, ox + 3, oy + 3, 10, 10, cam_shell)
+	rect(mut img, ox + 3, oy + 3, 10, 1, cam_shine)
+	rect(mut img, ox + 3, oy + 12, 10, 1, cam_dark)
+	rect(mut img, ox + 2, oy + 5, 1, 6, cam_dark)
+	rect(mut img, ox + 13, oy + 5, 1, 6, cam_dark)
+	match facing {
+		.right {
+			rect(mut img, ox + 9, oy + 6, 4, 4, cam_dark)
+			rect(mut img, ox + 11, oy + 7, 2, 2, lens)
+		}
+		.down {
+			rect(mut img, ox + 6, oy + 9, 4, 4, cam_dark)
+			rect(mut img, ox + 7, oy + 11, 2, 2, lens)
+		}
+		.up {
+			rect(mut img, ox + 6, oy + 3, 4, 4, cam_dark)
+			rect(mut img, ox + 7, oy + 3, 2, 2, lens)
+		}
+		.left {}
+	}
+}
+
+// medals is the sheet of the four ranks, 24 by 24 pixels each across: C, B,
+// A, S. A disc with a rim and the letter in the middle, in bronze, silver,
+// gold and cyan.
+fn medals() jaggame.Canvas {
+	mut img := jaggame.new_canvas(96, 24)
+	letters := [
+		['.###.', '#...#', '#....', '#....', '#....', '#...#', '.###.'],
+		['####.', '#...#', '#...#', '####.', '#...#', '#...#', '####.'],
+		['.###.', '#...#', '#...#', '#####', '#...#', '#...#', '#...#'],
+		['.####', '#....', '#....', '.###.', '....#', '....#', '####.'],
+	]
+	rims := [Colour{150, 96, 50}, Colour{190, 196, 210}, Colour{240, 190, 60},
+		Colour{90, 230, 250}]
+	faces := [Colour{100, 60, 30}, Colour{120, 126, 140}, Colour{170, 120, 30},
+		Colour{20, 120, 150}]
+	for k in 0 .. 4 {
+		ox := k * 24
+		for y in 0 .. 24 {
+			for x in 0 .. 24 {
+				dx := x - 12
+				dy := y - 12
+				d := dx * dx + dy * dy
+				if d <= 121 {
+					col := if d >= 90 { rims[k] } else { faces[k] }
+					dot(mut img, ox + x, y, col)
+				}
+			}
+		}
+		for row, line in letters[k] {
+			for col, ch in line {
+				if ch == `#` {
+					rect(mut img, ox + 7 + col * 2, 5 + row * 2, 2, 2, medal_ink)
+				}
+			}
+		}
+	}
 	return img
 }
 
