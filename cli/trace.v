@@ -30,6 +30,7 @@ struct TraceOptions {
 	skip       u64  // instructions to execute before any stop condition applies
 	watch      ?u32 // stop when the long at this address changes
 	watch_mask u32 = 0xffff_ffff
+	presses    []Press // scripted controller input, by frame
 }
 
 // program_counter returns the traced processor's program counter and its
@@ -84,8 +85,14 @@ fn trace(path string, options ImageOptions, t TraceOptions) ! {
 	if addr := t.watch {
 		watched = m.peek32(addr) & t.watch_mask
 	}
-	deadline := u64(t.frames) * m.config.region.master_clock_hz() / 60
+	frame_ticks := m.config.region.master_clock_hz() / 60
+	deadline := u64(t.frames) * frame_ticks
+	mut frame := -1
 	for m.tick < deadline {
+		if int(m.tick / frame_ticks) != frame {
+			frame = int(m.tick / frame_ticks)
+			apply_presses(mut m, t.presses, frame)
+		}
 		pc_before, _ := program_counter(m, t.processor)
 		mut entry := Executed{
 			pc: pc_before

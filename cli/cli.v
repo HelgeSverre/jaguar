@@ -157,6 +157,7 @@ fn run_command(command string, args []string) ! {
 				}
 			}
 			trace(free[0], options, TraceOptions{
+				presses:    presses.map(parse_press(it)!)
 				processor:  parse_processor(processor)!
 				frames:     frames
 				tail:       tail
