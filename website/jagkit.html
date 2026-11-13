@@ -1,0 +1,116 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>VJAG :: JAGKIT :: WRITE JAGUAR PROGRAMS IN V</title>
+<link rel="stylesheet" href="style.css">
+<script src="site.js"></script>
+</head>
+<body>
+<script>begin("JAGKIT");</script>
+
+<center>
+<div class="wordart">JAGKIT</div>
+<p class="pixel">NO ASSEMBLER. NO MAKEFILE. NO MERCY.<br>YOU WRITE V. V WRITES THE CARTRIDGE.</p>
+</center>
+
+<p><code>jagkit</code> is a small V module for making Jaguar programs without an assembler. You write <a class="vlink" href="https://docs.vlang.io/introduction.html">V</a>; V emits the <code>.jag</code> image. <b>V is the macro language.</b> A V function that calls assembler methods is a macro. A V <code>for</code> loop unrolls code. A V constant is an assembly-time constant. And V computes the data: sine tables, palettes, sprites and whole songs are generated at build time. Nothing is loaded from asset files.</p>
+
+<table width="100%" cellpadding="6" cellspacing="6"><tr>
+<td class="box gold" valign="top" width="50%">
+<h3>TWO ASSEMBLERS</h3>
+<p>One for the <b>68000</b>, one for the <b>GPU and DSP</b>. An instruction is a method call, a label is a string, a register can have a name that means something.</p>
+</td>
+<td class="box gold" valign="top">
+<h3>DISPLAY LISTS</h3>
+<p>Describe the bitmaps; the list comes out laid out, linked and guarded for <b>NTSC or PAL</b>.</p>
+</td>
+</tr><tr>
+<td class="box gold" valign="top">
+<h3>READY-MADE ROUTINES</h3>
+<p>A pad reader, text printing with a font, a <b>three-voice DSP synthesizer</b>.</p>
+</td>
+<td class="box gold" valign="top">
+<h3>THE DULL PARTS</h3>
+<p>The hardware register map, nearest-colour matching into CRY, a memory layout check and a <code>.jag</code> writer.</p>
+</td>
+</tr></table>
+
+<h2>THE 68000, AS METHOD CALLS</h2>
+<pre><span class="k">import</span> jagkit { abs, at, imm, inc, lbl, ptr }
+
+m.move(.w, lbl(<span class="s">'ball_x'</span>), d0)
+m.add(.w, imm(2), d0)
+m.cmp(.w, imm(288), d0)      <span class="c">// flags of d0 - 288</span>
+m.b(.hi, <span class="s">'skip'</span>)             <span class="c">// branch if d0 &gt; 288, unsigned</span>
+m.move(.w, d0, lbl(<span class="s">'ball_x'</span>))
+m.label(<span class="s">'skip'</span>)</pre>
+
+<h2>THE GPU, AS METHOD CALLS</h2>
+<p>The inner loop of <a href="demos.html#plasma">plasma</a>, ten instructions a pixel. The last one rides in the <b class="red">delay slot</b>: it runs after the jump either way, without disturbing the flags.</p>
+<pre>g.label(<span class="s">'pixel'</span>)
+g.loadb(across, colour)
+g.addqt(1, across)
+g.loadb(slant, other)
+g.addqt(1, slant)
+g.add(other, colour)
+g.add(row_wave, colour)
+g.storeb(colour, target)
+g.subq(1, left)
+g.jr(.ne, <span class="s">'pixel'</span>)
+g.addqt(1, target)           <span class="c">// delay slot</span></pre>
+<center><img class="tv" src="media/plasma.gif" width="325" height="240" alt="The plasma example running"></center>
+
+<h2>MISTAKES CAUGHT AT BUILD TIME</h2>
+<div class="box red">
+<p>Errors are collected, not thrown one at a time. Things the processors would not forgive come out <b>when the image is built</b>, not when it crashes:</p>
+<ul>
+<li>a form the 68000 does not have (<code>and</code> from an address register, <code>lea</code> of a data register, a byte move to an address register)</li>
+<li>a <code>movei</code> in a delay slot</li>
+<li>a program too large for its RAM</li>
+<li>overlapping memory</li>
+<li>unknown labels, labels defined twice, values out of range</li>
+</ul>
+<p>An accepted instruction is one the processor has: a test assembles <b>every combination</b> of instruction, size and addressing mode and reads the accepted ones back through the emulator's disassembler.</p>
+</div>
+
+<h2>THE 68000 OPCODE MENU</h2>
+<table class="data" width="100%">
+<tr><th>GROUP</th><th>METHODS</th></tr>
+<tr><td>Moves</td><td class="mono">move moveq lea push pop swap ext clr move_to_sr</td></tr>
+<tr><td>Arithmetic</td><td class="mono">add sub neg cmp tst mulu muls divu</td></tr>
+<tr><td>Logic and bits</td><td class="mono">and orr eor not btst bset bclr</td></tr>
+<tr><td>Shifts</td><td class="mono">asl asr lsl lsr rol ror roxl</td></tr>
+<tr><td>Flow</td><td class="mono">bra bsr b(cc, ...) dbra jmp jsr rts rte stop nop</td></tr>
+<tr><td>Data</td><td class="mono">byte word long long_label bytes text align</td></tr>
+<tr><td>Labels</td><td class="mono">label unique address_of symbols</td></tr>
+</table>
+<p class="small"><code>or</code> is spelled <code>orr</code> because <code>or</code> is a V keyword. We are sorry. It is V's fault.</p>
+
+<h2>HELLO, JAGUAR</h2>
+<table width="100%"><tr>
+<td valign="top"><img class="tv" src="media/hello2.gif" width="325" height="240" alt="hello2 running"></td>
+<td valign="top">
+<p><code>demos/hello</code> is the smallest complete program: two lines of text, a shaded ball you move with the pad, and a beep when you press fire. <b>4 KB.</b> The ball is drawn by a V function at build time.</p>
+<pre>just demo hello
+<span class="c"># builds demos/hello.jag from V
+# then runs it</span></pre>
+<p class="small">(The GIF is <code>hello2</code>: the same, rewritten with <a href="jaggame.html">jaggame</a>, plus a spinning coin and counting numbers.)</p>
+</td></tr></table>
+
+<h2>TESTED IN THE EMULATOR</h2>
+<p>Every demo is built, booted as NTSC <i>and</i> PAL, and <b>played by its test</b>. Tests read the game's variables through the assembler's symbol table and steer. The plasma test works out in V what every pixel should be and compares the buffer, so the GPU program is checked instruction for instruction, not by eye.</p>
+
+<h2>READ THE MANUAL (RTFM)</h2>
+<table class="data" width="100%">
+<tr><th>READ</th><th>FOR</th></tr>
+<tr><td><a href="https://github.com/HelgeSverre/jaguar/blob/main/docs/jagkit.md">docs/jagkit.md</a></td><td>the guide: two small programs explained, then the display list, pad, sound, text, GPU, testing</td></tr>
+<tr><td><a href="https://github.com/HelgeSverre/jaguar/blob/main/docs/jagkit-reference.md">docs/jagkit-reference.md</a></td><td>every public name, generated from the source comments</td></tr>
+<tr><td><a href="https://github.com/HelgeSverre/jaguar/tree/main/demos">demos/</a></td><td>two examples and three games, each with its <code>.jag</code> and a test that plays it</td></tr>
+</table>
+
+<center><p><a href="jaggame.html" class="pixel">TOO MUCH ASSEMBLY? TRY JAGGAME &gt;&gt;&gt;</a></p></center>
+
+<script>finish();</script>
+</body>
+</html>

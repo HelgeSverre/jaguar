@@ -1,0 +1,104 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>VJAG :: GAMES + DEMOS :: MADE IN V, RUN IN VJAG</title>
+<link rel="stylesheet" href="style.css">
+<script src="site.js"></script>
+</head>
+<body>
+<script>begin("DEMOS");</script>
+
+<center>
+<div class="wordart">GAMES + DEMOS</div>
+<p class="pixel">ORIGINAL HOMEBREW. WRITTEN IN V. IN THIS REPO.<br>EACH ONE HAS A TEST THAT <span class="red">PLAYS IT</span>.</p>
+</center>
+
+<table class="data" width="100%">
+<tr><th>DEMO</th><th>WHAT IT IS</th><th>SIZE</th><th>BUILT WITH</th></tr>
+<tr><td><a href="#ghostgrid">GHOSTGRID</a></td><td>stealth trainer, ten missions</td><td align="right">450 KB</td><td>jaggame</td></tr>
+<tr><td><a href="#hero">Jaguar Hero</a></td><td>five-lane rhythm game</td><td align="right">506 KB</td><td>jagkit</td></tr>
+<tr><td><a href="#maw">MAW</a></td><td>tunnel flyer with a psytrance habit</td><td align="right">438 KB</td><td>jagkit</td></tr>
+<tr><td><a href="#wirewing">WIREWING</a></td><td>wireframe flying game</td><td align="right">8 KB</td><td>jagkit</td></tr>
+<tr><td><a href="#plasma">plasma</a></td><td>a first GPU program</td><td align="right">2 KB</td><td>jagkit</td></tr>
+<tr><td>hello</td><td>the smallest complete program</td><td align="right">4 KB</td><td>jagkit</td></tr>
+<tr><td>hello2</td><td>hello again, no assembly, plus a coin</td><td align="right">13 KB</td><td>jaggame</td></tr>
+</table>
+<p class="small">All of them handle NTSC and PAL, and all run in vjag and in Virtual Jaguar. None has run on real hardware. <span class="gold">If you have a Jaguar and a flash cart, the guestbook wants to hear from you.</span></p>
+
+<pre><span class="k">just run</span> demos/maw.jag        <span class="c"># run an image that is already built</span>
+<span class="k">just demo</span> maw                <span class="c"># rebuild it from its V source first</span>
+<span class="k">just roboplay</span> ghostgrid      <span class="c"># watch its test's robot play it</span></pre>
+
+<img src="img/bar.gif" width="100%" height="6" alt="">
+
+<h2 id="ghostgrid">GHOSTGRID</h2>
+<table width="100%"><tr>
+<td valign="top" width="335"><img class="tv" src="media/ghostgrid.gif" width="325" height="240" alt="GHOSTGRID: walking through the depot"></td>
+<td valign="top">
+<p>An original stealth trainer. The red and white figure is you. The broad teal ones with the red lens are guards, and <b class="gold">the amber floor is what they see</b>. Walk, run (guards hear it), crouch behind cover (guards cannot see you there, cameras can) and knock on a wall.</p>
+<p>Ten missions of four kinds: DEPOT, VAULT and FOUNDRY are sneak missions; ARCHIVE and STACKS ask for every data chip; SPRINT, DASH and GAUNTLET run a countdown; ANNEX and CROSSING have two rooms. Ranks S, A, B, C, saved to the cartridge EEPROM.</p>
+</td></tr></table>
+<center><table cellspacing="6"><tr>
+<td><img class="tv" src="img/ghostgrid-title.png" width="217" height="160" alt="GHOSTGRID title over a drifting neon grid"></td>
+<td><img class="tv" src="img/ghostgrid-alert.png" width="217" height="160" alt="A guard on alert chasing the figure"></td>
+<td><img class="tv" src="img/ghostgrid-result.png" width="217" height="160" alt="Result screen with rank S"></td>
+</tr></table></center>
+<div class="box blue small">
+<b>ITS TESTS:</b> a robot that searches for a way through each mission that no guard or camera sees plays all ten on NTSC and PAL from the title, through the menus, to the result. The interpreter plays whole missions alongside the machine and the two agree frame by frame. The worst frame of every room is measured: under 60% of a frame, no frame missed. The robot's run was replayed in Virtual Jaguar and the record it wrote is the same in both chips.
+</div>
+
+<h2 id="hero">JAGUAR HERO</h2>
+<table width="100%"><tr>
+<td valign="top" width="335"><img class="tv" src="media/hero.gif" width="325" height="240" alt="Jaguar Hero: OMEGA OVERDRIVE, all perfect"></td>
+<td valign="top">
+<p>A five-lane rhythm game. Five original songs are written as patterns in <code>songs.v</code> and played by a <b>ten-voice DSP synthesizer</b> with drums, bass, distorted rhythm guitar, keys, twin leads and a stereo echo.</p>
+<p>Each chart is derived from the song's lead guitar, so what you press is what you hear: <span class="red">miss a note and the guitar drops out.</span></p>
+<p>Keys <kbd>1</kbd>-<kbd>5</kbd> play the lanes. Its test has a robot read the chart out of memory and play the finale perfectly inside the frame budget. <button onclick="playTrack(0)">&#9654; HEAR IT</button></p>
+</td></tr></table>
+<table class="data" align="center">
+<tr><th>SONG</th><th>STYLE</th><th>BPM</th></tr>
+<tr><td>MIDNIGHT ENGINE</td><td>synthwave anthem</td><td align="right">113</td></tr>
+<tr><td>COLOSSUS</td><td>heavy half-time</td><td align="right">129</td></tr>
+<tr><td>IRON GALLOP</td><td>galloping rock</td><td align="right">150</td></tr>
+<tr><td>NEON SERAPH</td><td>neo-classical shred</td><td align="right">150</td></tr>
+<tr><td class="red">OMEGA OVERDRIVE</td><td>frantic finale</td><td align="right" class="red">180</td></tr>
+</table>
+<center><table cellspacing="6"><tr>
+<td><img class="tv" src="img/jaguar-hero-title.png" width="217" height="160" alt="Jaguar Hero title screen"></td>
+<td><img class="tv" src="img/jaguar-hero-select.png" width="217" height="160" alt="Song select"></td>
+<td><img class="tv" src="img/jaguar-hero-results.png" width="217" height="160" alt="Results screen"></td>
+</tr></table></center>
+
+<h2 id="maw">MAW</h2>
+<table width="100%"><tr>
+<td valign="top" width="335"><img class="tv" src="media/maw.gif" width="325" height="240" alt="MAW: follow the green lane"></td>
+<td valign="top">
+<p>A tunnel flyer with a psytrance habit. Left and right turn the tunnel; follow the green lane through each gate, <b class="red">because the rest of the gate is live</b>.</p>
+<p>The GPU draws the tunnel from a lookup table: a Julia set folded into a kaleidoscope for a wall, a palette that turns while you fly, fog, and a window on the table that wanders so the tunnel swerves. The DSP is a three-voice synthesizer and the 68000 runs the rules and the tune: <b>150 BPM, kick, rolling bass, acid line.</b> <button onclick="playTrack(1)">&#9654; HEAR IT</button></p>
+</td></tr></table>
+<center><img class="tv" src="media/mawtitle.gif" width="325" height="240" alt="MAW title screen"></center>
+
+<h2 id="wirewing">WIREWING</h2>
+<table width="100%"><tr>
+<td valign="top" width="335"><img class="tv" src="media/wirewing.gif" width="325" height="240" alt="WIREWING flying over a wireframe landscape"></td>
+<td valign="top">
+<p>Bank with left and right, pull back to climb, fly through the spinning beacons before the tank is dry. The GPU projects the corners of a rolling landscape around the eye, with perspective, bank and distance shading, and joins them with lines it draws itself, <b>sixty pictures a second</b>.</p>
+<p>Fly into a hill and the onboard computer has a remark ready:</p>
+<img class="tv" src="img/wirewing-crash.png" width="217" height="160" alt="WHERE DID YOU LEARN TO FLY?">
+</td></tr></table>
+
+<h2 id="plasma">PLASMA</h2>
+<table width="100%"><tr>
+<td valign="top" width="335"><img class="tv" src="media/plasma.gif" width="325" height="240" alt="plasma"></td>
+<td valign="top">
+<p>The smallest program that uses the GPU. The 68000 keeps three numbers moving; the GPU turns them into a 160&times;100 picture every frame, shown at double size. <b>2 KB.</b> The <a href="jagkit.html">jagkit guide</a> walks through every instruction.</p>
+<p class="small">Unlike the fake Java applet on the front page, this one is real.</p>
+</td></tr></table>
+
+<h2>PAL, BY THE WAY</h2>
+<p>Anything counted in frames runs a sixth slower at 50 Hz. The tunes are corrected: MAW plays a step every five frames instead of six, and Jaguar Hero advances the song twice on every fifth frame. Movement is not: MAW's tunnel and WIREWING's plane are a sixth slower on a PAL machine. Europe, we apologize.</p>
+
+<script>finish();</script>
+</body>
+</html>

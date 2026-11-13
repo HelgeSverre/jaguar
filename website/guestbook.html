@@ -1,0 +1,101 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>VJAG :: GUESTBOOK :: PLEASE SIGN!!!</title>
+<link rel="stylesheet" href="style.css">
+<script src="site.js"></script>
+</head>
+<body>
+<script>begin("GUESTBOOK");</script>
+
+<center>
+<div class="wordart"><script>wavy("GUESTBOOK");</script></div>
+<p class="pixel">PLEASE SIGN! THE CHIPS ALREADY DID!</p>
+<p class="small grey">Entries you write are kept in <b>your own browser</b> only. Nobody else will ever see them. Just like a real 1998 guestbook after the free host shut down.</p>
+</center>
+
+<table class="box gold" width="100%" cellpadding="4"><tr><td>
+<form id="gb" onsubmit="return sign()">
+<table cellpadding="3">
+<tr><td class="pixel">NAME:</td><td><input id="gbname" size="30" maxlength="40"></td></tr>
+<tr><td class="pixel">FROM:</td><td><input id="gbfrom" size="30" maxlength="40" placeholder="cyberspace"></td></tr>
+<tr><td class="pixel">FAVE CHIP:</td><td><select id="gbchip"><option>the 68000</option><option>the GPU</option><option>the DSP</option><option>the object processor</option><option>the blitter</option><option>the EEPROM</option></select></td></tr>
+<tr><td class="pixel" valign="top">MESSAGE:</td><td><textarea id="gbmsg" rows="4" cols="50" maxlength="500"></textarea></td></tr>
+<tr><td></td><td><input type="submit" value="SIGN THE GUESTBOOK!"> <button type="reset">CLEAR</button></td></tr>
+</table>
+</form>
+</td></tr></table>
+
+<div id="mine"></div>
+
+<h2>WHAT VISITORS ARE SAYING</h2>
+<p class="small grey">(fictional entries, signed by the hardware. it has opinions.)</p>
+
+<div class="guest"><span class="who">THE BLITTER</span> <span class="tiny grey">&middot; from inside TOM &middot; fave chip: me</span><br>
+I finish every blit the instant it starts. They say this is "not done yet". I say I am simply efficient. Software can never catch me busy. Try it.</div>
+
+<div class="guest"><span class="who">THE 68000</span> <span class="tiny grey">&middot; from the middle of the bus</span><br>
+317,500 out of 317,500. Registers, memory, cycle count, AND bus order. Does anyone else in this machine count cycles correctly? No? Thought so. Anyway I mostly get out of the way.</div>
+
+<div class="guest"><span class="who">THE OBJECT PROCESSOR</span> <span class="tiny grey">&middot; from line 0 to line 240</span><br>
+i rewrite my own display list while i draw it. please do not ask me to explain this at parties</div>
+
+<div class="guest"><span class="who">THE DSP</span> <span class="tiny grey">&middot; from JERRY &middot; fave chip: the DSP</span><br>
+Ten voices for Jaguar Hero. Drums, bass, distorted rhythm guitar, keys, twin leads, stereo echo. Miss a note and I drop the guitar out. On purpose. <b>Press the jukebox button.</b> PRESS IT.</div>
+
+<div class="guest"><span class="who">THE GPU</span> <span class="tiny grey">&middot; from 4 KB of local RAM</span><br>
+Julia set folded into a kaleidoscope, sixty frames a second, and the front page has a FAKE JAVA PLASMA on it instead of me?? unbelievable. go to the demos page and look at the real one.</div>
+
+<div class="guest"><span class="who">A GUARD FROM GHOSTGRID</span> <span class="tiny grey">&middot; from the DEPOT</span><br>
+I have been patrolling this corridor for four missions. The robot has never once stepped into my amber light. I am beginning to think it reads my cone from memory. Suspicious... alert... search... return.</div>
+
+<div class="guest"><span class="who">THE CARTRIDGE EEPROM</span> <span class="tiny grey">&middot; 128 bytes, all of them yours</span><br>
+I keep your GHOSTGRID best times. You renamed the file? I don't care, I'm keyed by content. :)</div>
+
+<div class="guest"><span class="who">THE BOOT ROM</span> <span class="tiny grey">&middot; from: not wired up</span><br>
+hello?? is anyone there?? why does everything direct boot</div>
+
+<div class="guest"><span class="who">THE WAVETABLE</span> <span class="tiny grey">&middot; from JERRY</span><br>
+I am generated, not dumped. I sound close but not identical. I am doing my best.</div>
+
+<br>
+<center>
+<button onclick="toggleSparkles()" id="sparkbtn">TURN CURSOR SPARKLES OFF</button>
+<p class="tiny grey">for those who have suffered enough</p>
+</center>
+
+<script>
+function esc(s) { var d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+function load() { try { return JSON.parse(localStorage.getItem("vjag-guestbook") || "[]"); } catch (e) { return []; } }
+function render() {
+  var list = load(), h = "";
+  if (list.length) h += "<h2>YOUR ENTRIES</h2>";
+  for (var i = list.length - 1; i >= 0; i--) {
+    var e = list[i];
+    h += '<div class="guest"><span class="who">' + esc(e.name) + '</span> <span class="tiny grey">&middot; from ' + esc(e.from) + ' &middot; fave chip: ' + esc(e.chip) + ' &middot; ' + esc(e.when) + '</span><br>' + esc(e.msg) + '</div>';
+  }
+  document.getElementById("mine").innerHTML = h;
+}
+function sign() {
+  var name = document.getElementById("gbname").value.trim(), msg = document.getElementById("gbmsg").value.trim();
+  if (!name || !msg) { document.getElementById("gbname").focus(); return false; }
+  var list = load();
+  list.push({ name: name, from: document.getElementById("gbfrom").value.trim() || "cyberspace", chip: document.getElementById("gbchip").value, msg: msg, when: new Date().toISOString().slice(0, 10) });
+  try { localStorage.setItem("vjag-guestbook", JSON.stringify(list)); } catch (e) {}
+  document.getElementById("gb").reset();
+  render();
+  return false;
+}
+function sparklesOn() { try { return localStorage.getItem("vjag-sparkles") !== "off"; } catch (e) { return true; } }
+function toggleSparkles() {
+  try { localStorage.setItem("vjag-sparkles", sparklesOn() ? "off" : "on"); } catch (e) {}
+  location.reload();
+}
+document.getElementById("sparkbtn").textContent = sparklesOn() ? "TURN CURSOR SPARKLES OFF" : "TURN CURSOR SPARKLES BACK ON";
+render();
+</script>
+
+<script>finish();</script>
+</body>
+</html>

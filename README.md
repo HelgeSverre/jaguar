@@ -24,6 +24,8 @@ The Jaguar is an odd machine: a Motorola 68000 that mostly gets out of the way, 
   <img src="docs/screenshots/nebula.png" width="49%" alt="A 16-bit CRY photograph shown by the object processor">
 </p>
 
+The home page lives in [`website/`](website/README.md): static HTML, gameplay GIFs, the music video.
+
 The four above are public-domain homebrew. No commercial ROMs or boot ROM images come with this project; bring your own, or start with the [game that is built from source here](#write-your-own).
 
 ## Where it stands

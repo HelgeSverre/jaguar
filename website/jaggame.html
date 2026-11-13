@@ -1,0 +1,87 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>VJAG :: JAGGAME :: JAGUAR GAMES WITHOUT ASSEMBLY</title>
+<link rel="stylesheet" href="style.css">
+<script src="site.js"></script>
+</head>
+<body>
+<script>begin("JAGGAME");</script>
+
+<center>
+<div class="wordart">JAGGAME</div>
+<p class="pixel">DESCRIBE A GAME IN <a class="vlink" href="https://docs.vlang.io/introduction.html">V</a>.<br>GET 68000 MACHINE CODE.<br><span class="rainbow">NO ASSEMBLY. AT ALL.</span></p>
+</center>
+
+<p><code>jaggame</code> goes a step further than <a href="jagkit.html">jagkit</a> and takes the assembly away too. A program <b>describes</b> itself (variables, logic, sprites, rooms, scenes, sound) to a builder. The builder checks it, compiles the logic to 68000 code, links it with a fixed runtime and writes a <code>.jag</code> image, plus a <code>.j64</code> cartridge image for a board with the save chip.</p>
+
+<div class="box red center">
+<span class="pixel">THE SAME DESCRIPTION ALSO RUNS IN AN INTERPRETER WRITTEN IN V.<br><br>THE TWO MUST AGREE.<br><br>A DIFFERENTIAL FUZZER MAKES SURE THEY DO.</span>
+</div>
+
+<h2>A BALL, IN TWENTY LINES</h2>
+<p>It builds and runs: <code>v run</code> it, then <code>just run ball.jag</code>.</p>
+<pre><span class="k">mut</span> g := jaggame.new_game(jaggame.Config{ sprites: 1, layers: 1 })
+g.art_cry(<span class="s">'ball'</span>, 16, 16, 1, []u16{len: 256, init: jaggame.cry(255, 160, 40)})
+ball := g.sprite(0)
+hud := g.text_layer(<span class="s">'hud'</span>, jaggame.TextConfig{ columns: 16, rows: 1, x: 8, y: 8 })
+steps := g.p.u16(<span class="s">'steps'</span>)
+
+<span class="k">mut</span> init := g.define_init()
+ball.put(<span class="k">mut</span> init, <span class="s">'ball'</span>, 152, 112, 0)
+hud.print(<span class="k">mut</span> init, 0, 0, <span class="s">'STEPS'</span>)
+
+<span class="k">mut</span> c := g.define_update()
+c.if_(g.held(.left))
+c.sub_from(ball.x, 2)
+c.inc(steps)
+c.end()
+c.if_(g.held(.right))
+c.add_to(ball.x, 2)
+c.inc(steps)
+c.end()
+hud.number(<span class="k">mut</span> c, 6, 0, steps, 5)
+os.write_file_array(<span class="s">'ball.jag'</span>, g.build()!.bytes)!</pre>
+
+<h2>WHAT YOU GET</h2>
+<table class="data" width="100%">
+<tr><th>PART</th><th>WHAT IS IN IT</th></tr>
+<tr><td><b class="gold">A small typed language</b></td><td><code>u8</code> to <code>u32</code>, <code>fix</code> (16.16), <code>bool</code>, arrays, tables, records, functions, state machines. Types, sizes and memory are checked when the image is built; every mistake comes out together, with its place.</td></tr>
+<tr><td><b class="gold">A runtime</b></td><td>A frame loop for NTSC and PAL, sprites, text layers, timers, tile rooms bigger than the screen with a camera and collision, line of sight and hearing, scenes with a fade between them, menus.</td></tr>
+<tr><td><b class="gold">Sound</b></td><td>A six-voice DSP synthesizer with effects and music written as text patterns.</td></tr>
+<tr><td><b class="gold">Saves</b></td><td>A saved record in the cartridge's EEPROM.</td></tr>
+<tr><td><b class="gold">A GPU backdrop</b></td><td>A drifting neon grid with a sweeping bar and a scrolling gradient, as the first object of the display list.</td></tr>
+<tr><td><b class="gold">Assets</b></td><td>PNG files to sprites, tile sets and palettes; rooms as text with a legend.</td></tr>
+<tr><td><b class="gold">Tested twice</b></td><td>A differential fuzzer runs random programs in the interpreter and on the emulated 68000. A robot plays GHOSTGRID through the pad.</td></tr>
+</table>
+
+<h2 id="gg">THE PROOF: GHOSTGRID</h2>
+<table width="100%"><tr>
+<td valign="top"><img class="tv" src="media/ghostgrid.gif" width="325" height="240" alt="GHOSTGRID gameplay"></td>
+<td valign="top">
+<p>A stealth trainer with <b>ten missions</b>, written on jaggame with no assembly in it. Guards with a state machine (patrol, suspicious, alert, search, return) throw a cone of amber light on the floor that walls cut, and the cone is <i>exactly</i> what sees you. Cameras sweep cones of their own and call the guards.</p>
+<p>The interpreter plays whole missions alongside the machine and <b>the two agree frame by frame</b>.</p>
+<p><a href="demos.html#ghostgrid">MORE ABOUT GHOSTGRID &gt;&gt;</a></p>
+</td></tr></table>
+
+<h2>THE GUIDE: SIX CHAPTERS</h2>
+<ol class="comic">
+<li>the language</li>
+<li>the runtime</li>
+<li>assets, rooms and collision</li>
+<li>state machines, actors and guards</li>
+<li>scenes, menus, sound, save data and the backdrop</li>
+<li>missions as data, cameras, ranks and the record</li>
+</ol>
+<table class="data" width="100%">
+<tr><th>READ</th><th>FOR</th></tr>
+<tr><td><a href="https://github.com/HelgeSverre/jaguar/blob/main/docs/jaggame/guide.md">docs/jaggame/guide.md</a></td><td>the guide, from the language to GHOSTGRID's missions</td></tr>
+<tr><td><a href="https://github.com/HelgeSverre/jaguar/blob/main/docs/jaggame/reference.md">docs/jaggame/reference.md</a></td><td>every public name, generated from the source comments</td></tr>
+<tr><td><a href="https://github.com/HelgeSverre/jaguar/blob/main/jaggame/README.md">jaggame/README.md</a></td><td>what it is, in twenty lines of code</td></tr>
+</table>
+<pre>v -prod test jaggame/ demos/hello2/ demos/ghostgrid/    <span class="c"># all of it, about four minutes</span></pre>
+
+<script>finish();</script>
+</body>
+</html>

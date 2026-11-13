@@ -1,0 +1,133 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>VJAG - The Atari Jaguar Emulator Written In V!!!</title>
+<meta name="keywords" content="atari jaguar, jaguar emulator, vlang, v language, 68000, tom, jerry, blitter, homebrew, jagkit, jaggame, 64 bit, do the math">
+<meta name="description" content="vjag: an Atari Jaguar emulator written in V, plus a toolchain for writing Jaguar games in V.">
+<link rel="stylesheet" href="style.css">
+<script src="site.js"></script>
+</head>
+<body>
+<noscript><center><font color="#ffff00" size="5"><b>YOUR BROWSER DOES NOT SUPPORT JAVASCRIPT!! PLEASE UPGRADE TO NETSCAPE NAVIGATOR 4.0 OR ANY BROWSER MADE AFTER IT.</b></font></center></noscript>
+<script>begin("MAIN"); scrollTitle("VJAG - THE ATARI JAGUAR EMULATOR WRITTEN IN V");</script>
+
+<center>
+<div class="wordart"><script>wavy("WELCOME TO THE JUNGLE!!!");</script></div>
+<p class="pixel">THE ONLY ATARI JAGUAR EMULATOR<br>WRITTEN IN <a class="vlink" href="https://docs.vlang.io/introduction.html">V</a> THAT WE KNOW OF</p>
+<img src="media/shell-hero.png" width="640" height="432" alt="vjag in its console shell, playing Jaguar Hero" class="pix"><br>
+<span class="small grey">^^^ that is the actual window. it is shaped like a console. you can drag it around by its body. ^^^</span>
+</center>
+
+<img src="img/bar.gif" width="100%" height="6" alt="">
+
+<table width="100%" cellpadding="6" cellspacing="6"><tr>
+<td valign="top" width="55%">
+<h2>WHAT IS THIS?!</h2>
+<p><b>vjag</b> is an emulator for the <b>Atari Jaguar</b>, the 1993 console that wanted you to <i>do the math</i>. It emulates the whole odd machine:</p>
+<ul>
+<li>a <b class="gold">Motorola 68000</b> that mostly gets out of the way</li>
+<li>two custom <b class="gold">RISC processors</b>, the GPU for graphics and the DSP for sound</li>
+<li>an <b class="gold">object processor</b> that rewrites its own display list while it draws</li>
+<li>a <b class="gold">blitter</b> with more mode bits than documentation</li>
+</ul>
+<p>About <b class="red">14,000 lines of</b> <a class="vlink" href="https://docs.vlang.io/introduction.html">V</a>. No C emulation cores underneath. SDL3 only puts the picture in a window and the samples in the speakers.</p>
+<p>And then it got out of hand: there is now a <a href="jagkit.html">toolchain for writing Jaguar programs in V</a>, a <a href="jaggame.html">game engine that compiles V descriptions to 68000 code</a>, <a href="demos.html">five homebrew games</a>, robots that play them in the tests, and a <a href="video.html">music video</a>.</p>
+</td>
+<td valign="top" align="center">
+<div class="applet">
+<canvas id="applet" width="256" height="192" style="display:block;background:#000"></canvas>
+<div class="status" id="appletstatus">Loading Java applet...</div>
+</div>
+<p class="tiny grey">PLASMA.CLASS<br>(it is not java. it is not even the jaguar.<br><a href="demos.html">the real plasma runs on the emulated GPU.</a>)</p>
+</td>
+</tr></table>
+
+<h2><img src="img/new.gif" width="44" height="18" alt="NEW"> WHAT'S NEW <img src="img/new.gif" width="44" height="18" alt="NEW"></h2>
+<table class="data" width="100%" cellspacing="2">
+<tr><th width="110">DATE</th><th>NEWS FLASH</th></tr>
+<tr><td class="mono">2026-11-13</td><td><b>ROBOPLAY!</b> <code>just roboplay ghostgrid</code> opens the window and lets you watch a demo's test robot play the game, from the press file its test keeps.</td></tr>
+<tr><td class="mono">2026-11-13</td><td><b>Press files.</b> <code>--press-file</code> replays pad input from a file, in the window and in the headless runner, frame for frame the same.</td></tr>
+<tr><td class="mono">2026-11-13</td><td><b>GHOSTGRID is complete.</b> Ten stealth missions written with jaggame, with no assembly in them at all. <a href="demos.html#ghostgrid">See it!</a></td></tr>
+<tr><td class="mono">2026-11-13</td><td><b>Jaguar Hero</b>: a five-lane rhythm game with five original songs, from 113 to 180 BPM, played by a ten-voice DSP synthesizer.</td></tr>
+<tr><td class="mono">2026-11-12</td><td><b>jagkit, MAW and WIREWING.</b> Jaguar programs assembled from V, then a psytrance tunnel flyer and a wireframe flying game written with it, in one evening.</td></tr>
+<tr><td class="mono">2026-11-12</td><td><b>First commit, 09:54.</b> A 68000 interpreter with the SingleStepTests harness. 113 commits in two days followed.</td></tr>
+</table>
+
+<h2>LOOK AT IT GO</h2>
+<center>
+<table cellpadding="4" cellspacing="8"><tr>
+<td align="center"><img class="tv" src="media/hero.gif" width="325" height="240" alt="Jaguar Hero gameplay"><br><span class="pixel">JAGUAR HERO</span></td>
+<td align="center"><img class="tv" src="media/maw.gif" width="325" height="240" alt="MAW gameplay"><br><span class="pixel">MAW</span></td>
+</tr><tr>
+<td align="center"><img class="tv" src="media/ghostgrid.gif" width="325" height="240" alt="GHOSTGRID gameplay"><br><span class="pixel">GHOSTGRID</span></td>
+<td align="center"><img class="tv" src="media/wirewing.gif" width="325" height="240" alt="WIREWING gameplay"><br><span class="pixel">WIREWING</span></td>
+</tr></table>
+<p class="small">Every one of these is homebrew <b>written in V in this repo</b> and recorded straight out of <code>vjag_test --video</code>.<br>Press the jukebox buttons on the left to hear the music the emulated DSP made. &lt;-- &lt;-- &lt;--</p>
+</center>
+
+<h2>THE 30 SECOND TOUR</h2>
+<pre><span class="c"># you need V 0.5.2, SDL3 and just</span>
+<span class="k">brew install</span> vlang sdl3 just
+<span class="k">git clone</span> https://github.com/HelgeSverre/jaguar
+<span class="k">cd</span> jaguar
+<span class="k">just run</span> demos/hero.jag        <span class="c"># play a game built in this repo</span>
+<span class="k">just roboplay</span> ghostgrid        <span class="c"># watch the test robot play one</span>
+<span class="k">just run</span> path/to/your.j64      <span class="c"># bring your own cartridge dump</span></pre>
+
+<table width="100%" cellpadding="8"><tr>
+<td class="box red" width="50%" valign="top">
+<h3>!! NO ROMS HERE !!</h3>
+<p>No commercial ROMs and no boot ROM images come with this project or this site. Do not e-mail asking for them. Do not sign the guestbook asking for them. <b>Bring your own</b>, or play the <a href="demos.html">games that are built from source</a> right here.</p>
+</td>
+<td class="box gold" valign="top">
+<h3>118 OF 139!!</h3>
+<p>Boot a pile of cartridge dumps for 15 seconds each and 118 of 139 show a moving picture. 3D worlds render, 2D games scroll, menus answer the pad, music plays. <a href="status.html">See the full scoreboard.</a></p>
+</td>
+</tr></table>
+
+<center>
+<p class="pixel rainbow">THANKS FOR VISITING! COME BACK SOON!</p>
+<p><a href="guestbook.html"><span class="wordart" style="font-size:24px">&gt;&gt; SIGN MY GUESTBOOK &lt;&lt;</span></a></p>
+</center>
+
+<script>
+// PLASMA.CLASS - a fake java applet, now with 100% less java
+(function () {
+  var c = document.getElementById("applet"), st = document.getElementById("appletstatus");
+  var x = c.getContext("2d");
+  var W = 128, H = 96, img = x.createImageData(W, H);
+  var off = document.createElement("canvas"); off.width = W; off.height = H;
+  var ox = off.getContext("2d");
+  x.imageSmoothingEnabled = false;
+  var t0 = null, loaded = false;
+  function frame(ts) {
+    if (t0 === null) t0 = ts;
+    var t = (ts - t0) / 1000;
+    if (t < 1.6) {
+      x.fillStyle = "#c0c0c0"; x.fillRect(0, 0, 256, 192);
+      x.fillStyle = "#000"; x.font = "12px Tahoma, sans-serif"; x.fillText("Java", 110, 90);
+      x.fillStyle = "#000080"; x.fillRect(40, 110, Math.min(176, t * 120), 10);
+      x.strokeRect(40, 110, 176, 10);
+      requestAnimationFrame(frame); return;
+    }
+    if (!loaded) { st.textContent = "Applet PLASMA started"; loaded = true; }
+    for (var j = 0; j < H; j++) for (var i = 0; i < W; i++) {
+      var v = Math.sin(i / 9 + t) + Math.sin(j / 7 - t * 1.3) + Math.sin((i + j) / 13 + t * 0.7) + Math.sin(Math.sqrt(i * i + j * j) / 8 - t);
+      var k = (j * W + i) * 4;
+      img.data[k] = 128 + 127 * Math.sin(v * Math.PI);
+      img.data[k + 1] = 40 + 40 * Math.sin(v * Math.PI + 2);
+      img.data[k + 2] = 20 + 20 * Math.cos(v * Math.PI);
+      img.data[k + 3] = 255;
+    }
+    ox.putImageData(img, 0, 0);
+    x.drawImage(off, 0, 0, 256, 192);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+
+<script>finish();</script>
+</body>
+</html>

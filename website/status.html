@@ -1,0 +1,68 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>VJAG :: STATUS :: THE SCOREBOARD</title>
+<link rel="stylesheet" href="style.css">
+<script src="site.js"></script>
+</head>
+<body>
+<script>begin("STATUS");</script>
+
+<center>
+<div class="wordart">DOES IT WORK?</div>
+<p class="pixel">YES. MOSTLY. HERE IS THE MATH.</p>
+</center>
+
+<h2>THE SWEEP</h2>
+<p>A sweep over a private collection of <b class="gold">139</b> cartridge dumps and homebrew programs, each run for <b>15 seconds of emulated time</b>, with <code>vjag_test compat</code>:</p>
+
+<table class="data" width="100%">
+<tr><th>RESULT</th><th>IMAGES</th><th>THE BAR GRAPH OF DESTINY</th></tr>
+<tr><td>Animated picture</td><td align="right" class="lime"><b>118</b></td><td class="mono lime">██████████████████████████████████████████████████████████</td></tr>
+<tr><td>Static picture</td><td align="right">4</td><td class="mono gold">██</td></tr>
+<tr><td>Blank screen</td><td align="right">11</td><td class="mono grey">█████</td></tr>
+<tr><td>68000 ended up outside any program</td><td align="right" class="red">5</td><td class="mono red">██</td></tr>
+<tr><td>Refused by the loader</td><td align="right">1</td><td class="mono">▌</td></tr>
+</table>
+
+<p>Most of the blank ones are tools that draw nothing by design, or dumps that are damaged. <b class="red">The crashes are real bugs.</b></p>
+
+<div class="box gold">
+<h3>WHAT "ANIMATED" MEANS</h3>
+<p>Pixels moved. Not that the game is right. From looking at the pictures: 3D titles render their worlds, 2D titles scroll and animate, menus respond to the pad, and music plays.</p>
+<p>Known problems include one racing game that crashes its sound driver after about 13 seconds, a few demos that fall over on scaled sprites, and whatever nobody has played far enough to find.</p>
+</div>
+
+<h2>STILL ON THE TODO LIST</h2>
+<table class="data" width="100%">
+<tr><th>THING</th><th>STATUS</th><th>WHAT THAT MEANS</th></tr>
+<tr><td><b>Boot ROM</b></td><td class="red blink">NOPE</td><td>Everything starts by direct boot: the cartridge runs with the video timing the boot ROM would have left behind. Loading a real boot ROM is not wired up.</td></tr>
+<tr><td><b>Blitter timing</b></td><td class="gold">INSTANT</td><td>A blit finishes the instant it is started. Results are exact pixel for pixel in the tested modes, but software can never catch the blitter busy.</td></tr>
+<tr><td><b>Cycle accuracy</b></td><td class="gold">HALF</td><td>The 68000 counts cycles correctly; the RISC processors use rough per-instruction costs. The timing profile is called <code>functional_v1</code>.</td></tr>
+<tr><td><b>Save states</b></td><td class="red">NOPE</td><td>Cartridge EEPROM saves work and persist. Save states do not exist.</td></tr>
+<tr><td><b>Jaguar CD</b></td><td class="red">NOPE</td><td>Not emulated.</td></tr>
+<tr><td><b>Wavetable ROM</b></td><td class="gold">FAKED</td><td>The eight waveforms in JERRY are generated, not dumped, so software that plays them sounds close but not identical.</td></tr>
+<tr><td><b>Platforms</b></td><td class="gold">ONE</td><td>Tried on macOS arm64. <code>vjag_test</code> links without SDL, so it should build wherever V does.</td></tr>
+</table>
+
+<h2>THE PUBLIC-DOMAIN PROOF</h2>
+<p>These four are public-domain homebrew running in vjag. The blitter, the GPU, the CRY colour space and the object processor, one picture each:</p>
+<center>
+<table cellspacing="8"><tr>
+<td align="center"><img class="tv" src="img/landscape.png" width="320" height="240" alt="A wireframe landscape rendered through the blitter"><br><span class="small">wireframe landscape through the <b>blitter</b></span></td>
+<td align="center"><img class="tv" src="img/fractal.png" width="320" height="240" alt="A Mandelbrot set computed on the emulated GPU"><br><span class="small">Mandelbrot set on the emulated <b>GPU</b></span></td>
+</tr><tr>
+<td align="center"><img class="tv" src="img/colour-space.png" width="320" height="240" alt="The CRY colour space"><br><span class="small">the Jaguar's <b>CRY</b> colour space</span></td>
+<td align="center"><img class="tv" src="img/nebula.png" width="320" height="240" alt="A 16-bit CRY photograph"><br><span class="small">a 16-bit CRY photo via the <b>object processor</b></span></td>
+</tr></table>
+</center>
+
+<div class="box red">
+<h3>FOUND A BUG?</h3>
+<p>Run it through <code>vjag_test trace</code> first (see <a href="headless.html">the headless tools</a>), then <a href="https://github.com/HelgeSverre/jaguar/issues">open an issue</a>. Please do not attach ROMs.</p>
+</div>
+
+<script>finish();</script>
+</body>
+</html>

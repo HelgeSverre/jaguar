@@ -1,0 +1,71 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>VJAG :: GET IT!! :: DOWNLOAD AND BUILD</title>
+<link rel="stylesheet" href="style.css">
+<script src="site.js"></script>
+</head>
+<body>
+<script>begin("GET");</script>
+
+<center>
+<div class="wordart"><script>wavy("GET IT NOW!!!");</script></div>
+<p class="pixel">FREE! MIT LICENCE! NO SHAREWARE NAG SCREENS!</p>
+</center>
+
+<h2>STEP 1: GET THE TOOLS</h2>
+<p>You need <b>V 0.5.2</b>, <b>SDL3</b> and <a href="https://github.com/casey/just">just</a>. On macOS:</p>
+<pre><span class="k">brew install</span> vlang sdl3 just</pre>
+<p class="small">Tried on macOS arm64. The headless runner links without SDL and should build wherever V does; nobody has tried yet. Be the first! Sign the guestbook about it!</p>
+
+<h2>STEP 2: GET THE SOURCE</h2>
+<pre><span class="k">git clone</span> https://github.com/HelgeSverre/jaguar
+<span class="k">cd</span> jaguar</pre>
+
+<h2>STEP 3: PLAY</h2>
+<pre><span class="k">just run</span> demos/hero.jag        <span class="c"># optimized build, then play</span>
+<span class="k">just run</span>                       <span class="c"># empty window: drop an image on it</span>
+<span class="k">just run</span> path/to/game.j64      <span class="c"># your own cartridge dump</span></pre>
+
+<table width="100%" cellpadding="8"><tr>
+<td class="box red" valign="top"><h3>WHERE ARE THE ROMS?</h3><p>Not here. Not in the repo. Not on request. <b>Bring your own</b>, or play the <a href="demos.html">homebrew built from source</a>.</p></td>
+<td class="box gold" valign="top"><h3>WHERE IS THE BOOT ROM?</h3><p>Also not here, and not needed: everything starts by <b>direct boot</b> with the video timing the boot ROM would have left behind.</p></td>
+</tr></table>
+
+<h2>EVERY JUST RECIPE YOU WILL USE</h2>
+<table class="data" width="100%">
+<tr><th>RECIPE</th><th>DOES</th></tr>
+<tr><td class="mono gold">just run game.j64</td><td>optimized build, then play</td></tr>
+<tr><td class="mono gold">just dev game.j64</td><td>debug build with runtime checks</td></tr>
+<tr><td class="mono gold">just demo maw</td><td>rebuild a jagkit game from its V source and play it</td></tr>
+<tr><td class="mono gold">just roboplay hero</td><td>watch a demo's test robot play it</td></tr>
+<tr><td class="mono gold">just headless ...</td><td>run the headless runner, e.g. <code>just headless inspect image.jag --json</code></td></tr>
+<tr><td class="mono gold">just test</td><td>all unit tests</td></tr>
+<tr><td class="mono gold">just test-prod</td><td>the same under the optimizing compiler; output must match</td></tr>
+<tr><td class="mono gold">just fetch-tests</td><td>download the 68000 corpus (MIT) into <code>data/tests</code></td></tr>
+<tr><td class="mono gold">just compat</td><td>boot every local image headlessly and write <code>out/compat.json</code></td></tr>
+<tr><td class="mono gold">just benchmark game.j64</td><td>how fast it runs flat out (needs hyperfine)</td></tr>
+<tr><td class="mono gold">just crosscheck</td><td>run the demos in Virtual Jaguar too, for comparison</td></tr>
+<tr><td class="mono gold">just reference</td><td>regenerate the jagkit and jaggame references from source comments</td></tr>
+<tr><td class="mono gold">just install</td><td>copy <code>vjag</code> and <code>vjag_test</code> to <code>~/.local/bin</code></td></tr>
+</table>
+<p class="small"><code>just</code> on its own lists every recipe.</p>
+
+<h2>WHERE THINGS GO</h2>
+<ul>
+<li><b>Saves</b> land in your data directory, keyed by the content of the image. Renaming a file keeps its save.</li>
+<li><b>Settings</b> live in <code>vjag/config.toml</code> under your configuration directory (<code>~/Library/Application Support</code> on macOS). <code>shell = false</code> turns the console shell off for good; <code>--no-shell</code> for one run.</li>
+</ul>
+
+<center>
+<br>
+<table cellpadding="12" style="border:6px outset #ffd700;background:#800000"><tr><td align="center">
+<a href="https://github.com/HelgeSverre/jaguar" style="text-decoration:none"><span class="wordart" style="font-size:28px">&gt;&gt; GITHUB.COM/HELGESVERRE/JAGUAR &lt;&lt;</span></a><br>
+<span class="pixel gold">CLICK HERE!!</span>
+</td></tr></table>
+</center>
+
+<script>finish();</script>
+</body>
+</html>

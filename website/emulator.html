@@ -1,0 +1,136 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>VJAG :: THE EMULATOR :: HOW IT WORKS</title>
+<link rel="stylesheet" href="style.css">
+<script src="site.js"></script>
+</head>
+<body>
+<script>begin("EMU");</script>
+
+<center>
+<div class="wordart">THE EMULATOR</div>
+<p class="pixel">ONE MACHINE. FIVE BRAINS. ZERO C CORES.</p>
+</center>
+
+<h2>THE ODD MACHINE</h2>
+<p>The Jaguar is not a computer with a graphics card. It is a pile of processors that share one bus and argue about it. vjag emulates every one of them in <a class="vlink" href="https://docs.vlang.io/introduction.html">V</a>:</p>
+
+<pre>
+  +--------------------------------------------------------------+
+  |                     <span class="k">MAIN RAM</span>  (2 MB DRAM)                    |
+  +-------+-----------------+--------------------+---------------+
+          |                 |                    |
+  +-------+------+   +------+--------------------+------+   +----------+
+  | <span class="k">MOTOROLA</span>     |   |  <span class="s">TOM</span>                             |   | <span class="s">JERRY</span>    |
+  | <span class="k">68000</span>        |   |   +-------+  +-----------+      |   |  +-----+ |
+  |              |   |   |  <span class="k">GPU</span>  |  | <span class="k">OBJECT</span>    |      |   |  | <span class="k">DSP</span> | |
+  | "mostly gets |   |   | RISC  |  | <span class="k">PROCESSOR</span> |      |   |  | RISC| |
+  |  out of the  |   |   +-------+  +-----------+      |   |  +-----+ |
+  |  way"        |   |   +---------+  +--------+       |   |  timers  |
+  |              |   |   | <span class="k">BLITTER</span> |  | video  |       |   |  audio   |
+  +--------------+   |   +---------+  | timing |       |   |  pad     |
+                     |                +--------+       |   |  wavetbl |
+                     +---------------------------------+   +----------+
+                 <span class="c">all on one timeline: ticks of the 26.59 MHz master clock</span>
+</pre>
+
+<table class="data" width="100%">
+<tr><th>CHIP</th><th>WHAT IT DOES</th><th>IN VJAG</th></tr>
+<tr><td><b class="gold">68000</b></td><td>The general. Runs the game's rules and boots everything else.</td><td>Counts cycles correctly. Matches <a href="tests.html">every one of 317,500 test vectors</a> on registers, memory, cycle count and bus order.</td></tr>
+<tr><td><b class="gold">GPU</b> (in TOM)</td><td>A 32-bit RISC with its own local RAM. Draws, transforms, computes fractals.</td><td>Shares one instruction format with the DSP, two opcode maps. Delay slots and all. Rough per-instruction costs.</td></tr>
+<tr><td><b class="gold">DSP</b> (in JERRY)</td><td>The same RISC again, for sound.</td><td>Synthesizers in the demos run on it; the <a href="index.html">jukebox</a> on the left plays what it made.</td></tr>
+<tr><td><b class="gold">Object processor</b></td><td>Walks a display list every line and rewrites it while it draws.</td><td>Bitmaps, scaled bitmaps, branches, stops. Exact memory results in unit tests.</td></tr>
+<tr><td><b class="gold">Blitter</b></td><td>Copies, fills and shades pixels. More mode bits than documentation.</td><td>Pixel exact in the tested modes. <span class="red">Finishes the instant it starts</span>, so software never sees it busy.</td></tr>
+<tr><td><b class="gold">JERRY</b> rest</td><td>Timers, serial audio, the controller matrix, the wavetable.</td><td>The eight waveforms are generated, not dumped: close, not identical.</td></tr>
+<tr><td><b class="gold">EEPROM</b></td><td>128 bytes on the cartridge for saves.</td><td>Works and persists between runs, keyed by the content of the image.</td></tr>
+</table>
+
+<h2>THE CODE, BY THE POUND</h2>
+<p>Lines of V outside the tests, counted 2026-11-13:</p>
+<table class="data">
+<tr><th>MODULE</th><th>LINES</th><th>&nbsp;</th><th>WHAT</th></tr>
+<tr><td class="mono">m68k/</td><td align="right">2,915</td><td class="mono lime">##############</td><td>Motorola 68000</td></tr>
+<tr><td class="mono">loader/</td><td align="right">1,417</td><td class="mono lime">#######</td><td>image detection and validated load plans</td></tr>
+<tr><td class="mono">tom/</td><td align="right">1,327</td><td class="mono lime">######</td><td>video timing, object processor, blitter, CRY colour</td></tr>
+<tr><td class="mono">cli/</td><td align="right">1,111</td><td class="mono lime">#####</td><td>headless commands</td></tr>
+<tr><td class="mono">host/sdl/</td><td align="right">1,094</td><td class="mono lime">#####</td><td>window, audio stream, input, the shell</td></tr>
+<tr><td class="mono">debug/</td><td align="right">1,031</td><td class="mono lime">#####</td><td>disassemblers and read-only inspection</td></tr>
+<tr><td class="mono">risc/</td><td align="right">1,016</td><td class="mono lime">#####</td><td>the GPU and DSP</td></tr>
+<tr><td class="mono">machine/</td><td align="right">972</td><td class="mono lime">####</td><td>memory map, scheduler, interrupt wiring</td></tr>
+<tr><td class="mono">cmd/</td><td align="right">542</td><td class="mono lime">##</td><td><code>vjag</code> and <code>vjag_test</code></td></tr>
+<tr><td class="mono">jerry/</td><td align="right">413</td><td class="mono lime">##</td><td>timers, serial audio, controller matrix, wavetable</td></tr>
+<tr><td class="mono">cart/</td><td align="right">202</td><td class="mono lime">#</td><td>cartridge EEPROM</td></tr>
+<tr><td class="mono">hwtypes/</td><td align="right">160</td><td class="mono lime">#</td><td>the bus interface; depends on nothing</td></tr>
+</table>
+
+<h2>HOW IT IS PUT TOGETHER</h2>
+<div class="box blue">
+<ul>
+<li>Processors and devices only know the <code>Bus</code> interface from <code>hwtypes</code>. <code>machine</code> owns them all <i>and is</i> the bus.</li>
+<li>Nothing below <code>cli</code> touches a file, a clock or SDL.</li>
+<li>The core does not allocate while it runs: a ten-second benchmark allocates <b class="gold">about 12 KB in total</b>.</li>
+<li>All three processors share one timeline counted in ticks of the <b class="gold">26.59 MHz</b> master clock. The scheduler runs each processor for at most <b class="gold">64 ticks</b>, or up to the next device event, before the others catch up. A mailbox written by the 68000 is seen by the DSP a few microseconds later, not a frame later.</li>
+</ul>
+</div>
+
+<h2>HOW FAST?!</h2>
+<table width="100%" cellpadding="6"><tr>
+<td align="center" class="box term" width="50%"><span class="pixel lime">SIMPLE HOMEBREW</span><br><span style="font-size:48px">~14x</span><br>real speed on an M2 Max</td>
+<td align="center" class="box term"><span class="pixel lime">COMMERCIAL GAME,<br>BOTH RISCS BUSY</span><br><span style="font-size:48px">~4x</span><br>real speed</td>
+</tr></table>
+
+<h2>THE SHELL</h2>
+<table width="100%"><tr>
+<td valign="top"><img src="media/shell-empty.png" width="480" height="324" alt="The console shell with nothing loaded" class="pix"></td>
+<td valign="top">
+<p>By default the window is <b>not a window</b>. It is a borderless, see-through cutout shaped like a console, in the spirit of the media-player skins of twenty years ago.</p>
+<ul class="small">
+<li>Five red buttons: power, reset, pause, mute, fullscreen.</li>
+<li>Twelve keys: the controller keypad. Click and hold works.</li>
+<li>The strip shows what is loaded and scrolls.</li>
+<li><span class="red">The eyes flare with the sound.</span></li>
+<li>Drag it by the body. <kbd>,</kbd> and <kbd>.</kbd> resize it.</li>
+<li>Coward? <kbd>H</kbd> swaps it for a plain window and remembers.</li>
+</ul>
+</td></tr></table>
+
+<h2>CONTROLS</h2>
+<table width="100%" cellspacing="8"><tr><td valign="top">
+<table class="data">
+<tr><th>JAGUAR</th><th>KEYBOARD</th><th>GAMEPAD</th></tr>
+<tr><td>D-pad</td><td>Arrows</td><td>D-pad</td></tr>
+<tr><td>C, B, A</td><td><kbd>Z</kbd> <kbd>X</kbd> <kbd>C</kbd></td><td>West, South, East</td></tr>
+<tr><td>Pause</td><td><kbd>Enter</kbd></td><td>Start</td></tr>
+<tr><td>Option</td><td><kbd>Tab</kbd></td><td>Back or North</td></tr>
+<tr><td>Keypad 0-9</td><td><kbd>0</kbd>-<kbd>9</kbd></td><td></td></tr>
+<tr><td>Keypad * #</td><td><kbd>Q</kbd> <kbd>W</kbd></td><td>Shoulders</td></tr>
+</table>
+</td><td valign="top">
+<table class="data">
+<tr><th>EMULATOR</th><th>KEY</th></tr>
+<tr><td>Pause</td><td><kbd>P</kbd></td></tr>
+<tr><td>Reset</td><td><kbd>R</kbd></td></tr>
+<tr><td>Fullscreen</td><td><kbd>F</kbd></td></tr>
+<tr><td>Mute</td><td><kbd>M</kbd></td></tr>
+<tr><td>Status overlay</td><td><kbd>I</kbd></td></tr>
+<tr><td>Screenshot</td><td><kbd>S</kbd></td></tr>
+<tr><td>Shell on/off</td><td><kbd>H</kbd></td></tr>
+<tr><td>Fast-forward (hold)</td><td><kbd>Space</kbd></td></tr>
+<tr><td>Quit</td><td><kbd>Esc</kbd></td></tr>
+</table>
+</td></tr></table>
+<p class="small">These keys sit in the same place on every keyboard layout.</p>
+
+<h2>IMAGES IT EATS</h2>
+<p>Raw cartridges, Jaguar Server executables (<code>JAGR</code> types 2 and 3), DRI/Alcyon ABS, COFF and headerless binaries. <b>The loader looks at the bytes, never at the file extension.</b> For a headerless binary it scores a short list of load addresses by how many absolute jumps land inside the image; when it guesses, it says so.</p>
+<pre><span class="k">vjag</span> demo.bin --format raw --load-address 0x4000 --entry 0x4000
+<span class="k">vjag inspect</span> demo.bin        <span class="c"># what would the loader do? (without running)</span></pre>
+<p>Drop an image on the window to start it; drop another to switch. Saves land in your data directory, keyed by the content of the image, so renaming a file keeps its save.</p>
+
+<center><p><a href="status.html" class="pixel">NEXT: DOES IT ACTUALLY WORK? &gt;&gt;&gt;</a></p></center>
+
+<script>finish();</script>
+</body>
+</html>

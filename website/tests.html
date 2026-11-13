@@ -1,0 +1,59 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>VJAG :: 317,500 TESTS :: NO EXCLUSIONS</title>
+<link rel="stylesheet" href="style.css">
+<script src="site.js"></script>
+</head>
+<body>
+<script>begin("TESTS");</script>
+
+<center>
+<div class="wordart">THE TESTS</div>
+<br>
+<table class="box term" cellpadding="10"><tr><td align="center">
+<span class="pixel lime">68000 TEST VECTORS PASSING</span><br>
+<span id="vec" style="font-family:'Press Start 2P',monospace;font-size:40px;color:#33ff33">000000</span><br>
+<span class="pixel lime">OF 317,500</span><br><br>
+<span class="pixel gold">EXCLUSIONS: 0</span>
+</td></tr></table>
+</center>
+
+<h2>THE 68000: EVERY SINGLE CASE</h2>
+<p>Every case of <a href="https://github.com/SingleStepTests/m68000">SingleStepTests/m68000</a> matches on <b>registers, memory, cycle count and bus order</b>. 317,500 of 317,500. No exclusions. Without the corpus the test says it was skipped.</p>
+<pre><span class="k">just fetch-tests</span>   <span class="c"># once: downloads the 68000 corpus (MIT) into data/tests</span>
+<span class="k">just test</span></pre>
+
+<h2>THE LADDER</h2>
+<table class="data" width="100%">
+<tr><th>LEVEL</th><th>WHAT IS TESTED</th></tr>
+<tr><td class="gold">68000</td><td>The full SingleStepTests corpus, as above.</td></tr>
+<tr><td class="gold">Devices</td><td>The object processor, blitter, RISC cores, EEPROM, controller matrix and timers have unit tests that check exact memory and register results.</td></tr>
+<tr><td class="gold">Whole machine</td><td>Small hand-assembled programs boot through the real loader, run on the 68000, hand work to the GPU and publish a result word.</td></tr>
+<tr><td class="gold">Loader</td><td>Synthetic fixtures for every format and every way a file can be truncated or lie about itself.</td></tr>
+<tr><td class="gold">jagkit</td><td>Every instruction form the assemblers accept is read back through the emulator's disassemblers. Every demo is built, booted as NTSC and as PAL, and played by its test.</td></tr>
+<tr><td class="gold">jaggame</td><td>A differential fuzzer runs random programs in the interpreter and on the emulated 68000; they must agree.</td></tr>
+<tr><td class="gold">Robots</td><td>GHOSTGRID's robot plans an unseen route through all ten missions. Jaguar Hero's robot plays the finale with every note perfect. Their runs are kept as press files and replayed on a fresh machine.</td></tr>
+<tr><td class="gold">A second emulator</td><td><code>just crosscheck</code> runs the demos in Virtual Jaguar and leaves pictures to compare. It fetches and builds that emulator, so it is not part of <code>just test</code>.</td></tr>
+</table>
+
+<h2>EVEN THE COMPILER GETS CHECKED</h2>
+<div class="box blue">
+<p><code>just test-prod</code> runs the same tests under V's optimizing compiler. The output must match <code>just test</code>. Trust nobody. Not even <code>-prod</code>.</p>
+</div>
+
+<script>
+(function () {
+  var el = document.getElementById("vec"), n = 0, target = 317500;
+  var t = setInterval(function () {
+    n += 4217 + Math.floor(Math.random() * 900);
+    if (n >= target) { n = target; clearInterval(t); el.className = "blink"; setTimeout(function(){ el.className = ""; }, 3000); }
+    el.textContent = n.toLocaleString("en-US");
+  }, 25);
+})();
+</script>
+
+<script>finish();</script>
+</body>
+</html>

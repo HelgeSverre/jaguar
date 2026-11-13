@@ -1,0 +1,112 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>VJAG :: VJAG_TEST :: THE EMULATOR WITH NO WINDOW</title>
+<link rel="stylesheet" href="style.css">
+<script src="site.js"></script>
+</head>
+<body class="stars">
+<script>begin("HEADLESS");</script>
+
+<center>
+<div class="wordart">VJAG_TEST</div>
+<p class="pixel lime">THE SAME EMULATOR. NO WINDOW. ALL BUSINESS.</p>
+</center>
+
+<div class="box term">
+C:\JAGUAR&gt; vjag_test<br>
+vjag_test: the emulator without a window. it runs an image for a number of frames and reports.<br>
+it links without SDL, so it should build wherever V does.<br>
+C:\JAGUAR&gt; <span class="blink">_</span>
+</div>
+
+<h2>THE COMMANDS</h2>
+<table class="data" width="100%">
+<tr><th>COMMAND</th><th>DOES</th></tr>
+<tr><td class="mono gold">inspect &lt;image&gt;</td><td>describes how the image would be loaded: format, load address, entry point</td></tr>
+<tr><td class="mono gold">run &lt;image&gt;</td><td>runs for <code>--frames</code> frames, then produces what the options ask for: screenshots, sound, video, memory dumps</td></tr>
+<tr><td class="mono gold">compat &lt;dir&gt;</td><td>boots every image in a directory and writes a triage report: <code>animated</code>, <code>static_picture</code>, <code>blank</code>, <code>crashed</code>, <code>load_error</code></td></tr>
+<tr><td class="mono gold">bench &lt;image&gt;</td><td>measures emulation speed with nothing holding it back</td></tr>
+<tr><td class="mono gold">trace &lt;image&gt;</td><td>single-steps, keeps the last instructions of one processor, and prints them when a stop condition hits</td></tr>
+</table>
+<p class="small"><code>vjag</code> accepts the same commands, so <code>vjag run ...</code> works too.</p>
+
+<h2><img src="img/new.gif" width="44" height="18" alt=""> TRACE: THE ONE THAT EARNS ITS KEEP</h2>
+<p>It single-steps the machine, keeps the last instructions of one processor in a ring, and stops when something interesting happens: the DSP wanders out of its RAM, the 68000 jumps into the vector table, a memory location changes. Then it prints the ring as a disassembly. <b class="gold">Most of the bugs fixed so far were found this way.</b></p>
+<pre><span class="k">vjag_test trace</span> game.j64 --cpu m68k --stop-range 0x0:0x400   <span class="c"># who jumped into the vectors?</span>
+<span class="k">vjag_test trace</span> game.j64 --cpu m68k --watch 0x4912           <span class="c"># who overwrote this?</span>
+<span class="k">vjag_test trace</span> game.j64 --cpu dsp --tail 80                  <span class="c"># what was the DSP doing?</span></pre>
+<table class="data">
+<tr><th>OPTION</th><th>MEANING</th></tr>
+<tr><td class="mono">--cpu m68k|gpu|dsp</td><td>processor to follow; default <code>dsp</code></td></tr>
+<tr><td class="mono">--tail &lt;n&gt;</td><td>instructions to print; default 64</td></tr>
+<tr><td class="mono">--stop-pc &lt;addr&gt;</td><td>stop when the processor reaches an address</td></tr>
+<tr><td class="mono">--stop-range &lt;lo:hi&gt;</td><td>stop when its program counter enters a range</td></tr>
+<tr><td class="mono">--watch &lt;addr[:mask]&gt;</td><td>stop when the long at an address changes</td></tr>
+<tr><td class="mono">--skip &lt;n&gt;</td><td>instructions to run before the stop conditions apply</td></tr>
+</table>
+
+<h2>RUN: SCREENSHOTS, SOUND, FILMS</h2>
+<pre><span class="c"># start a game at frame 30, hold right for a second, look at the result</span>
+<span class="k">vjag_test run</span> demos/wirewing.jag --frames 200 --press b@30 --press right@60+60 --screenshot shot.png
+
+<span class="c"># a film with sound: frames and audio from frame 120 on, joined with ffmpeg</span>
+<span class="k">vjag_test run</span> demos/maw.jag --frames 720 --video out/maw.ppm --video-from 120 --wav out/maw.wav
+<span class="k">ffmpeg</span> -framerate 60 -f image2pipe -c:v ppm -i out/maw.ppm -i out/maw.wav -pix_fmt yuv420p out/maw.mp4
+
+<span class="c"># what is in the program's variables?</span>
+<span class="k">vjag_test run</span> demos/hello.jag --frames 60 --peek 0x4000:64 --list 0x4000:20
+
+<span class="c"># every write to the DSP control registers</span>
+<span class="k">vjag_test run</span> game.j64 --watch-io 0xf1a100:0xf1a120</pre>
+
+<div class="box gold">
+<b>FUN FACT!!</b> Every GIF on this site and every frame of game footage in the <a href="video.html">music video</a> came out of <code>vjag_test run --video</code>. The jukebox tracks came out of <code>--wav</code>.
+</div>
+
+<table class="data" width="100%">
+<tr><th>RUN OPTION</th><th>MEANING</th></tr>
+<tr><td class="mono">--screenshot &lt;png&gt;</td><td>save the last frame</td></tr>
+<tr><td class="mono">--wav &lt;file&gt;</td><td>save the sound</td></tr>
+<tr><td class="mono">--video &lt;ppm&gt;</td><td>save every frame as one stream of binary PPM images</td></tr>
+<tr><td class="mono">--video-from &lt;n&gt;</td><td>first frame saved; the <code>--wav</code> starts there too, so the two stay in step</td></tr>
+<tr><td class="mono">--press &lt;button@frame[+n]&gt;</td><td>hold a pad button from a frame, for <code>n</code> frames (6 if left out); repeatable</td></tr>
+<tr><td class="mono">--press-file &lt;file&gt;</td><td>presses from a file, one or more a line; <code>#</code> starts a comment</td></tr>
+<tr><td class="mono">--eeprom-in / --eeprom-out</td><td>load or write the 128-byte EEPROM image</td></tr>
+<tr><td class="mono">--dump</td><td>processors, video registers and the display list at the end</td></tr>
+<tr><td class="mono">--peek &lt;addr[:len]&gt;</td><td>print memory at the end</td></tr>
+<tr><td class="mono">--list &lt;addr[:count]&gt;</td><td>disassemble 68000 code at the end</td></tr>
+<tr><td class="mono">--watch-io &lt;lo:hi&gt;</td><td>log every write to hardware registers in the range</td></tr>
+<tr><td class="mono">--region ntsc|pal</td><td>television standard; default <code>ntsc</code></td></tr>
+</table>
+<p class="small">Buttons: <code>up down left right a b c option pause 0-9 star hash</code></p>
+
+<h2>PRESS FILES &amp; ROBOPLAY</h2>
+<p>A press file is the pad written down frame by frame. Here is the start of the GHOSTGRID robot's run:</p>
+<pre><span class="c"># demos/ghostgrid/roboplay.press</span>
+a@3+1
+a@22+1
+a@41+1
+right@87+10
+right@99+11
+down@111+9
+<span class="c">... 233 lines, four missions, each finished unseen with an S rank</span></pre>
+<p><code>vjag &lt;image&gt; --press-file &lt;file&gt;</code> replays it <b>in the window</b>, frame for frame as <code>run</code> would. While it plays, the pad keys are ignored (a stray key would put the game out of step), the buttons it holds stay held when the window loses focus, and the save is neither loaded nor written. Reset starts the replay over.</p>
+<pre><span class="k">just roboplay</span> ghostgrid    <span class="c"># four missions, unseen</span>
+<span class="k">just roboplay</span> hero         <span class="c"># the 180 BPM finale, every note perfect</span></pre>
+
+<h2>COMPAT &amp; BENCH</h2>
+<pre><span class="k">vjag_test compat</span> roms/ --frames 900 --report-json out/compat.json --screenshots out/shots
+<span class="k">vjag_test bench</span> game.j64 --frames 1200</pre>
+<p>Comparing two compat reports is how a change to the emulator is checked against a whole collection. <code>--jobs</code> sets parallel workers; the default is all cores.</p>
+
+<h2>A SECOND OPINION</h2>
+<p><code>scripts/crosscheck/run.sh</code> runs images in <b>another emulator</b>, the Virtual Jaguar libretro core, and leaves a picture from each side by side. <code>compare.v</code> diffs them pixel by pixel at an offset of (16, 3); the colours agree to within 2 or so. It has found <b>one bug in each direction</b> so far.</p>
+<pre>compared 77025 pixels, 0 differ by more than 2, max channel difference 1</pre>
+
+<p class="center"><a href="https://github.com/HelgeSverre/jaguar/blob/main/docs/headless.md">FULL MANUAL: docs/headless.md</a></p>
+
+<script>finish();</script>
+</body>
+</html>
