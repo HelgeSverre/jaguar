@@ -97,6 +97,8 @@ mut:
 	map_ready      bool // the tile layer's variables and functions are declared
 	sight          &SightVars = unsafe { nil } // line of sight and hearing, once `sight_ready`
 	sight_ready    bool
+	scene_ref      &Scenes = unsafe { nil } // the scenes, once `scene_set`
+	scene_set      bool
 	has_init       bool
 	has_update     bool
 	built          bool

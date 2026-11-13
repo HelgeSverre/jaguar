@@ -188,7 +188,10 @@ fn emit_set_tile(mut m jagkit.M68k, f Func, by_place bool) {
 	m.move(.b, lbl('rt_tile_count'), d4)
 	m.cmp(.l, imm(tile_queue_size), d4)
 	m.b(.cc, full)
-	m.move(.l, d4, d5)
+	m.moveq(0, d5)
+	m.move(.b, lbl('rt_tile_head'), d5)
+	m.add(.l, d4, d5)
+	m.and(.l, imm(tile_queue_size - 1), d5)
 	m.lsl(.l, imm(1), d5)
 	m.lea(lbl('rt_tile_queue'), jagkit.a1)
 	m.move(.w, d1, idx(0, jagkit.a1, d5))
@@ -223,7 +226,8 @@ fn run_set_tile(mut it Interpreter, f Func, by_place bool) ! {
 	it.put_label('rt_map', int(cell), it.get_label('${f.name}.tile', 0)!)!
 	count := it.get_label('rt_tile_count', 0)!
 	if count < tile_queue_size {
-		it.put_label('rt_tile_queue', int(count), cell)!
+		head := it.get_label('rt_tile_head', 0)!
+		it.put_label('rt_tile_queue', int((head + count) % tile_queue_size), cell)!
 		it.put_label('rt_tile_count', 0, count + 1)!
 	} else {
 		it.put_label('rt_tile_lost', 0, it.get_label('rt_tile_lost', 0)! + 1)!

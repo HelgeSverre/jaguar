@@ -22,8 +22,17 @@ const tile_buffer = u32(0x100000)
 // frame while a room loads.
 const tiles_per_frame = 48
 
-// tile_queue_size is how many tile changes (`set_tile`) one frame can hold.
-const tile_queue_size = 64
+// tile_queue_size is how many tile changes (`set_tile`) can wait to be
+// drawn: a ring, so a power of two. A change that does not fit is counted in
+// `rt_tile_lost`.
+const tile_queue_size = 128
+
+// tile_draws_per_frame is how many of the queued changes are drawn in one
+// frame (about 1,700 cycles each): a cone that turns changes up to 60 tiles,
+// and drawing them all in one frame took a third of it. What does not fit
+// waits for the next frames, so the picture can trail the map by a few frames
+// after a big change.
+const tile_draws_per_frame = 20
 
 // TileVars is what the tile layer declares in the program: variables and
 // functions, made by `use_map`.
@@ -40,8 +49,9 @@ mut:
 	to           Expr
 	cells        Expr // u16: the cells in the room
 	first        Expr // u16: where the room's tiles start in the table of all rooms
-	queue        Expr // u16 array: cells changed this frame
-	queued       Expr // u8: how many
+	queue        Expr // u16 array: a ring of the cells changed and not yet drawn
+	queued       Expr // u8: how many are waiting
+	head         Expr // u8: where in the ring the next to draw is
 	lost         Expr // u16: changes that did not fit
 	slide_x      Expr // fix: the position `move_and_slide` works on
 	slide_y      Expr
@@ -81,6 +91,7 @@ fn (mut g Game) use_map() {
 		first:   invalid('')
 		queue:   invalid('')
 		queued:  invalid('')
+		head:    invalid('')
 		lost:    invalid('')
 		slide_x: invalid('')
 		slide_y: invalid('')
@@ -99,6 +110,7 @@ fn (mut g Game) use_map() {
 	g.tv.first = g.p.u16('rt_load_first')
 	g.tv.queue = g.p.array_u16('rt_tile_queue', tile_queue_size)
 	g.tv.queued = g.p.u8('rt_tile_count')
+	g.tv.head = g.p.u8('rt_tile_head')
 	g.tv.lost = g.p.u16('rt_tile_lost')
 	g.tv.slide_x = g.p.fix('rt_slide_x')
 	g.tv.slide_y = g.p.fix('rt_slide_y')
@@ -380,8 +392,9 @@ fn (g &Game) emit_tile_routines(mut m jagkit.M68k) {
 
 // emit_render_tiles writes `rt.render_tiles`: it draws the cells from
 // `rt_load_from` up to `rt_load_to` (the slice of a room that is loading)
-// and then the cells the game changed this frame (`rt_tile_queue`), each
-// from the tile number in `rt_map`.
+// and then the first cells of the ring the game changed (`rt_tile_queue`),
+// at most `tile_draws_per_frame`, each from the tile number in `rt_map`.
+// `rt_frame` takes the drawn ones off the ring at the start of the next frame.
 fn (g &Game) emit_render_tiles(mut m jagkit.M68k) {
 	m.label('rt.render_tiles')
 	m.push([d6, d7])
@@ -399,12 +412,19 @@ fn (g &Game) emit_render_tiles(mut m jagkit.M68k) {
 	m.label('rt.slice_done')
 	m.moveq(0, d6)
 	m.move(.b, lbl('rt_tile_count'), d6)
+	m.cmp(.l, imm(tile_draws_per_frame), d6)
+	m.b(.ls, 'rt.queue_few')
+	m.moveq(tile_draws_per_frame, d6)
+	m.label('rt.queue_few')
 	m.moveq(0, d7)
 	m.label('rt.queue')
 	m.cmp(.l, d6, d7)
 	m.b(.cc, 'rt.queue_done')
 	m.lea(lbl('rt_tile_queue'), a0)
-	m.move(.l, d7, d0)
+	m.moveq(0, d0)
+	m.move(.b, lbl('rt_tile_head'), d0)
+	m.add(.l, d7, d0)
+	m.and(.l, imm(tile_queue_size - 1), d0)
 	m.add(.l, d0, d0)
 	m.moveq(0, d1)
 	m.move(.w, idx(0, a0, d0), d1)

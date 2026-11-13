@@ -26,6 +26,10 @@ fn (mut g Game) define_runtime() {
 		g.define_sight()
 	}
 
+	if g.scene_set {
+		g.scene_ref.finish()
+	}
+
 	init := g.p.func('rt_init', [], .void)
 	mut c := g.p.define(init)
 	i := c.local_u16('i')
@@ -40,6 +44,9 @@ fn (mut g Game) define_runtime() {
 	c.set(g.fps, 60)
 	c.end()
 	c.call(g.init_func)
+	if g.scene_set && g.scene_ref.has_start() {
+		c.call(g.scene_ref.gos[g.scene_ref.first])
+	}
 
 	frame := g.p.func('rt_frame', [], .void)
 	c = g.p.define(frame)
@@ -50,7 +57,11 @@ fn (mut g Game) define_runtime() {
 		c.end() // a noise dies away
 	}
 	if g.map_ready {
-		c.set(g.tv.queued, 0) // the tiles changed last frame were drawn
+		// The tiles that were drawn last frame leave the ring.
+		drawn := c.local_u8('drawn')
+		c.set(drawn, g.tv.queued.min(tile_draws_per_frame))
+		c.set(g.tv.head, g.tv.head.add(drawn).and(tile_queue_size - 1))
+		c.set(g.tv.queued, g.tv.queued.sub(drawn))
 	}
 	if g.timers.len > 0 {
 		tick := g.p.func('rt_tick', [], .void)
@@ -58,6 +69,9 @@ fn (mut g Game) define_runtime() {
 		c.call(tick)
 	}
 	c.call(g.update_func)
+	if g.scene_set {
+		c.call(g.scene_ref.tick)
+	}
 	if g.seqs.len > 0 {
 		animate := g.p.func('rt_animate', [], .void)
 		g.define_animate(animate)
