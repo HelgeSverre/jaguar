@@ -64,11 +64,6 @@ fn (mut c Code) problem(message string) {
 
 fn (mut c Code) add(s Stmt) {
 	mut b := &c.blocks[c.blocks.len - 1]
-	if b.kind == .body {
-		if b.bodies.len == 0 {
-			b.bodies << []Stmt{}
-		}
-	}
 	b.bodies[b.bodies.len - 1] << s
 }
 

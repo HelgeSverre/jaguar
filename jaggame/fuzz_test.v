@@ -412,7 +412,7 @@ fn (mut f Fuzzer) value(t Type, depth int) Val {
 	return f.operand(t, depth)
 }
 
-fn (mut f Fuzzer) target(c Code) ?Typed {
+fn (mut f Fuzzer) target() ?Typed {
 	if f.scope.len == 0 {
 		return none
 	}
@@ -430,7 +430,7 @@ fn (mut f Fuzzer) statement(mut c Code, depth int, own Expr, own_type Type, own_
 	ed := 1 + f.r.below(3)
 	match f.r.below(16) {
 		0, 1, 2 {
-			if x := f.target(c) {
+			if x := f.target() {
 				c.set(x.e, f.value(x.t, ed))
 				return
 			}
@@ -445,7 +445,7 @@ fn (mut f Fuzzer) statement(mut c Code, depth int, own Expr, own_type Type, own_
 			return
 		}
 		5 {
-			if x := f.target(c) {
+			if x := f.target() {
 				if x.t.is_number() {
 					match f.r.below(4) {
 						0 { c.inc(x.e) }
@@ -547,7 +547,7 @@ fn (mut f Fuzzer) statement(mut c Code, depth int, own Expr, own_type Type, own_
 		else {}
 	}
 
-	if x := f.target(c) {
+	if x := f.target() {
 		c.set(x.e, f.value(x.t, ed))
 	}
 }

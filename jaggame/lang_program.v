@@ -136,7 +136,7 @@ pub fn new_program() &Program {
 }
 
 fn valid_name(name string) bool {
-	if name.len == 0 || name[0].is_digit() {
+	if name == '' || name[0].is_digit() {
 		return false
 	}
 	for c in name {
