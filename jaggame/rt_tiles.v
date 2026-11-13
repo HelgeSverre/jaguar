@@ -249,8 +249,8 @@ fn (mut g Game) define_map() {
 	}
 	room_tiles := g.p.table_u8('rt_room_tiles', all)
 	room_first := g.p.table_u16('rt_room_first', first)
-	room_cols := g.p.table_u8('rt_room_cols', cols)
-	room_rows := g.p.table_u8('rt_room_rows', rows)
+	cols_table := g.p.table_u8('rt_room_cols', cols)
+	rows_table := g.p.table_u8('rt_room_rows', rows)
 	flags := g.p.table_u8('rt_tile_flags', g.flag_table())
 	g.tv.flags = flags
 	g.define_markers()
@@ -277,8 +277,8 @@ fn (mut g Game) define_map() {
 	last := c.local_u16('last')
 	c.set(last, n.min(g.rooms.len - 1))
 	c.set(g.room_number, last.as_(.u8))
-	c.set(room_w, room_cols.at(last).as_(.i16))
-	c.set(room_h, room_rows.at(last).as_(.i16))
+	c.set(room_w, cols_table.at(last).as_(.i16))
+	c.set(room_h, rows_table.at(last).as_(.i16))
 	c.set(g.room_width, room_w.shl(4))
 	c.set(g.room_height, room_h.shl(4))
 	c.set(tv.cells, room_w.as_(.u16).mul(room_h.as_(.u16)))

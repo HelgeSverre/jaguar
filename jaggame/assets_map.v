@@ -8,7 +8,7 @@ module jaggame
 //	game.tileset('art/tiles.png')
 //	game.legend_tile(`.`, 0, 0)
 //	game.legend_tile(`#`, 1, jaggame.flag_solid)
-//	game.legend_marker(`@`, 'start', 0) // the player starts here; tile 0 is drawn under it
+//	game.legend_marker(`@`, 'start', 0, 0) // the player starts here; tile 0 is drawn under it
 //	game.room('lab', '
 //	#####
 //	#@..#
@@ -46,9 +46,10 @@ struct LegendTile {
 }
 
 struct LegendMarker {
-	ch   rune
-	name string
-	tile int
+	ch    rune
+	name  string
+	tile  int
+	flags int
 }
 
 // Point is a position in a room, in tiles.
@@ -132,9 +133,10 @@ pub fn (mut g Game) legend_tile(ch rune, tile int, flags int) {
 
 // legend_marker says that the character `ch` in a room is a place called
 // `name`: the game asks for its position (`marker_x`, `marker_y`) and the
-// picture shows tile `tile` there. Several characters may share a name;
-// the places of a name are numbered in reading order, rows from the top.
-pub fn (mut g Game) legend_marker(ch rune, name string, tile int) {
+// picture shows tile `tile` there, with `flags` as for `legend_tile`. Several
+// characters may share a name; the places of a name are numbered in reading
+// order, rows from the top.
+pub fn (mut g Game) legend_marker(ch rune, name string, tile int, flags int) {
 	for l in g.legend_tiles {
 		if l.ch == ch {
 			g.problem('legend: the character `${ch}` is both a tile and the marker `${name}`')
@@ -153,7 +155,7 @@ pub fn (mut g Game) legend_marker(ch rune, name string, tile int) {
 	if tile < 0 || tile > 254 {
 		g.problem('legend: the marker `${name}` is drawn as tile ${tile}; tiles are 0..254')
 	}
-	g.legend_markers << LegendMarker{ch, name, tile}
+	g.legend_markers << LegendMarker{ch, name, tile, flags}
 }
 
 // room declares a room from a text of rows, one character a tile (a
@@ -305,6 +307,13 @@ fn (mut g Game) check_legend() {
 		if g.tile_count > 0 && l.tile >= g.tile_count {
 			g.problem('legend: the marker `${l.name}` is drawn as tile ${l.tile}, but the tile set ${g.tileset_path} has ${g.tile_count} tiles')
 		}
+		if l.tile in owner && flags[l.tile] != l.flags.str() {
+			g.problem('legend: tile ${l.tile} has flags ${flags[l.tile]} as `${owner[l.tile]}` and ${l.flags} as the marker `${l.name}`; the flags belong to the tile')
+		}
+		if l.tile !in owner {
+			owner[l.tile] = l.ch
+			flags[l.tile] = l.flags.str()
+		}
 	}
 }
 
@@ -313,6 +322,11 @@ fn (mut g Game) check_legend() {
 fn (g &Game) flag_table() []int {
 	mut table := []int{len: 256}
 	for l in g.legend_tiles {
+		if l.tile >= 0 && l.tile < 255 {
+			table[l.tile] = l.flags
+		}
+	}
+	for l in g.legend_markers {
 		if l.tile >= 0 && l.tile < 255 {
 			table[l.tile] = l.flags
 		}

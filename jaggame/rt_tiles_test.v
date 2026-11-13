@@ -66,7 +66,7 @@ fn map_game(dir string) &Game {
 	g.legend_tile(`.`, 0, 0)
 	g.legend_tile(`#`, 1, flag_solid)
 	g.legend_tile(`o`, 2, flag_item)
-	g.legend_marker(`@`, 'start', 0)
+	g.legend_marker(`@`, 'start', 0, 0)
 	g.room('big', room_text(30, 20, {
 		'5,3':   `o`
 		'20,10': `o`

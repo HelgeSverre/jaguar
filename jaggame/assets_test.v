@@ -165,8 +165,8 @@ fn legend_game(dir string) &Game {
 	g.legend_tile(`.`, 0, 0)
 	g.legend_tile(`#`, 1, flag_solid)
 	g.legend_tile(`o`, 2, flag_item)
-	g.legend_marker(`@`, 'start', 0)
-	g.legend_marker(`g`, 'guard', 0)
+	g.legend_marker(`@`, 'start', 0, 0)
+	g.legend_marker(`g`, 'guard', 0, 0)
 	return g
 }
 
@@ -201,8 +201,8 @@ fn test_map_mistakes_are_reported_together() {
 	g.legend_tile(`.`, 2, 0) // given twice
 	g.legend_tile(`+`, 9, 0) // the tile set has three tiles
 	g.legend_tile(`x`, 1, 0) // the wall tile with other flags
-	g.legend_marker(`@`, 'start', 7) // no such tile
-	g.legend_marker(`#`, 'wall', 0) // a tile already
+	g.legend_marker(`@`, 'start', 7, 0) // no such tile
+	g.legend_marker(`#`, 'wall', 0, 0) // a tile already
 	g.room('ragged', '
 ####
 ##
