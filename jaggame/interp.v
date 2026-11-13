@@ -108,7 +108,7 @@ fn (mut it Interpreter) call(id int, args []i64) !i64 {
 		it.memory[v][0] = 0
 	}
 	it.result = 0
-	it.block(f.body)!
+	it.block(&f.body)!
 	result := it.result
 	it.result = 0
 	return result
@@ -121,7 +121,7 @@ fn (mut it Interpreter) step() ! {
 	}
 }
 
-fn (mut it Interpreter) block(stmts []TStmt) !Flow {
+fn (mut it Interpreter) block(stmts &[]TStmt) !Flow {
 	for s in stmts {
 		it.step()!
 		flow := it.stmt(s)!
@@ -132,44 +132,44 @@ fn (mut it Interpreter) block(stmts []TStmt) !Flow {
 	return .normal
 }
 
-fn (mut it Interpreter) stmt(s TStmt) !Flow {
+fn (mut it Interpreter) stmt(s &TStmt) !Flow {
 	match s.kind {
 		.set {
 			// The destination's index is evaluated before the value.
-			slot := it.slot(s.place)!
-			value := it.eval(s.exprs[0])!
+			slot := it.slot(&s.place)!
+			value := it.eval(&s.exprs[0])!
 			it.memory[s.place.var][slot] = value
 		}
 		.branch {
 			for i, cond in s.exprs {
-				if it.eval(cond)! != 0 {
-					return it.block(s.bodies[i])
+				if it.eval(&cond)! != 0 {
+					return it.block(&s.bodies[i])
 				}
 			}
-			return it.block(s.bodies[s.bodies.len - 1])
+			return it.block(&s.bodies[s.bodies.len - 1])
 		}
 		.loop {
 			for {
 				it.step()!
-				if it.eval(s.exprs[0])! == 0 {
+				if it.eval(&s.exprs[0])! == 0 {
 					break
 				}
-				flow := it.block(s.bodies[0])!
+				flow := it.block(&s.bodies[0])!
 				if flow == .broke {
 					break
 				}
 				if flow == .returned {
 					return flow
 				}
-				it.block(s.bodies[1])!
+				it.block(&s.bodies[1])!
 			}
 		}
 		.eval {
-			it.eval(s.exprs[0])!
+			it.eval(&s.exprs[0])!
 		}
 		.ret {
 			if s.exprs.len > 0 {
-				it.result = it.eval(s.exprs[0])!
+				it.result = it.eval(&s.exprs[0])!
 			}
 			return .returned
 		}
@@ -188,11 +188,11 @@ fn (mut it Interpreter) stmt(s TStmt) !Flow {
 }
 
 // slot finds the value a place names, checking the index.
-fn (mut it Interpreter) slot(place TPlace) !int {
+fn (mut it Interpreter) slot(place &TPlace) !int {
 	if place.index.len == 0 {
 		return 0
 	}
-	index := it.eval(place.index[0])!
+	index := it.eval(&place.index[0])!
 	v := it.low.vars[place.var]
 	if index < 0 || index >= v.len {
 		return error('index ${index} is outside ${v.describe()} (0..${v.len - 1})')
@@ -203,45 +203,45 @@ fn (mut it Interpreter) slot(place TPlace) !int {
 	return int(index)
 }
 
-fn (mut it Interpreter) eval(e TExpr) !i64 {
+fn (mut it Interpreter) eval(e &TExpr) !i64 {
 	match e.kind {
 		.constant {
 			return e.value
 		}
 		.load {
-			slot := it.slot(e.place)!
+			slot := it.slot(&e.place)!
 			return it.memory[e.place.var][slot]
 		}
 		.unary {
-			return unary_value(e.op, e.typ, it.eval(e.args[0])!)
+			return unary_value(e.op, e.typ, it.eval(&e.args[0])!)
 		}
 		.binary {
-			a := it.eval(e.args[0])!
-			b := it.eval(e.args[1])!
+			a := it.eval(&e.args[0])!
+			b := it.eval(&e.args[1])!
 			if b == 0 && e.op in [.div, .mod] {
 				it.zero_divisions++
 			}
 			return binary_value(e.op, e.typ, a, b)
 		}
 		.compare {
-			a := it.eval(e.args[0])!
-			b := it.eval(e.args[1])!
+			a := it.eval(&e.args[0])!
+			b := it.eval(&e.args[1])!
 			return compare_value(e.op, a, b)
 		}
 		.logic {
-			a := it.eval(e.args[0])!
+			a := it.eval(&e.args[0])!
 			if (e.op == .both && a == 0) || (e.op == .either && a != 0) {
 				return a
 			}
-			return it.eval(e.args[1])!
+			return it.eval(&e.args[1])!
 		}
 		.convert {
-			return convert_value(e.args[0].typ, e.typ, it.eval(e.args[0])!)
+			return convert_value(e.args[0].typ, e.typ, it.eval(&e.args[0])!)
 		}
 		.call {
 			mut args := []i64{}
 			for a in e.args {
-				args << it.eval(a)!
+				args << it.eval(&a)!
 			}
 			return it.call(e.func, args)!
 		}

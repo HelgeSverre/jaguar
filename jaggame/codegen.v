@@ -76,7 +76,7 @@ fn (mut g Gen) function(f LFunc) {
 		g.m.clr(size_of(var.typ), lbl(var.label))
 	}
 	g.exit = 'jaggame.exit.${f.name}'
-	g.block(f.body)
+	g.block(&f.body)
 	g.m.label(g.exit)
 	g.m.rts()
 }
@@ -89,16 +89,16 @@ fn size_of(t Type) jagkit.Size {
 	}
 }
 
-fn (mut g Gen) block(stmts []TStmt) {
+fn (mut g Gen) block(stmts &[]TStmt) {
 	for s in stmts {
 		g.stmt(s)
 	}
 }
 
-fn (mut g Gen) stmt(s TStmt) {
+fn (mut g Gen) stmt(s &TStmt) {
 	match s.kind {
 		.set {
-			g.set(s.place, s.exprs[0])
+			g.set(&s.place, &s.exprs[0])
 		}
 		.branch {
 			end := g.m.unique('jaggame.end')
@@ -107,11 +107,11 @@ fn (mut g Gen) stmt(s TStmt) {
 				g.expr(cond)
 				g.m.tst(.l, d0)
 				g.m.b(.eq, next)
-				g.block(s.bodies[i])
+				g.block(&s.bodies[i])
 				g.m.bra(end)
 				g.m.label(next)
 			}
-			g.block(s.bodies[s.bodies.len - 1])
+			g.block(&s.bodies[s.bodies.len - 1])
 			g.m.label(end)
 		}
 		.loop {
@@ -121,23 +121,23 @@ fn (mut g Gen) stmt(s TStmt) {
 				exit: g.m.unique('jaggame.break')
 			}
 			g.m.label(top)
-			g.expr(s.exprs[0])
+			g.expr(&s.exprs[0])
 			g.m.tst(.l, d0)
 			g.m.b(.eq, labels.exit)
 			g.loops << labels
-			g.block(s.bodies[0])
+			g.block(&s.bodies[0])
 			g.m.label(labels.cont)
-			g.block(s.bodies[1])
+			g.block(&s.bodies[1])
 			g.loops.pop()
 			g.m.bra(top)
 			g.m.label(labels.exit)
 		}
 		.eval {
-			g.expr(s.exprs[0])
+			g.expr(&s.exprs[0])
 		}
 		.ret {
 			if s.exprs.len > 0 {
-				g.expr(s.exprs[0])
+				g.expr(&s.exprs[0])
 			}
 			g.m.bra(g.exit)
 		}
@@ -164,7 +164,7 @@ fn (mut g Gen) pop(r jagkit.Ea) {
 
 // set stores a value. As in the interpreter, the destination's index is
 // evaluated first.
-fn (mut g Gen) set(place TPlace, value TExpr) {
+fn (mut g Gen) set(place &TPlace, value &TExpr) {
 	if place.index.len == 0 {
 		g.expr(value)
 		g.m.move(size_of(place.typ), d0, lbl(g.low.vars[place.var].label))
@@ -180,8 +180,8 @@ fn (mut g Gen) set(place TPlace, value TExpr) {
 }
 
 // index leaves the byte offset of an element in d0.
-fn (mut g Gen) index(place TPlace) {
-	g.expr(place.index[0])
+fn (mut g Gen) index(place &TPlace) {
+	g.expr(&place.index[0])
 	mut left := place.shift
 	for left > 0 {
 		n := if left > 8 { 8 } else { left }
@@ -190,7 +190,7 @@ fn (mut g Gen) index(place TPlace) {
 	}
 }
 
-fn (g &Gen) field_ea(place TPlace) jagkit.Ea {
+fn (g &Gen) field_ea(place &TPlace) jagkit.Ea {
 	if place.offset == 0 {
 		return jagkit.ind(a0)
 	}
@@ -199,7 +199,7 @@ fn (g &Gen) field_ea(place TPlace) jagkit.Ea {
 
 // place_ea is the operand that reaches a place, computing an element's
 // address into a0 first.
-fn (mut g Gen) place_ea(place TPlace) jagkit.Ea {
+fn (mut g Gen) place_ea(place &TPlace) jagkit.Ea {
 	if place.index.len == 0 {
 		return lbl(g.low.vars[place.var].label)
 	}
@@ -209,7 +209,7 @@ fn (mut g Gen) place_ea(place TPlace) jagkit.Ea {
 	return g.field_ea(place)
 }
 
-fn (mut g Gen) load(place TPlace) {
+fn (mut g Gen) load(place &TPlace) {
 	ea := g.place_ea(place)
 	t := place.typ
 	match t {
@@ -264,16 +264,16 @@ fn (mut g Gen) constant(value i64) {
 	}
 }
 
-fn (mut g Gen) expr(e TExpr) {
+fn (mut g Gen) expr(e &TExpr) {
 	match e.kind {
 		.constant {
 			g.constant(e.value)
 		}
 		.load {
-			g.load(e.place)
+			g.load(&e.place)
 		}
 		.unary {
-			g.expr(e.args[0])
+			g.expr(&e.args[0])
 			g.unary(e.op)
 			g.normalize(e.typ)
 		}
@@ -288,14 +288,14 @@ fn (mut g Gen) expr(e TExpr) {
 		}
 		.logic {
 			end := g.m.unique('jaggame.logic')
-			g.expr(e.args[0])
+			g.expr(&e.args[0])
 			g.m.tst(.l, d0)
 			g.m.b(if e.op == .both { jagkit.Cc.eq } else { jagkit.Cc.ne }, end)
-			g.expr(e.args[1])
+			g.expr(&e.args[1])
 			g.m.label(end)
 		}
 		.convert {
-			g.expr(e.args[0])
+			g.expr(&e.args[0])
 			g.convert(e.args[0].typ, e.typ)
 		}
 		.call {
@@ -305,10 +305,10 @@ fn (mut g Gen) expr(e TExpr) {
 }
 
 // operands leaves the left operand in d0 and the right one in d1.
-fn (mut g Gen) operands(e TExpr) {
-	g.expr(e.args[0])
+fn (mut g Gen) operands(e &TExpr) {
+	g.expr(&e.args[0])
 	g.push()
-	g.expr(e.args[1])
+	g.expr(&e.args[1])
 	g.m.move(.l, d0, d1)
 	g.pop(d0)
 }
@@ -473,7 +473,7 @@ fn (mut g Gen) convert(from Type, to Type) {
 // call evaluates the arguments onto the stack, then stores them in the
 // parameters: an argument that calls the same function cannot overwrite a
 // parameter already stored.
-fn (mut g Gen) call(e TExpr) {
+fn (mut g Gen) call(e &TExpr) {
 	f := g.low.funcs[e.func]
 	for a in e.args {
 		g.expr(a)
