@@ -1,5 +1,5 @@
-// HELLO: the smallest complete jagkit program. A ball you move with the
-// pad, and a beep when you press fire. Run it to produce the image:
+// HELLO: the smallest complete jagkit program. Two lines of text, a ball
+// you move with the pad, and a beep when you press fire. Run it to produce the image:
 //
 //     v run demos/hello          # writes demos/hello.jag
 //
@@ -20,7 +20,12 @@ const sp = jagkit.sp
 const video = jagkit.ntsc
 const load_address = u32(0x4000) // where the image is loaded; the stack grows down from here
 const list_address = u32(0x80000) // the display list the object processor reads
-const list_bytes = 64 // two branches, a stop and one bitmap
+const list_bytes = 96 // two branches and a stop, then two bitmaps
+const text = jagkit.TextScreen{
+	address: 0x81000
+	rows:    2
+}
+const text_colour = 1 // its place in the colour table
 
 // The picture is a little larger than a television shows, so the program
 // keeps to the middle of it.
@@ -33,13 +38,6 @@ const ball_size = 32
 const speed = 2 // pixels a frame
 const beep_note = 81 // the A above concert pitch
 const beep_volume = 9000
-
-// Pad bits, as `read_pad` leaves them in d7.
-const pad_fire = 0
-const pad_up = 4
-const pad_down = 5
-const pad_left = 6
-const pad_right = 7
 
 fn main() {
 	output := if os.args.len > 1 { os.args[1] } else { 'demos/hello.jag' }
@@ -95,13 +93,12 @@ fn build() !Built {
 	mut m := jagkit.new_m68k(load_address)
 	start_up(mut m, dsp_code.len / 4, dsp.address_of('start'))
 	frame_interrupt(mut m, dsp.address_of('voices'))
-	read_pad(mut m)
+	m.pad_reader() // the subroutine `read_pad`, and the variables `pad` and `pressed`
+	m.text_routines(text) // `print`, `number` and `clear_text`, and the font
 
 	// Variables: a word each.
 	for name, initial in {
 		'frame':  0
-		'pad':    0
-		'fired':  0
 		'ball_x': (screen_width - ball_size) / 2
 		'ball_y': (screen_height - ball_size) / 2
 	} {
@@ -126,6 +123,7 @@ fn build() !Built {
 			depth:       .bpp16
 			transparent: true
 		},
+		text.bitmap(screen_left, video.vdb + 2 * (screen_top + 8), text_colour),
 	])!
 	assert list.bytes.len == list_bytes
 	m.label('list')
@@ -137,6 +135,7 @@ fn build() !Built {
 	jagkit.check_regions([
 		jagkit.Region{'image', load_address, payload.len},
 		jagkit.Region{'display list', list_address, list_bytes},
+		jagkit.Region{'text', text.address, text.bytes()},
 	])!
 	return Built{
 		image:   jagkit.jag_image(load_address, m.address_of('entry'), payload)
@@ -159,6 +158,12 @@ fn start_up(mut m jagkit.M68k, dsp_longs int, dsp_start u32) {
 	m.move(.w, imm(video.vde | 1), abs(jagkit.vi)) // interrupt after the last line
 	m.move(.l, imm(0), abs(jagkit.bord1))
 	m.move(.w, imm(jagkit.cry(0, 0, 60)), abs(jagkit.bg)) // dark blue behind everything
+
+	// The text: it is printed once and stays.
+	m.move(.w, imm(jagkit.cry(255, 255, 255)), abs(jagkit.clut + 2 * text_colour))
+	m.bsr('clear_text')
+	m.print_at(13, 0, 'HELLO, JAGUAR!')
+	m.print_at(8, 1, 'ARROWS MOVE. FIRE BEEPS.')
 
 	// The DSP: copy the synthesizer into its RAM and start it.
 	m.lea(lbl('dsp_program'), a0)
@@ -198,14 +203,16 @@ fn frame_interrupt(mut m jagkit.M68k, voices u32) {
 	m.add(.w, imm(1), lbl('frame'))
 
 	m.bsr('read_pad')
-	slide(mut m, pad_left, 'ball_x', -speed, screen_width - ball_size)
-	slide(mut m, pad_right, 'ball_x', speed, screen_width - ball_size)
-	slide(mut m, pad_up, 'ball_y', -speed, screen_height - ball_size)
-	slide(mut m, pad_down, 'ball_y', speed, screen_height - ball_size)
+	m.move(.w, lbl('pad'), d7)
+	slide(mut m, jagkit.pad_left, 'ball_x', -speed, screen_width - ball_size)
+	slide(mut m, jagkit.pad_right, 'ball_x', speed, screen_width - ball_size)
+	slide(mut m, jagkit.pad_up, 'ball_y', -speed, screen_height - ball_size)
+	slide(mut m, jagkit.pad_down, 'ball_y', speed, screen_height - ball_size)
 
 	// Fire starts a beep; every frame the beep loses an eighth of its
 	// volume.
-	m.tst(.w, lbl('fired'))
+	m.move(.w, lbl('pressed'), d0)
+	m.btst(jagkit.pad_fire, d0)
 	m.b(.eq, 'no_beep')
 	m.move(.l, imm(jagkit.note_step(beep_note)), lead_step)
 	m.move(.l, imm(beep_volume), lead_volume)
@@ -222,7 +229,7 @@ fn frame_interrupt(mut m jagkit.M68k, voices u32) {
 
 	// show copies the master display list into place, because the object
 	// processor used up the last copy, and moves the ball in the copy. The
-	// bitmap sits 32 bytes in; its line is in bits 3..13 of its first
+	// ball is the first bitmap, 32 bytes in; its line is in bits 3..13 of its first
 	// phrase and its column in bits 0..11 of its second.
 	m.label('show')
 	m.lea(lbl('list'), a0)
@@ -263,36 +270,4 @@ fn slide(mut m jagkit.M68k, button int, variable string, step int, limit int) {
 	m.b(.hi, skip)
 	m.move(.w, d0, lbl(variable))
 	m.label(skip)
-}
-
-// read_pad leaves the first controller in d7 and in `pad`: bit 0 for A, B
-// or C, bits 4..7 for up, down, left and right. `fired` is set on the frame
-// a fire button goes down.
-fn read_pad(mut m jagkit.M68k) {
-	// The pad is a matrix: select a row, read its columns. Lines are low
-	// while pressed.
-	row := jagkit.joystick_enable | 0xf0
-	m.label('read_pad')
-	m.move(.w, imm(row | 0xe), abs(jagkit.joystick)) // row 0: directions and A
-	m.move(.w, abs(jagkit.joystick), d7)
-	m.move(.w, abs(jagkit.joybuts), d1)
-	m.move(.w, imm(row | 0xd), abs(jagkit.joystick)) // row 1: B
-	m.and(.w, abs(jagkit.joybuts), d1)
-	m.move(.w, imm(row | 0xb), abs(jagkit.joystick)) // row 2: C
-	m.and(.w, abs(jagkit.joybuts), d1)
-	m.not(.w, d7)
-	m.lsr(.w, imm(4), d7)
-	m.and(.w, imm(0xf0), d7)
-	m.btst(1, d1)
-	m.b(.ne, 'no_fire')
-	m.orr(.w, imm(1 << pad_fire), d7)
-	m.label('no_fire')
-	// fired = held now and not held last frame.
-	m.move(.w, lbl('pad'), d0)
-	m.move(.w, d7, lbl('pad'))
-	m.not(.w, d0)
-	m.and(.w, d7, d0)
-	m.and(.w, imm(1 << pad_fire), d0)
-	m.move(.w, d0, lbl('fired'))
-	m.rts()
 }

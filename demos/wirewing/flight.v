@@ -1,6 +1,6 @@
 module main
 
-import jagkit { abs, at, idx, imm, inc, ind, lbl, ptr }
+import jagkit { abs, idx, imm, inc, ind, lbl, ptr }
 
 // The 68000 side: start-up, and everything that happens once a frame in
 // the vertical interrupt: showing the finished picture, flying, the beacon,
@@ -34,6 +34,12 @@ const buffer_b = u32(0xa0000)
 
 const text_columns = 40
 const text_rows = 25
+const text_screen = jagkit.TextScreen{
+	address: text_address
+	columns: text_columns
+	rows:    text_rows
+	digits:  3
+}
 const list_objects = 4
 const list_bytes = 32 + list_objects * 32
 
@@ -43,11 +49,11 @@ const state_play = 1
 const state_dead = 2
 
 // Pad bits, as `read_pad` leaves them.
-const pad_fire = 0
-const pad_up = 4
-const pad_down = 5
-const pad_left = 6
-const pad_right = 7
+const pad_fire = jagkit.pad_fire
+const pad_up = jagkit.pad_up
+const pad_down = jagkit.pad_down
+const pad_left = jagkit.pad_left
+const pad_right = jagkit.pad_right
 
 // Tuning. Angles are 256 to the turn and kept as 8.8 fixed point;
 // distances are in units, 256 to a cell.
@@ -107,16 +113,7 @@ fn (f &Flight) voice(offset int) jagkit.Ea {
 
 // say prints a string constant at a text cell.
 fn (mut f Flight) say(column int, row int, text string) {
-	name := f.m.unique('text')
-	skip := f.m.unique('after')
-	f.m.lea(lbl(name), a0)
-	f.m.moveq(column, d0)
-	f.m.moveq(row, d1)
-	f.m.bsr('print')
-	f.m.bra(skip)
-	f.m.label(name)
-	f.m.text(text)
-	f.m.label(skip)
+	f.m.print_at(column, row, text)
 }
 
 // centred prints a string constant in the middle of a row.
@@ -345,32 +342,10 @@ fn (mut f Flight) colours() {
 	m.rts()
 }
 
-// read_pad leaves the held buttons in `pad` and the newly pressed ones in
-// `pressed`: bit 0 any fire button, bits 4 to 7 up, down, left, right.
+// read_pad is the kit's: it leaves the held buttons in `pad` and the newly
+// pressed ones in `pressed`.
 fn (mut f Flight) read_pad() {
-	mut m := f.m
-	row := jagkit.joystick_enable | 0xf0
-	m.label('read_pad')
-	m.move(.w, imm(row | 0xe), abs(jagkit.joystick)) // row 0: directions and A
-	m.move(.w, abs(jagkit.joystick), d0)
-	m.move(.w, abs(jagkit.joybuts), d1)
-	m.move(.w, imm(row | 0xd), abs(jagkit.joystick)) // row 1: B
-	m.and(.w, abs(jagkit.joybuts), d1)
-	m.move(.w, imm(row | 0xb), abs(jagkit.joystick)) // row 2: C
-	m.and(.w, abs(jagkit.joybuts), d1)
-	m.not(.w, d0) // the lines are low while pressed
-	m.lsr(.w, imm(4), d0)
-	m.and(.w, imm(0xf0), d0)
-	m.btst(1, d1)
-	m.b(.ne, 'no_fire')
-	m.orr(.w, imm(1 << pad_fire), d0)
-	m.label('no_fire')
-	m.move(.w, lbl('pad'), d1)
-	m.move(.w, d0, lbl('pad'))
-	m.not(.w, d1)
-	m.and(.w, d0, d1)
-	m.move(.w, d1, lbl('pressed'))
-	m.rts()
+	f.m.pad_reader()
 }
 
 // sound keeps the engine droning, beeps when the fuel is low and fades the
@@ -821,54 +796,9 @@ fn (mut f Flight) beacon() {
 
 fn (mut f Flight) text_routines() {
 	mut m := f.m
-	// print draws the zero-terminated string at a0 at column d0, row d1.
-	m.label('print')
-	m.mulu(imm(text_columns * 8), d1)
-	m.add(.w, d0, d1)
-	m.lea(abs(text_address), a1)
-	m.add(.l, d1, a1)
-	m.label('print_next')
-	m.moveq(0, d2)
-	m.move(.b, inc(a0), d2)
-	m.b(.eq, 'print_done')
-	m.sub(.w, imm(jagkit.font_first), d2)
-	m.lsl(.w, imm(3), d2)
-	m.lea(lbl('font'), a2)
-	m.add(.w, d2, a2)
-	m.move(.l, a1, a3)
-	m.moveq(7, d3)
-	m.label('print_row')
-	m.move(.b, inc(a2), ind(a3))
-	m.lea(at(text_columns, a3), a3)
-	m.dbra(d3, 'print_row')
-	m.add(.l, imm(1), a1)
-	m.bra('print_next')
-	m.label('print_done')
-	m.rts()
+	// `print`, `number` and `clear_text`, and the font.
+	m.text_routines(text_screen)
 
-	// number writes d0 as three digits and leaves a0 pointing at them.
-	m.label('number')
-	m.lea(lbl('digits_end'), a0)
-	m.moveq(2, d2)
-	m.label('next_digit')
-	m.and(.l, imm(0xffff), d0)
-	m.divu(imm(10), d0)
-	m.swap(d0) // the remainder
-	m.add(.b, imm(int(`0`)), d0)
-	m.move(.b, d0, jagkit.dec(a0))
-	m.move(.w, imm(0), d0)
-	m.swap(d0) // the quotient
-	m.dbra(d2, 'next_digit')
-	m.rts()
-	m.label('digits')
-	m.bytes([]u8{len: 3})
-	m.label('digits_end')
-	m.byte(0)
-	m.align(2)
-
-	m.label('clear_text')
-	m.lea(abs(text_address), a0)
-	m.move(.w, imm(text_columns * text_rows * 8 / 4 - 1), d0)
 	// clear zeroes d0 + 1 longs from a0.
 	m.label('clear')
 	m.move(.l, imm(0), inc(a0))
@@ -901,8 +831,6 @@ fn (mut f Flight) variables() {
 	f.variable('best', 0)
 	f.variable('crashes', 0)
 	f.variable('timer', 0)
-	f.variable('pad', 0)
-	f.variable('pressed', 0)
 	f.variable('noise', 0xace1)
 	m.label('profile')
 	m.long(0)

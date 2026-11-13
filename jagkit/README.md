@@ -11,6 +11,7 @@ A V module for writing Atari Jaguar programs in V: you call it from an ordinary 
 | `image.v` | the `.jag` writer, big-endian helpers, RGB to CRY |
 | `memory.v` | a build-time check that buffers, lists and the image do not overlap |
 | `font.v` | an 8x8 font |
+| `routines.v` | ready-made 68000 subroutines: a pad reader and text printing |
 | `synth.v` | a three-voice DSP synthesizer |
 
 - **Guide:** [`docs/jagkit.md`](../docs/jagkit.md) walks through a complete program and covers the display list, the pad, sound, the GPU and testing.

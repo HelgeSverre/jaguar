@@ -133,3 +133,21 @@ fn test_fire_beeps() {
 	p.frames(10)
 	assert p.loudest() < 200, 'and it must fade out'
 }
+
+fn test_the_text_is_printed() {
+	mut p := boot()
+	p.frames(30)
+	pixels, info := p.m.frame()
+	mut white := 0
+	for y in 0 .. 30 {
+		for x in 0 .. info.width {
+			pixel := pixels[y * info.pitch + x]
+			if pixel & 0xff > 180 && (pixel >> 8) & 0xff > 180 && (pixel >> 16) & 0xff > 180 {
+				white++
+			}
+		}
+	}
+	// 14 and 24 characters of about 16 pixels each.
+	assert white > 300
+	assert white < 900
+}

@@ -77,3 +77,24 @@ fn test_overlapping_regions_are_reported() {
 	assert message.contains('`buffer` ends at 0x208000, past the end of memory')
 	assert message.contains('`empty` has no size')
 }
+
+fn test_printing_a_character_the_font_lacks_is_reported() {
+	mut m := new_m68k(0x4000)
+	m.text_routines(TextScreen{ address: 0x80000 })
+	m.print_at(0, 0, 'FINE')
+	m.print_at(0, 1, 'lower')
+	message := if _ := m.assemble() { '' } else { err.msg() }
+	assert message.contains('the font has no `l` (in "lower")')
+	assert !message.contains('FINE')
+}
+
+fn test_a_text_screen_describes_its_own_bitmap() {
+	screen := TextScreen{
+		address: 0x80000
+		rows:    2
+	}
+	assert screen.bytes() == 640
+	bitmap := screen.bitmap(16, 40, 17)
+	assert bitmap.width == 320 && bitmap.height == 16 && bitmap.palette == 16
+	object_list(0x90000, ntsc, [bitmap])!
+}

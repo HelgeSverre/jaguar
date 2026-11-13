@@ -34,9 +34,9 @@ just demo hello              # both steps
 v -prod test demos/hello/    # boot it in the emulator and check it works
 ```
 
-A ball sits on a dark blue screen. The arrow keys move it; Z, X or C beep.
+Two lines of text and a ball on a dark blue screen. The arrow keys move the ball; Z, X or C beep.
 
-<img src="screenshots/hello.png" width="320" alt="The hello example: an orange ball on a dark blue screen">
+<img src="screenshots/hello.png" width="320" alt="The hello example: two lines of text and an orange ball on a dark blue screen">
 
 ## How a jagkit program is built
 
@@ -251,7 +251,24 @@ The controller is a matrix. Write a row select to `joystick`, read the columns b
 
 Always include `jagkit.joystick_enable` in the value written: it drives the row outputs and unmutes the sound.
 
-`read_pad` in the example is a complete reader you can copy. It leaves the directions in bits 4..7 of `d7`, any fire button in bit 0, and sets the variable `fired` on the frame a fire button goes down. Jaguar Hero's reader in [`demos/hero/game.v`](../demos/hero/game.v) also reads the keypad, Option and Pause.
+`m.pad_reader()` emits a complete reader as the subroutine `read_pad`, with two word variables it keeps up to date: `pad`, the buttons that are held, and `pressed`, the ones that went down since the last call. Call it once a frame; it changes `d0` and `d1`.
+
+```v
+m.pad_reader()                          // once, anywhere outside the path of execution
+// in the frame interrupt:
+m.bsr('read_pad')
+m.move(.w, lbl('pressed'), d0)
+m.btst(jagkit.pad_fire, d0)
+m.b(.eq, 'no_beep')
+```
+
+| Bit | Button |
+|---|---|
+| `pad_fire` | A, B or C |
+| `pad_a`, `pad_b`, `pad_c` | each fire button on its own |
+| `pad_up`, `pad_down`, `pad_left`, `pad_right` | the directions |
+
+It does not read the keypad, Option or Pause. Jaguar Hero's reader in [`demos/hero/game.v`](../demos/hero/game.v) does.
 
 In the emulator the arrow keys are the directions and Z, X, C are the fire buttons.
 
@@ -292,17 +309,47 @@ For more than three voices, envelopes or echo, write your own DSP program. [`dem
 
 ## Text
 
-`jagkit.font_8x8()` returns a font of capitals, digits and punctuation (ASCII 32..95), eight bytes a character, one bit a pixel. `jagkit.glyph(c)` returns one character's rows for drawing at build time.
+A `jagkit.TextScreen` is a one-bit picture made of 8×8 character cells: 40 columns by 25 rows unless you say otherwise. `m.text_routines(screen)` emits the font and three subroutines for it.
 
-There is no text routine in the kit. The usual approach:
+| Subroutine | Does |
+|---|---|
+| `print` | draws the zero-terminated string at `a0` at column `d0`, row `d1` |
+| `number` | turns `d0` (0..65535) into `screen.digits` digits and leaves `a0` pointing at them, ready for `print` |
+| `clear_text` | blanks the screen |
 
-1. Reserve a 1-bit buffer, for example 320×200 pixels (8,000 bytes), and show it as a `.bpp1` transparent bitmap on top of everything else.
-2. Put the font in the image.
-3. Write a `print` routine that copies eight font bytes per character into the buffer. Forty characters fit a 320-pixel line, and a character cell is byte-aligned, so no shifting is needed.
+They change `d0`..`d3` and `a0`..`a3`.
 
-`text_routines` in [`demos/wirewing/flight.v`](../demos/wirewing/flight.v) is such a routine with a number printer, and `say`/`centred` in the same file show how to wrap it in a V helper that places a string constant inline. A second copy of the text bitmap one pixel down and right, in black, gives a drop shadow.
+```v
+const text = jagkit.TextScreen{
+	address: 0x81000
+	rows:    2
+}
 
-For a fixed word or logo, draw it at build time instead: `banner` in [`demos/wirewing/main.v`](../demos/wirewing/main.v).
+m.text_routines(text)                           // once
+// show it: one more bitmap in the display list
+text.bitmap(left, top, text_colour)             // text_colour is an odd colour number
+// at start-up
+m.move(.w, imm(jagkit.cry(255, 255, 255)), abs(jagkit.clut + 2 * text_colour))
+m.bsr('clear_text')
+m.print_at(13, 0, 'HELLO, JAGUAR!')             // a string constant, stored in line
+```
+
+To print a variable:
+
+```v
+m.move(.w, lbl('score'), d0)
+m.bsr('number')
+m.moveq(30, d0)        // column
+m.moveq(0, d1)         // row
+m.bsr('print')
+```
+
+Notes:
+
+- **The font has capitals, digits and punctuation only** (ASCII 32..95). `print_at` reports a string with any other character; `print` at run time does not check.
+- **Printing does not erase.** A cell is overwritten whole, so print spaces over text that should go.
+- **A drop shadow** is a second bitmap of the same screen, one pixel down and right, in a dark colour, placed before the first in the list. WIREWING does this in [`demos/wirewing/main.v`](../demos/wirewing/main.v).
+- **For a fixed word or logo**, draw it at build time instead: `banner` in the same file, using `jagkit.font_8x8()`. `jagkit.glyph(c)` returns one character's rows.
 
 ## The GPU and the DSP
 

@@ -160,7 +160,7 @@ gpu.jr(.ne, 'next')
 gpu.addqt(2, target)           // delay slot
 ```
 
-[`docs/jagkit.md`](docs/jagkit.md) is the guide. It walks through [`demos/hello`](demos/hello/main.v), a ball you move with the pad that beeps when you press fire: the smallest program with a picture, input, sound and a test.
+[`docs/jagkit.md`](docs/jagkit.md) is the guide. It walks through [`demos/hello`](demos/hello/main.v), a ball you move with the pad that beeps when you press fire: the smallest program with a picture, text, input, sound and a test.
 
 `demos/maw`, `demos/wirewing` and `demos/hero` are whole games built this way, and the `.jag` files next to them are their output, so there is something to run out of the box:
 

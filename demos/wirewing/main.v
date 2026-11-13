@@ -132,8 +132,6 @@ fn build() !Built {
 	f.text_routines()
 	f.variables()
 
-	m.label('font')
-	m.bytes(jagkit.font_8x8())
 	m.label('heights')
 	m.bytes(heights())
 	m.label('beacon_lines')
