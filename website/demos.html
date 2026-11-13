@@ -99,11 +99,21 @@
 <h2>PAL, BY THE WAY</h2>
 <p>Anything counted in frames runs a sixth slower at 50 Hz. The tunes are corrected: MAW plays a step every five frames instead of six, and Jaguar Hero advances the song twice on every fifth frame. Movement is not: MAW's tunnel and WIREWING's plane are a sixth slower on a PAL machine. Europe, we apologize.</p>
 
-<div id="crash" hidden><canvas id="crashcv"></canvas><div class="crashscan"></div><div class="crashhint pixel blink">CLICK OR ESC TO EJECT</div></div>
+<div id="crash" hidden><div class="crashwin" id="crashwin">
+<div class="crashtitle"><span>WIREWING.EXE - where_did_you_learn_to_fly.txt</span><button id="crashx" title="close">X</button></div>
+<div class="crashbody" id="crashbody"><canvas id="crashcv"></canvas><div class="crashscan"></div><div class="crashhint pixel blink">CLICK OR ESC TO EJECT</div></div>
+</div></div>
 <style>
-#crash { position: fixed; inset: 0; z-index: 2000; background: #000; cursor: crosshair; }
-#crash canvas { display: block; width: 100%; height: 100%; }
-#crash.shake { animation: crashshake 0.12s steps(2) infinite; }
+#crash { position: fixed; inset: 0; z-index: 2000; background: rgba(0,0,0,0.7); cursor: crosshair; }
+.crashwin { position: absolute; inset: 24px; display: flex; flex-direction: column;
+  background: #c0c0c0; border: 3px outset #ffffff; box-shadow: 8px 8px 0 #000; }
+.crashtitle { display: flex; align-items: center; justify-content: space-between; padding: 2px 3px 2px 6px;
+  background: linear-gradient(to right, #800000, #ff2020); color: #fff;
+  font-family: Tahoma, Verdana, sans-serif; font-weight: bold; font-size: 12px; }
+.crashtitle button { width: 20px; height: 18px; padding: 0; font-size: 11px; line-height: 1; }
+.crashbody { position: relative; flex: 1; margin: 3px; border: 2px inset #808080; background: #000; overflow: hidden; }
+.crashbody canvas { display: block; width: 100%; height: 100%; }
+.crashwin.shake { animation: crashshake 0.12s steps(2) infinite; }
 @keyframes crashshake { 0% { transform: translate(0,0); } 25% { transform: translate(-6px,3px); } 50% { transform: translate(5px,-4px); } 75% { transform: translate(-3px,-5px); } 100% { transform: translate(4px,2px); } }
 .crashscan { position: absolute; inset: 0; pointer-events: none;
   background: repeating-linear-gradient(to bottom, rgba(0,0,0,0) 0, rgba(0,0,0,0) 2px, rgba(0,0,0,0.45) 3px, rgba(0,0,0,0) 4px); }
@@ -112,29 +122,29 @@
 <script>
 var crashRun = null;
 function crashMode() {
-  var box = document.getElementById("crash"), cv = document.getElementById("crashcv"), x = cv.getContext("2d");
+  var box = document.getElementById("crash"), win = document.getElementById("crashwin"), body = document.getElementById("crashbody");
+  var cv = document.getElementById("crashcv"), x = cv.getContext("2d");
   box.hidden = false;
-  if (box.requestFullscreen) box.requestFullscreen().catch(function () {});
-  var W, H, dpr = 1;
-  function size() { W = cv.width = Math.floor(innerWidth / 2); H = cv.height = Math.floor(innerHeight / 2); }
+  var W, H;
+  function size() { W = cv.width = Math.max(160, Math.floor(body.clientWidth / 2)); H = cv.height = Math.max(120, Math.floor(body.clientHeight / 2)); }
   size(); addEventListener("resize", size);
   x.imageSmoothingEnabled = false;
   cv.style.imageRendering = "pixelated";
 
   var PHRASES = [
     "WHERE DID YOU LEARN TO FLY?",
+    "WHERE DID YOU LEARN TO FLY?",
+    "WHERE DID YOU LEARN TO FLY?",
     "WHERE DID YOU LEARN TO FLY, WHERE DID YOU LEARN TO FLY?",
+    "WHERE DID YOU LEARN TO FLY?",
     "WEHRE DID YOU LERARN TO FLY",
-    "WHERE DID YOU LEARN TO FLY??????",
+    "WHERE DID YOU LEARN TO FLY?",
     "WHER DID YUO LEARN TO FYL",
-    "WHERE DID YOU LEARN TO FLY? WHERE DID YOU LEARN TO",
-    "PRESS FIRE",
-    "W H E R E   D I D   Y O U   L E A R N   T O   F L Y",
-    "WHEREDIDYOULEARNTOFLYWHEREDIDYOULEARNTOFLY",
-    "FUEL 000",
-    "WHERE DID YOU LEARN TO FLY?!?!"
+    "WHERE DID YOU LEARN TO FLY??????",
+    "WHERE DID YOU LEARN TO FLY?"
   ];
-  var lines = [], writers = [], t0 = performance.now(), last = t0, boom = 1;
+  var CH = 8, LH = 10;               // a character and a line, in canvas pixels
+  var rows = [], partial = null, t0 = performance.now(), last = t0, carry = 0;
 
   // the noise of a plane meeting a hill
   try {
@@ -145,17 +155,18 @@ function crashMode() {
     src.buffer = buf; src.connect(g); g.connect(ac.destination); src.start();
   } catch (e) {}
 
-  function newWriter(t) {
-    var prev = lines.length ? lines[lines.length - 1] : null;
-    var size = Math.random() < 0.12 ? 16 : 8;
-    var y = prev ? prev.y + prev.size + 4 + Math.random() * 6 : 14;
-    var xx = prev ? prev.x + (Math.random() * 90 - 25) : 6;
-    if (y > H - 10) { y = 10 + Math.random() * 30; xx = Math.random() * W * 0.6; }
-    if (xx > W - 60) xx = Math.random() * 40;
-    var ln = { text: PHRASES[Math.floor(Math.random() * PHRASES.length)], x: xx, y: y, size: size, n: 0, born: t, red: Math.random() < 0.3 };
-    lines.push(ln);
-    if (lines.length > 140) lines.shift();
-    return { line: ln, speed: 25 + Math.random() * 40 + (t - t0) / 120 };
+  // one line of the file: the phrase, sometimes run on several times, wrapped at the screen edge
+  function fileLine() {
+    var p = PHRASES[Math.floor(Math.random() * PHRASES.length)], line = p;
+    var more = Math.random() < 0.35 ? 1 + Math.floor(Math.random() * 4) : 0;
+    for (var i = 0; i < more; i++) line += " " + PHRASES[Math.floor(Math.random() * PHRASES.length)];
+    return line;
+  }
+  function push(text) {
+    var cols = Math.max(10, Math.floor((W - 8) / CH));
+    for (var i = 0; i < text.length; i += cols) rows.push(text.substring(i, i + cols));
+    var max = Math.ceil(H / LH) + 2;
+    if (rows.length > max) rows.splice(0, rows.length - max);
   }
 
   function terrain(t) {
@@ -190,42 +201,38 @@ function crashMode() {
   function frame(now) {
     if (box.hidden) return;
     var t = now - t0, dt = Math.min(0.1, (now - last) / 1000); last = now;
-    // more and more typewriters as time goes on. spam is a feature.
-    var want = Math.min(14, 1 + Math.floor(t / 900));
-    while (writers.length < want) writers.push(newWriter(t));
-    for (var i = 0; i < writers.length; i++) {
-      var w = writers[i];
-      w.line.n += w.speed * dt;
-      if (w.line.n >= w.line.text.length + 2) writers[i] = newWriter(t);
+
+    // $ cat where_did_you_learn_to_fly.txt
+    // the first line is typed, then the file pours out faster and faster
+    if (t < 1400) {
+      var cmd = "$ cat where_did_you_learn_to_fly.txt";
+      rows = [cmd.substring(0, Math.floor(t / 1100 * cmd.length))];
+    } else {
+      if (rows.length === 1 && rows[0].charAt(0) === "$") rows = ["$ cat where_did_you_learn_to_fly.txt"];
+      var perSecond = Math.min(900, 25 * Math.pow(1.9, (t - 1400) / 1000));
+      carry += perSecond * dt;
+      while (carry >= 1) { push(fileLine()); carry -= 1; }
     }
 
-    x.fillStyle = "rgba(0,0,0," + (Math.random() < 0.1 ? 0.2 : 1) + ")";
+    x.fillStyle = "rgba(0,0,0," + (Math.random() < 0.1 ? 0.25 : 0.82) + ")";
     x.fillRect(0, 0, W, H);
     terrain(t);
 
     x.textBaseline = "top";
-    for (var j = 0; j < lines.length; j++) {
-      var L = lines[j], s = L.text.substring(0, Math.floor(L.n));
-      var cursor = L.n < L.text.length && Math.floor(t / 120) % 2 ? "_" : "";
-      x.font = L.size + 'px "Press Start 2P", monospace';
-      var jx = Math.random() < 0.03 ? Math.random() * 10 - 5 : 0;
+    x.font = '8px "Press Start 2P", monospace';
+    var base = H - rows.length * LH - 2;
+    if (base > 4) base = 4;          // fill from the top until the screen is full, then scroll
+    for (var j = 0; j < rows.length; j++) {
+      var y = base + j * LH, s = rows[j];
+      if (y < -LH || y > H) continue;
+      var jx = Math.random() < 0.02 ? Math.random() * 24 - 12 : 0;
+      var cursor = j === rows.length - 1 && Math.floor(t / 150) % 2 ? "_" : "";
       x.globalCompositeOperation = "lighter";
-      x.fillStyle = "#ff0000"; x.fillText(s + cursor, L.x - 2 + jx, L.y);
-      x.fillStyle = "#00ffff"; x.fillText(s + cursor, L.x + 2 + jx, L.y + (Math.random() < 0.05 ? 2 : 0));
+      x.fillStyle = "#ff0000"; x.fillText(s + cursor, 3 + jx, y);
+      x.fillStyle = "#00ffff"; x.fillText(s + cursor, 5 + jx, y);
       x.globalCompositeOperation = "source-over";
-      x.fillStyle = L.red ? "#ff6040" : "#ffe9a0"; x.fillText(s + cursor, L.x + jx, L.y);
-    }
-
-    // every few seconds, the big one
-    if (Math.floor(t / 2400) !== Math.floor((t - dt * 1000) / 2400)) boom = 1;
-    if (boom > 0.02) {
-      x.font = '16px "Press Start 2P", monospace';
-      x.textAlign = "center";
-      x.fillStyle = "rgba(255,255,255," + boom + ")";
-      x.save(); x.translate(W / 2, H / 2); x.scale(1 + (1 - boom) * 2, 1 + (1 - boom) * 2);
-      x.fillText("WHERE DID YOU LEARN TO FLY?", 0, -8); x.restore();
-      x.textAlign = "left";
-      boom *= 0.93;
+      x.fillStyle = s.indexOf("WEHRE") >= 0 || s.indexOf("YUO") >= 0 ? "#ff6040" : "#d8ffd8";
+      x.fillText(s + cursor, 4 + jx, y);
     }
 
     // tear: slide random bands of the picture sideways
@@ -241,23 +248,22 @@ function crashMode() {
     if (Math.random() < 0.15) for (var k = 0; k < 400; k++) { x.fillStyle = Math.random() < 0.5 ? "#fff" : "#888"; x.fillRect(Math.random() * W, Math.random() * H, 1, 1); }
     // whole-screen colour flash
     if (Math.random() < 0.02) { x.fillStyle = Math.random() < 0.5 ? "rgba(255,0,0,0.35)" : "rgba(0,255,255,0.25)"; x.fillRect(0, 0, W, H); }
-    box.className = Math.random() < 0.3 ? "shake" : "";
+    win.className = Math.random() < 0.3 ? "crashwin shake" : "crashwin";
     crashRun = requestAnimationFrame(frame);
   }
   crashRun = requestAnimationFrame(frame);
 
   function eject() {
-    box.hidden = true; box.className = "";
+    box.hidden = true; win.className = "crashwin";
     cancelAnimationFrame(crashRun);
     removeEventListener("resize", size);
     document.removeEventListener("keydown", onKey);
     box.onclick = null;
-    if (document.fullscreenElement) document.exitFullscreen().catch(function () {});
     try { ac.close(); } catch (e) {}
   }
   function onKey(e) { if (e.key === "Escape") eject(); }
   document.addEventListener("keydown", onKey);
-  document.addEventListener("fullscreenchange", function fc() { if (!document.fullscreenElement && !box.hidden) { document.removeEventListener("fullscreenchange", fc); eject(); } });
+  document.getElementById("crashx").onclick = function (e) { e.stopPropagation(); eject(); };
   setTimeout(function () { box.onclick = eject; }, 400);
 }
 </script>
