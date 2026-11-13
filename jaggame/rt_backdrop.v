@@ -301,6 +301,13 @@ fn backdrop_painter() &jagkit.Risc {
 	return s
 }
 
+// backdrop_mailbox is the address of the values the 68000 and the GPU share, in
+// the GPU's memory: `shared_drawn` further on, a count of the pictures drawn.
+pub fn backdrop_mailbox() u32 {
+	_, mailbox := backdrop_code() or { panic(err) }
+	return mailbox
+}
+
 // backdrop_code is the assembled GPU program, padded to whole longs, and
 // where its shared values are.
 fn backdrop_code() !([]u8, u32) {

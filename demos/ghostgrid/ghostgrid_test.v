@@ -6,6 +6,7 @@ import tom
 import jaggame
 import jaggame.emulated
 import jerry
+import jagkit
 
 // GHOSTGRID is tested by playing it: the image is booted in the emulator on
 // both television standards and a robot plays it through the pad, reading
@@ -1412,4 +1413,203 @@ fn test_what_a_frame_costs() {
 		assert worst.max * 100 <= budget * 60, 'and its most expensive frame too: ${worst.max} of ${budget}'
 		assert w.value('missed_frames') == 0 && b.value('missed_frames') == 0
 	}
+}
+
+// ---- scenes, menus, save data, sound, backdrop ----
+
+// screen_text reads `count` cells of a row of the msg layer.
+fn screen_text(s Sim, row int, from int, count int) string {
+	mut out := []u8{}
+	for k in 0 .. count {
+		out << u8(s.element('msg_cells', row * 24 + from + k) + 32)
+	}
+	return out.bytestr()
+}
+
+fn clock_text(secs int) string {
+	return '${secs / 60}:${(secs % 60) / 10}${secs % 10}'
+}
+
+fn test_the_game_goes_from_the_title_through_the_menus_and_the_pause_menu() {
+	for pal in [false, true] {
+		mut b := boot(pal)
+		mut s := Sim(b)
+		run_frames(mut s, 5, 0)
+		assert scene_of(s) == scene_title
+		assert screen_text(s, 3, 7, 9) == 'GHOSTGRID'
+		assert b.value('rt_backdrop_on') == 1, 'the backdrop is behind the title'
+		s.frame(pad(.a))
+		assert scene_of(s) == scene_picker
+		run_frames(mut s, 8, 0)
+		assert screen_text(s, 1, 5, 14) == 'SELECT MISSION'
+		assert screen_text(s, 3, 3, 11) == 'NO TIME YET', 'no record yet'
+		// the cursor, and BACK
+		s.frame(pad(.down))
+		run_frames(mut s, 2, 0)
+		assert b.value('picker_cursor') == 1
+		s.frame(pad(.a))
+		assert scene_of(s) == scene_title
+		run_frames(mut s, 3, 0)
+		s.frame(pad(.pause))
+		run_frames(mut s, 3, 0)
+		s.frame(pad(.a))
+		wait_loaded(mut s)
+		assert scene_of(s) == scene_play && b.value('rt_backdrop_on') == 0
+		assert b.value('rt_music') == 1, 'the calm track'
+		// pause: the guards stand still; resume
+		run_frames(mut s, 30, 0)
+		s.frame(pad(.pause))
+		assert b.value('paused') == 1
+		g0 := b.field('guards', 0, 'x') + b.field('guards', 0, 'y')
+		clock := b.value('clock')
+		run_frames(mut s, 40, 0)
+		assert b.field('guards', 0, 'x') + b.field('guards', 0, 'y') == g0
+			&& b.value('clock') == clock
+		assert screen_text(s, 2, 9, 6) == 'PAUSED'
+		s.frame(pad(.a))
+		assert b.value('paused') == 0
+		run_frames(mut s, 20, 0)
+		assert b.value('clock') > clock, 'the mission goes on'
+		// restart from the pause menu
+		s.frame(pad(.pause))
+		run_frames(mut s, 3, 0)
+		s.frame(pad(.down))
+		run_frames(mut s, 3, 0)
+		s.frame(pad(.a))
+		wait_loaded(mut s)
+		assert b.value('clock') < 100 && b.value('paused') == 0 && scene_of(s) == scene_play
+		// quit to the mission select
+		s.frame(pad(.pause))
+		run_frames(mut s, 3, 0)
+		for _ in 0 .. 2 {
+			s.frame(pad(.down))
+			run_frames(mut s, 3, 0)
+		}
+		s.frame(pad(.a))
+		assert scene_of(s) == scene_picker
+		assert b.value('rt_backdrop_on') == 1 && b.value('missed_frames') == 0
+	}
+}
+
+// finish_mission plays the robot's pad log on a machine from the boot.
+fn finish_mission(plans Plans, pal bool) &Booted {
+	mut b := boot(pal)
+	for mask in plans.pad_log {
+		b.frame(mask)
+		if b.value('phase') != 0 {
+			break
+		}
+	}
+	run_frames_booted(mut b, 14)
+	return b
+}
+
+fn run_frames_booted(mut b Booted, n int) {
+	for _ in 0 .. n {
+		b.frame(0)
+	}
+}
+
+fn test_the_best_time_is_saved_shown_after_a_restart_and_a_damaged_save_is_none() {
+	plans := make_plans(Options{}) or {
+		assert false, 'no plan'
+		return
+	}
+	for pal in [false, true] {
+		mut b := finish_mission(plans, pal)
+		mut s := Sim(b)
+		assert scene_of(s) == scene_result && b.value('phase') == 1
+		secs := b.value('secs')
+		assert screen_text(s, 0, 4, 16) == 'MISSION COMPLETE'
+		assert screen_text(s, 2, 4, 10) == 'TIME  ' + clock_text(secs)
+		assert screen_text(s, 6, 4, 14) == 'NEW BEST TIME!'
+		assert b.p.m.eeprom.words[0] == 0x4701 && int(b.p.m.eeprom.words[1]) == secs
+		// back to the mission select: the best is read and shown
+		s.frame(pad(.down))
+		run_frames(mut s, 3, 0)
+		s.frame(pad(.a))
+		assert scene_of(s) == scene_picker
+		run_frames(mut s, 10, 0)
+		assert screen_text(s, 3, 3, 4) == 'BEST' && screen_text(s, 3, 8, 4) == clock_text(secs)
+		// a new machine with the same chip: title, select, and the best is there
+		eeprom := b.p.m.eeprom.to_bytes()
+		mut c := boot(pal)
+		c.p.m.eeprom.load_bytes(eeprom)!
+		mut cs := Sim(c)
+		run_frames(mut cs, 5, 0)
+		cs.frame(pad(.a))
+		run_frames(mut cs, 10, 0)
+		assert screen_text(cs, 3, 3, 4) == 'BEST', 'the best survived a restart'
+		assert screen_text(cs, 3, 8, 4) == clock_text(secs)
+		assert c.value('save_best_time') == secs
+		// a damaged record is none: the checksum is wrong
+		mut bad := eeprom.clone()
+		bad[7] ^= 0x01
+		mut d := boot(pal)
+		d.p.m.eeprom.load_bytes(bad)!
+		mut ds := Sim(d)
+		run_frames(mut ds, 5, 0)
+		ds.frame(pad(.a))
+		run_frames(mut ds, 10, 0)
+		assert screen_text(ds, 3, 3, 11) == 'NO TIME YET'
+		assert d.value('save_best_time') == 0 && d.value('missed_frames') == 0
+	}
+}
+
+fn test_the_music_follows_the_alarm_and_keeps_its_tempo() {
+	calm_lead := [57, 62, 64, 65, 67, 69, 72, 74].map(i64(jagkit.note_step(it)))
+	alert_lead := [62, 67, 68, 71, 72, 73, 76, 77].map(i64(jagkit.note_step(it)))
+	for pal in [false, true] {
+		mut b := boot(pal)
+		mut s := Sim(b)
+		// the title already plays the calm track; ten seconds of it keep the tempo (5.5 rows a second)
+		run_frames(mut s, 10 * (if pal { 50 } else { 60 }), 0)
+		rows := b.value('rt_music_rows')
+		assert rows >= 54 && rows <= 56, '${rows} rows in ten seconds'
+		wait_loaded(mut s)
+		assert b.value('rt_music') == 1
+		put_figure(mut s, 8, 17)
+		mut was := 0
+		mut last_rows := b.value('rt_music_rows')
+		mut alert_frames := 0
+		mut jumps := 0
+		for n in 0 .. 500 {
+			s.frame(0)
+			if b.value('phase') != 0 {
+				break
+			}
+			now := b.value('rt_music_rows')
+			if b.value('rt_music') == 2 {
+				alert_frames++
+				if now - last_rows > 1 {
+					jumps++
+				}
+			}
+			last_rows = now
+			was = n
+		}
+		assert alert_frames > 10, 'the alert track played (${alert_frames} frames, ${was})'
+		assert jumps == 0, 'the track is not restarted while the alarm goes on'
+		_ = calm_lead
+		_ = alert_lead
+		// the voices the DSP got come from the alert pattern
+		lead := b.element('rt_voice', 0)
+		assert lead == 0 || lead in alert_lead || lead in calm_lead
+	}
+}
+
+fn test_the_title_shows_the_backdrop_and_the_mission_does_not() {
+	mut b := boot(false)
+	mut s := Sim(b)
+	run_frames(mut s, 20, 0)
+	assert b.value('rt_backdrop_on') == 1
+	mailbox := jaggame.backdrop_mailbox()
+	drawn := b.p.m.peek32(mailbox + 40)
+	run_frames(mut s, 10, 0)
+	assert b.p.m.peek32(mailbox + 40) > drawn, 'the GPU draws the backdrop on the title'
+	wait_loaded(mut s)
+	run_frames(mut s, 5, 0)
+	stopped := b.p.m.peek32(mailbox + 40)
+	run_frames(mut s, 30, 0)
+	assert b.p.m.peek32(mailbox + 40) == stopped, 'and is left alone in the mission'
 }

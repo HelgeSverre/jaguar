@@ -438,6 +438,7 @@ Every public name in `jaggame`, with the comment from its source. This file is g
 | `fn (mut g Game) backdrop_show(mut c Code)` | backdrop_show makes the backdrop visible from the next picture on. |
 | `fn (mut g Game) backdrop_hide(mut c Code)` | backdrop_hide hides the backdrop: the GPU is left alone and the picture shows what is behind it. |
 | `fn (mut g Game) backdrop_shown() Expr` | backdrop_shown is true while the backdrop is visible. |
+| `fn backdrop_mailbox() u32` | backdrop_mailbox is the address of the values the 68000 and the GPU share, in the GPU's memory: `shared_drawn` further on, a count of the pictures drawn. |
 
 ## The runtime: cartridge images
 
