@@ -39,6 +39,28 @@ fn test_keys_reach_the_pad_through_the_event_queue() {
 	assert input.poll().kind == .none
 }
 
+fn test_every_awkward_key_has_one_that_is_on_every_keyboard() {
+	star := decode_key(int(C.SDL_SCANCODE_Q), true) or { panic('Q is not bound') }
+	assert star.kind == .button && star.button == jerry.Button.star && star.pressed
+	hash := decode_key(int(C.SDL_SCANCODE_W), true) or { panic('W is not bound') }
+	assert hash.kind == .button && hash.button == jerry.Button.hash && hash.pressed
+
+	scancodes := [int(C.SDL_SCANCODE_R), int(C.SDL_SCANCODE_I), int(C.SDL_SCANCODE_S),
+		int(C.SDL_SCANCODE_H), int(C.SDL_SCANCODE_F), int(C.SDL_SCANCODE_COMMA),
+		int(C.SDL_SCANCODE_PERIOD), int(C.SDL_SCANCODE_SPACE)]
+	commands := [Command.reset, .overlay, .screenshot, .shell, .fullscreen, .shrink, .grow,
+		.fast_forward]
+	for i, scancode in scancodes {
+		event := decode_key(scancode, true) or { panic('key ${i} is not bound') }
+		assert event.kind == .command
+		assert event.command == commands[i]
+	}
+	// Fast-forward lasts as long as the space bar is down.
+	release := decode_key(int(C.SDL_SCANCODE_SPACE), false) or { panic('no release') }
+	assert release.command == .fast_forward
+	assert !release.pressed
+}
+
 fn test_a_dropped_file_reports_its_path() {
 	assert C.SDL_Init(u32(C.SDL_INIT_EVENTS))
 	defer {
@@ -65,7 +87,7 @@ fn test_face_buttons_read_c_b_a_from_left_to_right() {
 }
 
 fn test_unbound_keys_and_command_releases_are_ignored() {
-	assert decode_key(int(C.SDL_SCANCODE_Q), true) == none
+	assert decode_key(int(C.SDL_SCANCODE_J), true) == none
 	assert decode_key(int(C.SDL_SCANCODE_F5), false) == none
 	assert decode_key(int(C.SDL_SCANCODE_GRAVE), false)?.command == .fast_forward
 }

@@ -210,7 +210,11 @@ fn (mut s Shell) click(x f32, y f32, down bool) ?Event {
 }
 
 // decode_key maps a keyboard scancode to a controller button on port 0 or
-// to a frontend command.
+// to a frontend command. A scancode names a key by its place, not its label,
+// and the punctuation and function keys are awkward on many keyboards (a
+// Norwegian one has no `[`, `]`, `=` or `` ` `` of its own; a laptop wants Fn
+// for F5), so each of those also has a letter, comma, full stop or the
+// space bar: keys that sit in the same place on every layout.
 fn decode_key(scancode int, down bool) ?Event {
 	button := match scancode {
 		int(C.SDL_SCANCODE_UP) { jerry.Button.up }
@@ -232,8 +236,8 @@ fn decode_key(scancode int, down bool) ?Event {
 		int(C.SDL_SCANCODE_7), int(C.SDL_SCANCODE_KP_7) { jerry.Button.seven }
 		int(C.SDL_SCANCODE_8), int(C.SDL_SCANCODE_KP_8) { jerry.Button.eight }
 		int(C.SDL_SCANCODE_9), int(C.SDL_SCANCODE_KP_9) { jerry.Button.nine }
-		int(C.SDL_SCANCODE_MINUS), int(C.SDL_SCANCODE_KP_MULTIPLY) { jerry.Button.star }
-		int(C.SDL_SCANCODE_EQUALS), int(C.SDL_SCANCODE_KP_DIVIDE) { jerry.Button.hash }
+		int(C.SDL_SCANCODE_Q), int(C.SDL_SCANCODE_MINUS), int(C.SDL_SCANCODE_KP_MULTIPLY) { jerry.Button.star }
+		int(C.SDL_SCANCODE_W), int(C.SDL_SCANCODE_EQUALS), int(C.SDL_SCANCODE_KP_DIVIDE) { jerry.Button.hash }
 		else { return decode_command(scancode, down) }
 	}
 
@@ -251,15 +255,15 @@ fn decode_command(scancode int, down bool) ?Event {
 	command := match scancode {
 		int(C.SDL_SCANCODE_ESCAPE) { Command.quit }
 		int(C.SDL_SCANCODE_P) { Command.pause }
-		int(C.SDL_SCANCODE_F5) { Command.reset }
+		int(C.SDL_SCANCODE_F5), int(C.SDL_SCANCODE_R) { Command.reset }
 		int(C.SDL_SCANCODE_F11), int(C.SDL_SCANCODE_F) { Command.fullscreen }
 		int(C.SDL_SCANCODE_M) { Command.mute }
-		int(C.SDL_SCANCODE_F1) { Command.overlay }
-		int(C.SDL_SCANCODE_F12) { Command.screenshot }
-		int(C.SDL_SCANCODE_GRAVE) { Command.fast_forward }
-		int(C.SDL_SCANCODE_F2) { Command.shell }
-		int(C.SDL_SCANCODE_LEFTBRACKET) { Command.shrink }
-		int(C.SDL_SCANCODE_RIGHTBRACKET) { Command.grow }
+		int(C.SDL_SCANCODE_F1), int(C.SDL_SCANCODE_I) { Command.overlay }
+		int(C.SDL_SCANCODE_F12), int(C.SDL_SCANCODE_S) { Command.screenshot }
+		int(C.SDL_SCANCODE_GRAVE), int(C.SDL_SCANCODE_SPACE) { Command.fast_forward }
+		int(C.SDL_SCANCODE_F2), int(C.SDL_SCANCODE_H) { Command.shell }
+		int(C.SDL_SCANCODE_LEFTBRACKET), int(C.SDL_SCANCODE_COMMA) { Command.shrink }
+		int(C.SDL_SCANCODE_RIGHTBRACKET), int(C.SDL_SCANCODE_PERIOD) { Command.grow }
 		else { return none }
 	}
 

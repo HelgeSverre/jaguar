@@ -79,9 +79,9 @@ By default the window is not a window. It is a borderless, see-through cutout sh
 - The twelve keys are the controller's keypad, laid out 1-9, `*`, 0, `#`. Click and hold works.
 - The strip shows what is loaded and scrolls when the title is too long for it.
 - The eyes flare with the sound.
-- Drag it anywhere by the body. `[` and `]` change its size.
+- Drag it anywhere by the body. `,` and `.` change its size.
 
-Not your thing? `F2` swaps it for an ordinary resizable window and back, and remembers the choice. So does `shell = false` in `vjag/config.toml` under your configuration directory (`~/Library/Application Support` on macOS), and `--no-shell` turns it off for one run. Fullscreen always shows the bare picture.
+Not your thing? `H` swaps it for an ordinary resizable window and back, and remembers the choice. So does `shell = false` in `vjag/config.toml` under your configuration directory (`~/Library/Application Support` on macOS), and `--no-shell` turns it off for one run. Fullscreen always shows the bare picture.
 
 <p>
   <img src="docs/screenshots/shell.png" width="49%" alt="The console shell with no image loaded">
@@ -96,20 +96,22 @@ Not your thing? `F2` swaps it for an ordinary resizable window and back, and rem
 | Pause | Enter | Start |
 | Option | Tab | Back or North |
 | Keypad 0-9 | 0-9 | |
-| Keypad `*` and `#` | `-` and `=` | Left and right shoulder |
+| Keypad `*` and `#` | Q and W | Left and right shoulder |
 
 | Emulator | Key |
 | --- | --- |
 | Pause emulation | P |
-| Reset | F5 |
-| Fullscreen | F11 |
+| Reset | R |
+| Fullscreen | F |
 | Mute | M |
-| Status overlay | F1 |
-| Screenshot | F12 |
-| Console shell on/off | F2 |
-| Shell smaller / larger | `[` / `]` |
-| Fast-forward (hold) | `` ` `` |
+| Status overlay | I |
+| Screenshot | S |
+| Console shell on/off | H |
+| Shell smaller / larger | `,` / `.` |
+| Fast-forward (hold) | Space |
 | Quit | Esc |
+
+These keys sit in the same place on every keyboard layout. The older ones still work where your keyboard has them: `-` and `=` for the keypad, F5, F11, F1, F12 and F2, `[` and `]`, and `` ` ``.
 
 ### Images it understands
 

@@ -16,9 +16,10 @@ const usage = 'usage: vjag [image] [--region ntsc|pal] [--format kind] [--load-a
 Without an image the window opens empty; drop an image on it to play.
 
 keys: arrows = d-pad   Z X C = C B A   Enter = Pause   Tab = Option
-      0-9 - = keypad (- is *, = is #)   P pause   F5 reset   F11 fullscreen
-      M mute   F1 status overlay   F12 screenshot   ` fast-forward   Esc quit
-      F2 console shell on/off   [ ] shell size'
+      0-9 = keypad   Q or - = *   W or = is #
+      P pause   R or F5 reset   F or F11 fullscreen   M mute   Esc quit
+      I or F1 status overlay   S or F12 screenshot   Space or ` fast-forward (hold)
+      H or F2 console shell on/off   , . or [ ] shell size'
 
 fn main() {
 	args := os.args[1..]
