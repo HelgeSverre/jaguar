@@ -1514,7 +1514,7 @@ c.end() // a wall to knock on
 c.end() // C pressed
 ```
 
-A figure that runs is heard five tiles away, every eighth frame; one that walks or crouches is not. A knock is the **C** button with a solid tile within 12 pixels of the middle of the figure in the direction it faces, and is heard seven tiles away. Guards on patrol or on their way back react; a guard that is already suspicious, searching or chasing has his mind on something else.
+A figure that runs is heard five tiles away, every eighth frame; one that walks or crouches is not. A knock is the **C** button with a solid tile within 12 pixels of the middle of the figure in the direction it faces, and is heard seven tiles away (the word KNOCK shows on the HUD for 40 frames). Guards on patrol or on their way back react; a guard that is already suspicious, searching or chasing has his mind on something else.
 
 ### The mission
 

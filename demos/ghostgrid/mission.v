@@ -19,7 +19,7 @@ mut:
 	crouched jaggame.Expr
 	clear_at jaggame.Expr // the next tile of `lit` to clear while a room loads
 	pcell    jaggame.Expr // the tile the figure is on: row * columns + column
-	flash    jaggame.Expr // frames the word KNOCK stays up
+	flash    jaggame.Expr // frames the word KNOCK stays on the HUD
 	// the mission
 	phase     jaggame.Expr // 0 playing, 1 done, 2 caught
 	clock     jaggame.Expr // frames of play
@@ -571,6 +571,19 @@ fn (mut m Mission) define_hud(mut c jaggame.Code) {
 	c.set(m.seen_on, m.seen)
 	m.hud.number(mut c, 5, 1, m.seen, 3)
 	c.end() // times seen
+
+	// The word KNOCK shows for a moment after a knock.
+	c.if_(m.flash.ne(0))
+
+	c.if_(m.flash.eq(40))
+	m.hud.print(mut c, 10, 1, 'KNOCK')
+	c.end() // just knocked
+	c.dec(m.flash)
+
+	c.if_(m.flash.eq(0))
+	m.hud.print(mut c, 10, 1, '     ')
+	c.end() // gone again
+	c.end() // a knock was heard
 
 	// The alert indicator, in a colour that says it too.
 	c.if_(m.phase.eq(0).both(m.level.ne(m.shown)))
