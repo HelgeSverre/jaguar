@@ -2,9 +2,9 @@
 
 `jaggame` is a V module for writing Atari Jaguar programs without writing assembly. A program *describes* its variables and logic to a builder; the builder checks the description, compiles it to 68000 code and writes a `.jag` image. The same description also runs in an interpreter written in V, and the two must agree.
 
-This guide grows with the module. Chapter 1 is the language: the programs there compute values that tests read back. Chapter 2 is the runtime (the frame loop, video, sprites, pad, text, timers), built around the demo [`hello2`](../../demos/hello2/main.v). Chapter 3 is assets, rooms, the camera and collision, built around [`demos/ghostgrid`](../../demos/ghostgrid/main.v). Chapter 4 is state machines, actors, line of sight, cones and hearing, built around the guards of the same demo. Chapter 5 is scenes, menus, sound and music, save data and the GPU backdrop, which turn the mission into a game with a title, a menu and a result. [`design.md`](design.md) is the plan and the contract; [`reference.md`](reference.md) lists every public name with its comment.
+This guide grows with the module. Chapter 1 is the language: the programs there compute values that tests read back. Chapter 2 is the runtime (the frame loop, video, sprites, pad, text, timers), built around the demo [`hello2`](../../demos/hello2/main.v). Chapter 3 is assets, rooms, the camera and collision, built around [`demos/ghostgrid`](../../demos/ghostgrid/main.v). Chapter 4 is state machines, actors, line of sight, cones and hearing, built around the guards of the same demo. Chapter 5 is scenes, menus, sound and music, save data and the GPU backdrop, which turn the mission into a game with a title, a menu and a result. Chapter 6 finishes the game: ten missions of four kinds as rows of a table, cameras, ranks, the record, and how the whole of GHOSTGRID is put together. [`design.md`](design.md) is the plan and the contract; [`reference.md`](reference.md) lists every public name with its comment.
 
-Every V block in this guide is quoted from tested code, and every text block is output that a test produces. A V block is named by a comment on the line above it, `<!-- guide:NAME -->`, and must be a run of lines from the region of that name: the lines between `// guide:NAME` and `// guide:end` in a test in [`jaggame/tests`](../../jaggame/tests), or in `demos/hello2/main.v` or its test, or in `demos/ghostgrid/main.v`, `mission.v`, `guards.v`, `scenes.v`, `sound.v` or its test. `jaggame/tests/guide_test.v` fails if a block is unnamed, names a region that does not exist, or has drifted from it.
+Every V block in this guide is quoted from tested code, and every text block is output that a test produces. A V block is named by a comment on the line above it, `<!-- guide:NAME -->`, and must be a run of lines from the region of that name: the lines between `// guide:NAME` and `// guide:end` in a test in [`jaggame/tests`](../../jaggame/tests), or in `demos/hello2/main.v` or its test, or in the files of `demos/ghostgrid` (`main.v`, `mission.v`, `guards.v`, `cameras.v`, `world.v`, `missions.v`, `maps.v`, `scenes.v`, `sound.v`) or its tests (`guards_test.v`, `cameras_test.v`, `records_test.v`, `robots_1_test.v`, `flow_test.v`). The chapters were written one slice at a time: a number or a measurement in chapters 3 to 5 is as it was in that slice, and chapter 6 and [`design.md`](design.md) have the final ones. `jaggame/tests/guide_test.v` fails if a block is unnamed, names a region that does not exist, or has drifted from it.
 
 ## Contents
 
@@ -72,6 +72,21 @@ Every V block in this guide is quoted from tested code, and every text block is 
   - [Testing the game](#testing-the-game)
   - [What it costs](#what-it-costs-2)
   - [V traps in this slice](#v-traps-in-this-slice-2)
+- [Chapter 6: missions as data, cameras, ranks and the record](#chapter-6-missions-as-data-cameras-ranks-and-the-record)
+  - [How the whole game is put together](#how-the-whole-game-is-put-together)
+  - [A mission is a row of a table](#a-mission-is-a-row-of-a-table)
+  - [Adding a mission](#adding-a-mission)
+  - [Rooms and doors](#rooms-and-doors)
+  - [Chips and the exit](#chips-and-the-exit)
+  - [The clock and the countdown](#the-clock-and-the-countdown)
+  - [Cameras](#cameras)
+  - [Ranks and the result](#ranks-and-the-result)
+  - [The record](#the-record)
+  - [The mission select, the briefing and the fade](#the-mission-select-the-briefing-and-the-fade)
+  - [Testing the missions](#testing-the-missions)
+  - [What it costs](#what-it-costs-3)
+  - [Playing it in Virtual Jaguar](#playing-it-in-virtual-jaguar)
+  - [V traps in this slice](#v-traps-in-this-slice-3)
 
 ## Chapter 1: the language
 
@@ -894,11 +909,11 @@ just run demos/ghostgrid.jag        # play it
 v -prod test demos/ghostgrid/       # a robot plays it on NTSC and PAL (chapter 4)
 ```
 
-<img src="../screenshots/ghostgrid-room.png" width="325" alt="GHOSTGRID's depot as it starts: a dark floor with a glowing grid, blue block walls with a lit top edge, purple cover blocks, the figure in the bottom left and two guards with amber cones; a HUD shows the time and the times seen, and the word CALM">
+<img src="../screenshots/ghostgrid-room.png" width="325" alt="GHOSTGRID's depot as it starts: a dark floor with a glowing grid, blue block walls with a lit top edge, purple cover blocks, the figure in the top left and a guard with an amber cone; a HUD shows the time and the times seen, and the word CALM">
 
-The depot is 40 by 26 tiles (640 by 416 pixels), bigger than the screen both ways, so the camera follows the figure and stops at the room's edges. The floor, the walls, the purple cover blocks, the exit pad, the figure and the first guards are all in this picture; scrolled to the exit room in the north east it looks like this:
+A room of GHOSTGRID is 28 by 20 tiles (448 by 320 pixels; the depot of slice 4 was 40 by 26 and chapter 6 explains why the rooms are smaller now), bigger than the screen both ways, so the camera follows the figure and stops at the room's edges. The floor, the walls, the purple cover blocks, the exit pad, the figure and the first guards are all in this picture; scrolled to the exit room in the north east it looks like this:
 
-<img src="../screenshots/ghostgrid-scrolled.png" width="325" alt="GHOSTGRID's depot scrolled to the exit room: a dark room with a green exit pad, and below its door a guard with an amber cone that reaches through the door">
+<img src="../screenshots/ghostgrid-scrolled.png" width="325" alt="GHOSTGRID's depot with the figure next to the exit pad, the camera following it to the north east corner of the room">
 
 - [Pictures from PNG files](#pictures-from-png-files)
 - [Tiles and rooms from text](#tiles-and-rooms-from-text)
@@ -925,6 +940,9 @@ game.tileset(os.join_path(art_dir(), 'tiles.png'))
 game.png_pal('player', os.join_path(art_dir(), 'player.png'), 16, 16)
 game.png_pal('guard', os.join_path(art_dir(), 'guard.png'), 16, 16)
 game.png_pal('mark', os.join_path(art_dir(), 'mark.png'), 16, 16)
+game.png_pal('cam', os.join_path(art_dir(), 'cam.png'), 16, 16)
+game.png_cry('medal', os.join_path(art_dir(), 'medal.png'), 24, 24)
+game.art_cry('panel', 28, 16, 1, []u16{len: 28 * 16, init: jaggame.cry(8, 12, 34)})
 
 game.legend_tile(`.`, tile_floor, 0)
 game.legend_tile(`#`, tile_wall, jaggame.flag_solid)
@@ -932,15 +950,22 @@ game.legend_tile(`c`, tile_cover, jaggame.flag_solid | jaggame.flag_cover)
 game.legend_tile(`X`, tile_exit, jaggame.flag_exit)
 game.legend_tile(`,`, tile_floor_lit, 0)
 game.legend_tile(`;`, tile_exit_lit, jaggame.flag_exit)
-game.legend_marker(`@`, 'start', tile_floor, 0)
-mut waypoint := 0
-for names in route_names {
-	for name in names {
-		game.legend_marker(rune(`1` + waypoint), name, tile_floor, 0)
-		waypoint++
-	}
+game.legend_tile(`%`, tile_chip_lit, jaggame.flag_item)
+game.legend_tile(`D`, tile_door_next, flag_door)
+game.legend_tile(`d`, tile_door_next_lit, flag_door)
+game.legend_tile(`U`, tile_door_prev, flag_door)
+game.legend_tile(`u`, tile_door_prev_lit, flag_door)
+game.legend_marker(`@`, marker_start, tile_floor, 0)
+game.legend_marker(`[`, marker_from_prev, tile_floor, 0)
+game.legend_marker(`]`, marker_from_next, tile_floor, 0)
+game.legend_marker(`$`, 'chip', tile_chip, jaggame.flag_item)
+for k in 0 .. max_cams {
+	game.legend_marker(rune(`A` + k), 'cam${k}', tile_wall, jaggame.flag_solid)
 }
-depot_room := game.room('depot', depot)
+for k in 1 .. 10 {
+	game.legend_marker(rune(`0` + k), waypoint_marker(u8(`0` + k)), tile_floor, 0)
+}
+mut world := new_world(mut game)
 ```
 
 `tileset` is a `png_pal` of 16 by 16 pixel tiles, numbered across and then down from 0; a game has one tile set, at most 255 tiles. The figure's sheet is four frames across (standing, one foot, the other foot, crouching) and a row for each direction, so the animations pick frames by number:
@@ -996,35 +1021,29 @@ Rooms are read when the game is built, so the legend may come after them, and ev
 
 The demo's room, as it is in `main.v`: `#` is a wall, `c` a cover block, `@` where the player starts, `X` the exit pad, and the digits are markers, named places that chapter 4 uses for the guards' routes (each has a name of its own in the legend, `g0w0` and so on). `,` and `;` are in the legend but not in the text: they are the tiles a guard's cone turns the floor and the exit pad into.
 
-<!-- guide:gg_depot -->
+<!-- guide:gg_map_depot -->
 ```v
-const depot = '
-########################################
-#............################..........#
-#.6........7.################..........#
-#....########################.......X..#
-#....########################..........#
-#....########################..........#
-#....########################..........#
-#............################..........#
-#.9........8.#####################..####
-#............################.....c....#
-#.......cc...################..........#
-#............################.....5....#
-#.......3....################..........#
-#..#####.....################.####.....#
-#............################.####.....#
-#............################..........#
-#............################...cc.....#
-#............################..........#
-#.............1............2...........#
-#............######c.c#######.......cc.#
-#...ccc......################..........#
-#............################..........#
-#.......4....################..........#
-#.@..........################..........#
-#............################..........#
-########################################
+const map_depot = '
+############################
+#.........#..........#.....#
+#.@.......#..........#...X.#
+#.........#....c.....#.....#
+#....cc...#..........#.....#
+#.........#..........#.....#
+####.######..........###.###
+#..........................#
+#..1.......c..c.......2....#
+#..........................#
+####.####..........#####.###
+#.........#........#.......#
+#.........#...3....#...5...#
+#....c....c........#...c...#
+#.........#........#.......#
+#.........####.#####.......#
+#..........................#
+#..4...................6...#
+#..........................#
+############################
 '
 
 ```
@@ -1039,7 +1058,7 @@ The game asks for places by name, as expressions that are right for the room tha
 ```v
 c.if_(game.loading)
 game.camera_follow(mut c, m.pcx(), m.pcy())
-c.for_(k, m.clear_at, m.clear_at.add(128).min(room_cols * room_rows))
+c.for_(k, m.clear_at, m.clear_at.add(128).min(room_cells))
 c.set(m.lit.at(k), 0)
 c.end() // each tile of a slice
 c.set(m.clear_at, m.clear_at.add(128))
@@ -1116,7 +1135,10 @@ c.end()
 
 game.move_and_slide(mut c, m.px, m.py, player_box, dx, dy)
 c.set(m.pcell, m.pcy().shr(4).mul(room_cols).add(m.pcx().shr(4)).as_(.u16))
-moving := dx.ne(0).either(dy.ne(0))
+// a figure that pushes against a wall does not walk on the spot
+moving := c.local_bool('moving')
+c.set(moving,
+	dx.ne(0).both(game.blocked_x().invert()).either(dy.ne(0).both(game.blocked_y().invert())))
 
 ```
 
@@ -1168,10 +1190,8 @@ Then the world: the sprite goes where the figure is, the camera follows, and the
 c.set(m.player.x, m.px.as_(.i16))
 c.set(m.player.y, m.py.as_(.i16))
 
-// What is under the middle of the figure: the exit.
-c.if_(game.flags_at(m.pcx(), m.pcy()).and(jaggame.flag_exit).ne(0))
-c.set(m.phase, 1)
-c.end() // on the exit pad
+// What is under the middle of the figure: a chip, the exit, a door.
+c.set(under, game.flags_at(m.pcx(), m.pcy()))
 ```
 
 ### Numbers are cheaper
@@ -1193,14 +1213,15 @@ Chapter 4 describes the robot that plays the mission. What belongs to this chapt
 
 <!-- guide:gg_compare -->
 ```v
-s.frame(mask)
-it.frame(mask)
-for name in ['px', 'py', 'phase', 'seen', 'level', 'secs', 'camera_x', 'camera_y'] {
+sim.frame(mask)
+its.frame(mask)
+for name in ['px', 'py', 'phase', 'seen', 'alerts', 'level', 'secs', 'camera_x',
+	'camera_y'] {
 	assert b.value(name) == it.value(name), 'frame ${n}: ${name}: machine ${b.value(name)}, interpreter ${it.value(name)}'
 }
 for i in 0 .. 4 {
-	assert gstate(b, i) == gstate(it, i), 'frame ${n}: guard ${i}: machine ${state_names[gstate(b,
-		i)]}, interpreter ${state_names[gstate(it, i)]}'
+	assert gstate(b, i) == gstate(it, i), 'frame ${n}: guard ${i}: machine ${robot.state_names[gstate(b,
+		i)]}, interpreter ${robot.state_names[gstate(it, i)]}'
 
 	visited[gstate(b, i)] = true
 	for field in ['x', 'y', 'face', 'wp', 'mleft', 'look', 'stuck', 'cone_n'] {
@@ -1242,7 +1263,7 @@ A frame of the player alone left about 200,000 cycles for the work of guards.
 
 ## Chapter 4: state machines, actors and guards
 
-Chapter 3 had a figure that walks. This chapter gives it something to fear: [`demos/ghostgrid`](../../demos/ghostgrid/main.v) is now a whole mission, about 1,250 lines with no assembly. The figure starts in the south west of a depot of 40 by 26 tiles, bigger than the screen both ways, and has to reach the exit pad in the north east. Four guards patrol it. Each throws a cone of amber light on the floor, and whoever stands in that light is seen. The figure can walk, run (guards hear it), crouch behind a cover block (guards cannot see it there) and knock on a wall (a guard comes to look).
+Chapter 3 had a figure that walks. This chapter gives it something to fear: [`demos/ghostgrid`](../../demos/ghostgrid/main.v) is now a whole mission with no assembly. The figure starts in the north west of a depot of 28 by 20 tiles, bigger than the screen both ways, and has to reach the exit pad in the north east. Four guards patrol it. Each throws a cone of amber light on the floor, and whoever stands in that light is seen. The figure can walk, run (guards hear it), crouch behind a cover block (guards cannot see it there) and knock on a wall (a guard comes to look).
 
 ```sh
 v -prod test demos/ghostgrid/       # a robot plays the mission, and the guards are tested
@@ -1343,7 +1364,8 @@ An array of records and a sprite for each is what most games' creatures are, so 
 
 <!-- guide:gg_actors -->
 ```v
-guards := game.actors('guards', guard_fields(), guard_count, 1)
+guards := game.actors('guards', guard_fields(), max_guards, sprite_guard)
+cams := game.actors('cams', cam_fields(), max_cams, sprite_cam)
 ```
 
 <!-- guide:gg_fields -->
@@ -1368,11 +1390,13 @@ m.ai.run(mut c, i)
 
 c.end() // each guard
 
-c.for_(k, 0, guard_count)
+c.set(m.worked, false)
+c.for_(k, 0, max_guards)
 c.set(g, game.frame.add(k).and(3).as_(.u16))
 
 c.if_(m.guards.live(g).both(m.gf(g, 'stale')))
 c.call(m.cone, g)
+c.set(m.worked, true)
 c.break_()
 c.end() // a cone to work out
 c.end() // each guard, from a different one every frame
@@ -1396,55 +1420,30 @@ A cone looks at every tile in range, and a wall walk for every tile on every fra
 
 <!-- guide:gg_views -->
 ```v
-mut view_at := []int{}
-mut view_len := []int{}
-mut pool_cell := []int{}
-for y in 0 .. room_rows {
-	for x in 0 .. room_cols {
-		for f in 0 .. 4 {
-			view_at << pool_cell.len
-			if passable(rows[y][x]) {
-				for cell in game.view_cells(room, x, y, f * 64, sight_range, sight_half, false) {
-					pool_cell << cell.y * room_cols + cell.x
-				}
-			}
-			view_len << pool_cell.len - view_at.last()
-			assert view_len.last() <= cone_slots
-		}
-	}
-}
+world.views(mut game)
 ```
 
 A test asks the machine's `can_see` about every floor tile of six random rooms from random tiles and facings, standing and crouching (20,410 questions) and the lists agree with it on all. A cone on the screen is then a table look-up. A byte for each tile (`lit`) says which guards' cones are on it (a bit for each guard); moving a cone changes only the tiles that are in one list and not in the other, drawn with `set_cell` (new: `set_tile` for a cell number; both are machine code now):
 
 <!-- guide:gg_cone -->
 ```v
-c = p.define(m.cone)
-i := m.cone.arg('i')
-f := c.local_u8('f')
+c = p.define(m.light)
+src := m.light.arg('src')
+key := m.light.arg('key')
+old_n := m.light.arg('old_n')
 k := c.local_u16('k')
 n := c.local_u8('n')
-gx := c.local_i32('gx')
-gy := c.local_i32('gy')
-key := c.local_u16('key')
-start := c.local_u16('start')
+start := c.local_u32('start')
 cell := c.local_u16('cell')
-slot := c.local_u16('slot')
-bit := c.local_u8('bit')
-marked := c.local_u8('marked')
-bits := c.local_u8('bits')
-old_n := c.local_u8('old_n')
+bit := c.local_u16('bit')
+marked := c.local_u16('marked')
+bits := c.local_u16('bits')
 first := c.local_u16('first')
-c.set(f, m.guards.face(i).shr(6))
-c.set(gx, m.gcx(i).shr(4))
-c.set(gy, m.gcy(i).shr(4))
-c.set(bit, jaggame.lit(1).as_(.u8).shl(i))
-c.set(marked, bit.shl(4))
-c.set(key, gy.mul(room_cols).add(gx).as_(.u16).shl(2).add(f.as_(.u16)))
-c.set(start, m.view_at.at(key))
+c.set(bit, jaggame.lit(1).as_(.u16).shl(src))
+c.set(marked, bit.shl(8))
+c.set(start, m.pool_base.at(game.room_number).add(m.view_at.at(key)))
 c.set(n, m.view_len.at(key))
-c.set(old_n, m.gf(i, 'cone_n'))
-c.set(first, i.mul(cone_slots).as_(.u16))
+c.set(first, src.mul(cone_slots).as_(.u16))
 
 // Mark the cells of the new cone, so that the cells that stay are not
 // drawn twice.
@@ -1463,7 +1462,7 @@ c.if_(bits.and(marked).eq(0))
 c.set(bits, bits.and(bit.not()))
 c.set(m.lit.at(cell), bits)
 
-c.if_(bits.and(0x0f).eq(0))
+c.if_(bits.and(0x7f).eq(0))
 game.set_cell(mut c, cell, m.dim_of.at(game.tile_cell(cell))) // no cone is on it any more
 c.end() // dark
 c.end() // gone
@@ -1471,25 +1470,20 @@ c.end() // each old cell
 
 // The cells that are lit now and were not; the list is kept for next time.
 c.for_(k, 0, n)
-c.set(slot, start.add(k))
-c.set(cell, m.pool_cell.at(slot))
+c.set(cell, m.pool_cell.at(start.add(k)))
 c.set(bits, m.lit.at(cell))
 
 c.if_(bits.and(bit).eq(0))
 
-c.if_(bits.and(0x0f).eq(0))
+c.if_(bits.and(0x7f).eq(0))
 game.set_cell(mut c, cell, m.glow_of.at(game.tile_cell(cell))) // the first cone on it
 c.end() // lit
 c.set(bits, bits.or_(bit))
 c.end() // new
 c.set(m.lit.at(cell), bits.and(marked.not()))
-c.set(m.old_cell.at(first.add(k)), m.pool_cell.at(slot))
+c.set(m.old_cell.at(first.add(k)), cell)
 c.end() // each new cell
-c.set(m.gf(i, 'cone_n'), n)
-c.set(m.gf(i, 'cone_x'), gx.as_(.i16))
-c.set(m.gf(i, 'cone_y'), gy.as_(.i16))
-c.set(m.gf(i, 'cone_f'), f)
-c.set(m.gf(i, 'stale'), false)
+c.ret(n)
 ```
 
 A guard's cone is out of date when he has gone into another tile or turned, and one is worked out a frame, the guard picked by the frame number, so that four guards turning at once cost four frames and not one big one.
@@ -1533,35 +1527,29 @@ A figure that runs is heard five tiles away, every eighth frame; one that walks 
 
 The depot is text. `#` is a wall, `c` a cover block, `X` the exit, `@` the start, and the digits are the guards' waypoints:
 
-<!-- guide:gg_depot -->
+<!-- guide:gg_map_depot -->
 ```v
-const depot = '
-########################################
-#............################..........#
-#.6........7.################..........#
-#....########################.......X..#
-#....########################..........#
-#....########################..........#
-#....########################..........#
-#............################..........#
-#.9........8.#####################..####
-#............################.....c....#
-#.......cc...################..........#
-#............################.....5....#
-#.......3....################..........#
-#..#####.....################.####.....#
-#............################.####.....#
-#............################..........#
-#............################...cc.....#
-#............################..........#
-#.............1............2...........#
-#............######c.c#######.......cc.#
-#...ccc......################..........#
-#............################..........#
-#.......4....################..........#
-#.@..........################..........#
-#............################..........#
-########################################
+const map_depot = '
+############################
+#.........#..........#.....#
+#.@.......#..........#...X.#
+#.........#....c.....#.....#
+#....cc...#..........#.....#
+#.........#..........#.....#
+####.######..........###.###
+#..........................#
+#..1.......c..c.......2....#
+#..........................#
+####.####..........#####.###
+#.........#........#.......#
+#.........#...3....#...5...#
+#....c....c........#...c...#
+#.........#........#.......#
+#.........####.#####.......#
+#..........................#
+#..4...................6...#
+#..........................#
+############################
 '
 
 ```
@@ -1664,19 +1652,12 @@ c.set(m.gf(i, 'lost'), m.gf(i, 'lost').add(1).min(255))
 c.end() // in view
 c.call(m.chase, i, m.gf(i, 'spot_x').as_(.i32), m.gf(i, 'spot_y').as_(.i32), 2.0)
 
-c.if_(jaggame.overlap(jaggame.Rect{
-	x: m.guards.x(i).as_(.i16).add(2)
-	y: m.guards.y(i).as_(.i16).add(3)
-	w: 12
-	h: 12
-}, jaggame.Rect{
-	x: m.px.as_(.i16).add(2)
-	y: m.py.as_(.i16).add(3)
-	w: 12
-	h: 12
-}))
+c.if_(m.guards.x(i).sub(m.px).abs().lt(13.0).both(m.guards.y(i).sub(m.py).abs().lt(13.0)))
+
+c.if_(jaggame.overlap(m.guards.sprite(i).rect(catch_box), m.player.rect(catch_box)))
 c.set(m.phase, 2) // caught
 c.end() // touched the figure
+c.end() // near it
 
 c.if_(m.gf(i, 'lost').gt(lose_after))
 c.to('search')
@@ -1743,6 +1724,7 @@ for name in ['suspicious', 'alert', 'search', 'return'] {
 	}
 	if name == 'alert' {
 		game.play(mut e, 'spotted')
+		e.inc(m.alerts)
 	}
 }
 ```
@@ -1761,7 +1743,7 @@ gty := c.local_i32('gty')
 ptx := c.local_i32('ptx')
 pty := c.local_i32('pty')
 exposure := m.gf(i, 'exposure')
-bit := jaggame.lit(1).as_(.u8).shl(i)
+bit := jaggame.lit(1).as_(.u16).shl(i)
 
 c.if_(m.lit.at(m.pcell).and(bit).ne(0))
 c.set(sees, true)
@@ -1827,7 +1809,10 @@ c.end()
 
 game.move_and_slide(mut c, m.px, m.py, player_box, dx, dy)
 c.set(m.pcell, m.pcy().shr(4).mul(room_cols).add(m.pcx().shr(4)).as_(.u16))
-moving := dx.ne(0).either(dy.ne(0))
+// a figure that pushes against a wall does not walk on the spot
+moving := c.local_bool('moving')
+c.set(moving,
+	dx.ne(0).both(game.blocked_x().invert()).either(dy.ne(0).both(game.blocked_y().invert())))
 
 ```
 
@@ -1840,44 +1825,30 @@ The rules, exactly as implemented:
 
 ### Testing the mission
 
-The robot reads what it needs from the machine's memory by name: where each guard is (`guards` fields `x`, `y`, `face`), his state (`guard_ai_state`) and which tiles are lit (`lit`). It does not guess. Guards walk the same way whatever the figure does as long as they do not notice it, so the game is first run in the interpreter with the figure parked in a wall and the cones of every frame written down, from the game's own `lit` bytes. A breadth-first search over (tile, time) then finds the walk that never stands in a lit tile, in steps of four frames, with a margin of two frames each side, waiting where it has to, crouching where a cover block hides it, and moving crouched where that is the only way. The knock changes what the guards do, so the search is made twice: to the place where the figure knocks, and, after the game is run again from the knock on, from there to the exit.
-
-The search also says what the mission needs. With the figure allowed to wait, to hide and to knock it finds a way of 804 frames (the clock reads 12 seconds on NTSC and 15 on PAL, which counts the same frames at 50 a second): to the corridor, 12 ticks of waiting and 10 of hiding in the alcove while the corridor guard goes by, then to the foot of the crates, where it knocks, and from there to the exit while the sentinel is away. Without the knock there is no way at all within the 3,600 frames the search looks at (the exit room's door is in the sentinel's cone all the time), and without crouching behind cover there is none either (the corridor is one tile wide and the guard in it passes the alcove twice). The robot's pad is then played on the machine, on NTSC and PAL, with the interpreter alongside:
+The robot reads what it needs from the machine's memory by name: where each guard is (`guards` fields `x`, `y`, `face`), his state (`guard_ai_state`) and which tiles are lit (`lit`). It does not guess. Guards walk the same way whatever the figure does as long as they do not notice it, so the game is first run in the interpreter with the figure parked in a wall and the cones of every frame written down, from the game's own `lit` words. A breadth-first search over (tile, time) then finds the walk that never stands in a lit tile, in steps of four frames, with a margin of two frames each side, waiting where it has to, crouching where a cover block hides it, and moving crouched where that is the only way. (In slice 4 the depot needed a knock to draw a guard away, and the robot knocked; the missions of chapter 6 do not, so the robot only walks, and the knock is tested on its own in `guards_test.v`.) Chapter 6 shows the robot as it is now, on all ten missions with chips, doors and cameras. Its run is played on the machine, on NTSC and PAL, and its result is checked:
 
 <!-- guide:gg_robot -->
 ```v
-for n, mask in plans.pad_log {
-	s.frame(mask)
-	it.frame(mask)
-	assert b.value('seen') == 0, 'a guard saw the figure (frame ${n})'
-	for i in 0 .. 4 {
-		st := gstate(s, i)
-		if i == 2 {
-			assert st in [patrol, suspicious, returning], 'the sentinel is ${state_names[st]} (frame ${n})'
-			if st == suspicious {
-				woke = true
-			}
-		} else {
-			assert st == patrol, 'guard ${i} is ${state_names[st]} (frame ${n})'
-		}
-	}
-	if b.value('flash') > 0 {
-		knocked = true
-	}
-	// the interpreter does the same
-	for name in ['px', 'py', 'phase', 'seen', 'camera_x', 'camera_y', 'crouched'] {
-		assert b.value(name) == it.value(name), 'frame ${n}: ${name}: machine ${b.value(name)}, interpreter ${it.value(name)}'
-	}
-	for i in 0 .. 4 {
-		for field in ['x', 'y', 'face', 'wp', 'mleft'] {
-			assert b.field('guards', i, field) == it.field('guards', i, field), 'frame ${n}: guard ${i} ${field}: machine ${b.field('guards',
-				i, field)}, interpreter ${it.field('guards', i, field)}'
-		}
-	}
-	if b.value('phase') != 0 {
-		break
-	}
+assert r.phase == 1, '${def.title} ${std}: the mission is done, not ${r.phase}'
+assert r.seen == 0 && r.alerts == 0, '${def.title} ${std}: never seen'
+assert r.secs == secs, '${def.title} ${std}: ${r.secs} seconds, expected ${secs}'
+assert r.rank == rank, '${def.title} ${std}: rank ${rank_letters[r.rank]}, expected ${rank_letters[rank]} (score ${r.score} against ${def.ranks})'
+assert b.value('missed_frames') == 0, '${def.title} ${std}: ${b.value('missed_frames')} frames missed'
+if def.limit > 0 {
+	assert r.secs < def.limit, '${def.title}: inside the limit'
 }
+if s.find(s.first[mission], `$`).len > 0 {
+	assert b.value('chips_left') == 0, '${def.title}: every chip is taken'
+}
+assert b.value('room_at') == def.rooms.len - 1, '${def.title}: in the last room'
+assert scene_of(Sim(b)) == robot.scene_result
+// the result screen and the record
+sim := Sim(b)
+assert screen_text(sim, 0, 4, 16) == 'MISSION COMPLETE'
+assert screen_text(sim, 6, 9, 1) == rank_letters[rank]
+assert screen_text(sim, 7, 9, 4) == robot.clock_text(secs)
+word := int(b.p.m.eeprom.words[1 + mission])
+assert word == (rank << 12 | secs), '${def.title}: the record holds ${word}'
 ```
 
 Every frame, a guard saw nothing, every guard but the sentinel stayed in patrol, the sentinel was drawn out and went back, the machine and the interpreter agreed on the figure and every guard, and at the end every variable of the program was the same on both.
@@ -1897,14 +1868,15 @@ The other tests set up one situation each, on NTSC and PAL:
 
 <!-- guide:gg_compare -->
 ```v
-s.frame(mask)
-it.frame(mask)
-for name in ['px', 'py', 'phase', 'seen', 'level', 'secs', 'camera_x', 'camera_y'] {
+sim.frame(mask)
+its.frame(mask)
+for name in ['px', 'py', 'phase', 'seen', 'alerts', 'level', 'secs', 'camera_x',
+	'camera_y'] {
 	assert b.value(name) == it.value(name), 'frame ${n}: ${name}: machine ${b.value(name)}, interpreter ${it.value(name)}'
 }
 for i in 0 .. 4 {
-	assert gstate(b, i) == gstate(it, i), 'frame ${n}: guard ${i}: machine ${state_names[gstate(b,
-		i)]}, interpreter ${state_names[gstate(it, i)]}'
+	assert gstate(b, i) == gstate(it, i), 'frame ${n}: guard ${i}: machine ${robot.state_names[gstate(b,
+		i)]}, interpreter ${robot.state_names[gstate(it, i)]}'
 
 	visited[gstate(b, i)] = true
 	for field in ['x', 'y', 'face', 'wp', 'mleft', 'look', 'stuck', 'cone_n'] {
@@ -1914,11 +1886,11 @@ for i in 0 .. 4 {
 }
 ```
 
-**Second emulator.** `scripts/crosscheck/run.sh 300 demos/ghostgrid.jag` runs the image in Virtual Jaguar. With input (`front` with pad holds, the same holds as `vjag_test run --press`): the figure walks right from frame 40 for 70 frames and walks into the first guard, and the frames at 90 (calm), 150 (the guard has seen the figure: the question mark and CAUTION), 190 (the guard chases: the exclamation mark, ALERT!), 230 (caught: the end screen) and 300 (after A, the room loading again; since slice 5 the game starts on a title, so these holds start with the two As that reach the mission) are identical to this emulator's: 0.00% of the pixels differ at one fixed offset of the two pictures (Virtual Jaguar shows the whole 352-pixel window, this one the middle 325). Guards, cones, signs and the HUD match. The robot's own run was not replayed in Virtual Jaguar: `front` takes at most 16 holds and the robot's pad has about a hundred.
+**Second emulator.** In slice 4 the image ran in Virtual Jaguar with a handful of pad holds; the robot's own run could not be replayed there. It can now: chapter 6 has the replay and its numbers.
 
 ### What it costs
 
-Measured on the emulated 68000 (`Player.busy_cycles`) by `test_what_a_frame_costs`; a frame is 221,000 cycles on NTSC and 265,000 on PAL.
+Measured on the emulated 68000 (`Player.busy_cycles`) in slice 4, on its mission of four guards; a frame is 221,000 cycles on NTSC and 265,000 on PAL. Chapter 6 has the final numbers.
 
 | | NTSC cycles a frame | PAL |
 |---|---|---|
@@ -1951,7 +1923,7 @@ The measured worst case was 97,000 on average before the code generator's change
 | a struct literal of the game's own `Expr`s has to name every field | `new_mission` makes all of them in one literal |
 | `jaggame.Room{...}` with positional fields only works inside the module | name the fields, or keep a `const` |
 | the formatter wraps a call inside a string interpolation and breaks a `// guide:` region's line match | keep the long messages in a variable |
-| `front` takes at most 16 holds | merge a pad's holds, or use `vjag_test --press` |
+| `front` took at most 16 holds (slice 4) | it takes them from a file now (`--holds-file`) |
 
 ## Chapter 5: scenes, menus, sound, save data and the backdrop
 
@@ -1971,15 +1943,16 @@ m.msg.print(mut c, 3, 5, 'A STEALTH TRAINER')
 game.music_play(mut c, 'calm')
 
 c = scenes.scene('title')
-c.if_(scenes.time().mod(60).eq(0))
+c.if_(game.music_is('calm').both(game.music_rows().and(8).ne(0)))
 m.msg.print(mut c, 8, 9, 'PRESS A')
-c.else_if(scenes.time().mod(60).eq(35))
+c.else_()
 m.msg.print(mut c, 8, 9, '       ')
-c.end() // blink
+c.end() // blink, on the beat of the music
 
 c.if_(game.pressed(.a).either(game.pressed(.pause)))
 game.play(mut c, 'menu_select')
-scenes.go(mut c, 'picker')
+c.set(m.page, 0)
+scenes.go_fade(mut c, 'picker')
 c.end() // go on
 ```
 
@@ -1990,7 +1963,7 @@ c.end() // go on
 ```v
 c.if_(game.loading)
 game.camera_follow(mut c, m.pcx(), m.pcy())
-c.for_(k, m.clear_at, m.clear_at.add(128).min(room_cols * room_rows))
+c.for_(k, m.clear_at, m.clear_at.add(128).min(room_cells))
 c.set(m.lit.at(k), 0)
 c.end() // each tile of a slice
 c.set(m.clear_at, m.clear_at.add(128))
@@ -2005,12 +1978,20 @@ c.call(m.setup, m.scenes.step)
 <!-- guide:gg_play -->
 ```v
 mut c := scenes.on_enter('play')
+
+c.if_(game.backdrop_shown())
 game.backdrop_hide(mut c)
-game.load_room(mut c, m.room)
+c.end() // the backdrop is behind a menu
+game.load_room_number(mut c, m.room_of())
 c.set(m.clear_at, 0)
 game.music_play(mut c, 'calm')
 
-c = scenes.setup('play', guard_count + 1)
+c = scenes.on_leave('play')
+c.set(m.paused, false)
+m.panel.hide(mut c)
+m.limit.stop(mut c)
+
+c = scenes.setup('play', max_guards + 2)
 m.define_play_setup(mut c)
 
 c = scenes.scene('play')
@@ -2018,7 +1999,8 @@ m.define_play_update(mut c)
 ```
 
 - **Mistakes are build errors:** a scene declared twice, `go` to a scene that does not exist, an `on_leave` or a setup of a scene that does not exist, no scenes, no `start`, a `start` that names no scene. All are reported together, with the scenes that do exist.
-- **Not in this slice:** transitions that fade through the colour table (the design asked for them; a scene change is a cut), and scenes that stack (a pause is a mode of the play scene, below).
+- **A fade between scenes** (added in slice 6): `go_fade(mut c, name)` is `go` through black. The picture dims in eight frames (the scene's update does not run), the scenes change while it is black, the new scene's setup runs, and the picture comes back in eight before the update begins. `game.fade` is the brightness, 0 to 16: the machine scales the intensity of every entry of the colour table to it, and the text colours too, so tiles, 8-bit sprites and text fade and the 16-bit backdrop and sprites do not. A game may set `game.fade` itself (GHOSTGRID dims to half for the pause menu). `rt_scenes_test.v` checks that the brightness, the colour table and the scene change agree on both sides.
+- **Not done:** scenes that stack (a pause is a mode of the play scene, below).
 
 ### Menus
 
@@ -2026,10 +2008,13 @@ m.define_play_update(mut c)
 
 <!-- guide:gg_menus -->
 ```v
-save:   game.save(1, ['best_time', 'least_seen'])
-picker: game.menu('picker', msg, 3, 5, items)
+save:   game.save(2, ['m0', 'm1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'open'])
+picker: game.menu('picker', msg, 1, 3, ['                    ', '                    ',
+	'                    ', '                    ', '                    ', 'NEXT PAGE',
+	'BACK'])
 pause:  game.menu('pause', msg, 5, 4, ['RESUME', 'RESTART', 'QUIT'])
-after:  game.menu('after', msg, 3, 9, ['PLAY AGAIN', 'MISSION SELECT'])
+win:    game.menu('win', msg, 3, 9, ['PLAY AGAIN', 'NEXT MISSION', 'MISSION SELECT'])
+lose:   game.menu('lose', msg, 3, 9, ['PLAY AGAIN', 'MISSION SELECT'])
 ```
 
 `open(mut c)` writes the items and puts the cursor on the first; `update(mut c)` runs every frame. The mission select (the list of missions is `mission_titles` plus a way back, so more missions are a name and a room):
@@ -2038,11 +2023,21 @@ after:  game.menu('after', msg, 3, 9, ['PLAY AGAIN', 'MISSION SELECT'])
 ```v
 mut c := scenes.on_enter('picker')
 m.menu_screen(mut c)
-c.set(m.msg.colour, jaggame.cry(255, 255, 255))
-m.msg.print(mut c, 5, 1, 'SELECT MISSION')
-m.picker.open(mut c)
 c.set(m.best_up, false)
 m.save.load(mut c)
+
+// The screen is written in two frames, behind the black of the fade.
+c = scenes.setup('picker', 2)
+c.if_(scenes.step.eq(0))
+c.set(m.msg.colour, jaggame.cry(255, 255, 255))
+m.msg.print(mut c, 5, 1, 'SELECT MISSION')
+m.msg.print(mut c, 1, 11, 'PAGE')
+m.msg.print(mut c, 7, 11, '/2')
+m.picker.open(mut c)
+c.end() // the frame and the menu
+c.if_(scenes.step.eq(1))
+m.draw_page(mut c)
+c.end() // the missions
 
 c = scenes.scene('picker')
 m.picker.update(mut c)
@@ -2051,18 +2046,29 @@ c.if_(m.picker.moved)
 game.play(mut c, 'menu_move')
 c.end() // the cursor moved
 
-// The record is read a word a frame; when it is in, the best is shown.
+// The record is read a word a frame; when it is in, the page is drawn again.
 c.if_(m.save.busy().invert().both(m.best_up.invert()))
 c.set(m.best_up, true)
-m.print_best(mut c, m.msg, 3, 3)
+m.load_record(mut c)
+m.draw_page(mut c)
 c.end() // the record arrived
 
-c.if_(m.picker.chosen.eq(0))
+c.if_(m.picker.chosen.lt(picker_rows))
+c.set(m.mission, m.page.mul(picker_rows).add(m.picker.chosen))
+
+c.if_(m.mission.lt(m.unlocked))
 game.play(mut c, 'menu_select')
-scenes.go(mut c, 'play')
-c.else_if(m.picker.chosen.eq(mission_titles.len).either(m.picker.backed))
+scenes.go_fade(mut c, 'brief')
+c.else_()
+game.play(mut c, 'denied')
+c.end() // open, or locked
+c.else_if(m.picker.chosen.eq(picker_rows))
 game.play(mut c, 'menu_select')
-scenes.go(mut c, 'title')
+c.set(m.page, m.page.xor(1))
+m.draw_page(mut c)
+c.else_if(m.picker.chosen.eq(picker_rows + 1).either(m.picker.backed))
+game.play(mut c, 'menu_select')
+scenes.go_fade(mut c, 'title')
 c.end() // what was chosen
 ```
 
@@ -2079,20 +2085,23 @@ c.end() // the cursor moved
 
 c.if_(m.pause.chosen.eq(0).either(m.pause.backed))
 game.play(mut c, 'menu_select')
-c.set(m.paused, false)
-m.msg.clear(mut c)
+m.resume(mut c)
 c.else_if(m.pause.chosen.eq(1))
 game.play(mut c, 'menu_select')
-m.scenes.go(mut c, 'play')
+m.start_mission(mut c, 'play')
 c.else_if(m.pause.chosen.eq(2))
 game.play(mut c, 'menu_select')
-m.scenes.go(mut c, 'picker')
+m.scenes.go_fade(mut c, 'picker')
 c.end() // what was chosen
 c.ret_void()
 c.end() // paused
 
 c.if_(game.pressed(.option).either(game.pressed(.pause)).both(m.phase.eq(0)))
 c.set(m.paused, true)
+c.set(m.limit.running, false)
+c.set(m.clock.running, false)
+m.show_panel(mut c)
+c.set(game.fade, 8)
 m.msg.print(mut c, 9, 2, 'PAUSED')
 m.pause.open(mut c)
 c.ret_void()
@@ -2193,88 +2202,135 @@ The sound costs 2,800 cycles a frame on average above an empty game's (4,483 aga
 ```v
 mut c := scenes.on_enter('result')
 changed := c.local_bool('changed')
-best := m.save.field('best_time')
-least := m.save.field('least_seen')
+packed := c.local_u16('packed')
+old_rank := c.local_u16('old_rank')
+old_time := c.local_u16('old_time')
+time := c.local_u16('time')
 c.set(m.new_best, false)
+c.set(m.has_next, false)
 game.music_stop(mut c)
 
 c.if_(m.phase.eq(1))
 game.play(mut c, 'complete')
+// the score: seconds, and 5 for each time seen, 15 for each alert
+c.set(m.score, m.secs.add(m.seen.mul(5)).add(m.alerts.mul(15)))
+c.set(m.rank,
+	m.score.le(m.ms_rank_b.at(m.mission)).as_(.u8).add(m.score.le(m.ms_rank_a.at(m.mission)).as_(.u8)).add(m.score.le(m.ms_rank_s.at(m.mission)).as_(.u8)).add(1))
+c.set(packed, m.bests.at(m.mission))
+c.set(old_rank, packed.shr(12))
+c.set(old_time, packed.and(0xfff))
+c.set(time, m.secs.min(4095))
 
-c.if_(best.eq(0))
-c.set(best, m.secs)
-c.set(least, m.seen)
+c.if_(old_rank.eq(0).either(time.lt(old_time)))
 c.set(m.new_best, true)
-c.set(changed, true)
-c.else_()
-
-c.if_(m.secs.lt(best))
-c.set(best, m.secs)
-c.set(m.new_best, true)
-c.set(changed, true)
+c.set(old_time, time)
 c.end() // a faster time
+c.set(changed, m.new_best.either(m.rank.as_(.u16).gt(old_rank)))
+c.set(m.bests.at(m.mission), old_rank.max(m.rank.as_(.u16)).shl(12).or_(old_time))
 
-c.if_(m.seen.lt(least))
-c.set(least, m.seen)
+// The next mission opens.
+c.if_(m.unlocked.lt(m.mission.as_(.u16).add(2)).both(m.mission.add(1).lt(mission_count)))
+c.set(m.unlocked, m.mission.as_(.u16).add(2))
 c.set(changed, true)
-c.end() // fewer times seen
-c.end() // a first time, or not
-c.else_()
-game.play(mut c, 'caught')
-c.end() // done or caught
+c.end() // something new is open
+c.set(m.has_next, m.mission.add(1).lt(mission_count))
 
 c.if_(changed)
-m.save.store(mut c)
+m.store_record(mut c)
 c.end() // something to keep
+c.else_if(m.phase.eq(2))
+game.play(mut c, 'caught')
+c.else_()
+game.play(mut c, 'timeup')
+c.end() // done, caught or out of time
 
 c = scenes.setup('result', 4)
 step := scenes.step
 c.if_(step.eq(0))
 m.msg.clear(mut c)
 c.set(m.msg.colour, jaggame.cry(255, 255, 255))
+m.show_panel(mut c)
 
 c.if_(m.phase.eq(1))
 m.msg.print(mut c, 4, 0, 'MISSION COMPLETE')
-c.else_()
+c.else_if(m.phase.eq(2))
 m.msg.print(mut c, 4, 0, 'YOU WERE CAUGHT')
-c.end() // done or caught
-c.end() // title
+c.else_()
+m.msg.print(mut c, 4, 0, 'TIME IS UP')
+c.end() // done, caught or out of time
+c.end() // the title
 
 c.if_(step.eq(1))
-m.msg.print(mut c, 4, 2, 'TIME')
-m.msg.number(mut c, 10, 2, m.secs.div(60), 1)
-m.msg.print(mut c, 11, 2, ':')
-m.msg.number(mut c, 12, 2, m.secs.mod(60).div(10), 1)
-m.msg.number(mut c, 13, 2, m.secs.mod(10), 1)
-m.msg.print(mut c, 4, 3, 'SEEN')
-m.msg.number(mut c, 10, 3, m.seen, 3)
-c.end() // this mission
+m.msg.print(mut c, 3, 2, 'TIME')
+m.clock_at(mut c, 9, 2, m.secs)
+m.msg.print(mut c, 3, 3, 'SEEN')
+m.msg.number(mut c, 9, 3, m.seen, 3)
+m.msg.print(mut c, 3, 4, 'ALERTS')
+m.msg.number(mut c, 10, 4, m.alerts, 2)
+c.end() // what happened
 
-c.if_(step.eq(2))
-m.print_best(mut c, m.msg, 4, 5)
+c.if_(step.eq(2).both(m.phase.eq(1)))
+m.msg.print(mut c, 3, 5, 'SCORE')
+m.msg.number(mut c, 9, 5, m.score, 3)
+m.msg.print(mut c, 3, 6, 'RANK')
+m.letter(mut c, 9, 6, m.rank.as_(.u16))
+m.msg.print(mut c, 3, 7, 'BEST')
+m.clock_at(mut c, 9, 7, m.bests.at(m.mission).and(0xfff))
 
 c.if_(m.new_best)
-m.msg.print(mut c, 4, 6, 'NEW BEST TIME!')
+m.msg.print(mut c, 5, 1, 'NEW BEST TIME!')
 c.end() // a record
-c.end() // the best
+c.end() // the rank
+
 c.if_(step.eq(3))
-m.after.open(mut c)
+
+c.if_(m.phase.eq(1))
+m.medal.put(mut c, 'medal', 212, 74, 3)
+c.set(m.medal.scale, 2.0)
+c.set(m.medal.fixed, true)
+c.set(m.medal.frame, m.rank.sub(1))
+c.end() // a medal
+c.if_(m.has_next)
+m.win.open(mut c)
+c.else_()
+m.lose.open(mut c)
+c.end() // which menu
 c.end() // the menu
 
 c = scenes.scene('result')
-m.after.update(mut c)
+c.if_(m.has_next)
+m.win.update(mut c)
 
-c.if_(m.after.moved)
+c.if_(m.win.moved)
 game.play(mut c, 'menu_move')
 c.end() // the cursor moved
 
-c.if_(m.after.chosen.eq(0))
+c.if_(m.win.chosen.eq(0))
 game.play(mut c, 'menu_select')
-scenes.go(mut c, 'play')
-c.else_if(m.after.chosen.eq(1).either(m.after.backed))
+m.start_mission(mut c, 'play')
+c.else_if(m.win.chosen.eq(1))
 game.play(mut c, 'menu_select')
-scenes.go(mut c, 'picker')
+c.inc(m.mission)
+m.start_mission(mut c, 'play')
+c.else_if(m.win.chosen.eq(2).either(m.win.backed))
+game.play(mut c, 'menu_select')
+m.scenes.go_fade(mut c, 'picker')
 c.end() // what was chosen
+c.else_()
+m.lose.update(mut c)
+
+c.if_(m.lose.moved)
+game.play(mut c, 'menu_move')
+c.end() // the cursor moved
+
+c.if_(m.lose.chosen.eq(0))
+game.play(mut c, 'menu_select')
+m.start_mission(mut c, 'play')
+c.else_if(m.lose.chosen.eq(1).either(m.lose.backed))
+game.play(mut c, 'menu_select')
+m.scenes.go_fade(mut c, 'picker')
+c.end() // what was chosen
+c.end() // which menu
 ```
 
 The emulator's EEPROM was changed for this: a driver clocks data out by reading `$F14800` (as Virtual Jaguar's core, which the standard driver was checked against, does); the emulator had only clocked by writing. Both work now, a byte write of the data line no longer reads the word it merges with, and a board without the chip can be modelled (`eeprom.present = false`: nothing is stored and the data line stays high).
@@ -2285,7 +2341,7 @@ The emulator's EEPROM was changed for this: a driver clocks data out by reading 
 
 <!-- guide:gg_screen -->
 ```v
-for s in 0 .. 9 {
+for s in 0 .. 14 {
 	game.sprite(s).hide(mut c)
 }
 game.hide_room(mut c)
@@ -2299,20 +2355,22 @@ The test reads the GPU's picture and compares it, pixel for pixel, with a V mode
 
 ### GHOSTGRID as a game
 
-The four scenes are `title` (the backdrop, the calm track, a blinking prompt), `picker` (the missions, the best time and the fewest times seen of the saved record), `play` (the mission; the pause menu is a mode of it) and `result` (the room as it was with the result over it: time, times seen, the best, `NEW BEST TIME!` if it is one, and a menu: play again or the mission select). The result is written a few lines a frame, in a setup of four steps; written in one frame it cost about 100,000 cycles. The title and the result:
+The scenes are `title` (the backdrop, the calm track, a prompt that blinks on the beat of the music), `picker` (the missions, five a page, and the best rank and time of each), `brief` (chapter 6), `play` (the mission; the pause menu is a mode of it) and `result` (a panel over the room as it was: time, times seen, alerts, score, rank and a medal, the best, `NEW BEST TIME!` if it is one, and a menu). The result is written a few lines a frame, in a setup of four steps; written in one frame it cost about 100,000 cycles. Slice 6 tidied it onto a panel of its own, since the text had been crowded over the room. The title and the result:
 
 <p>
   <img src="../screenshots/ghostgrid-title.png" width="49%" alt="The GHOSTGRID title: a drifting neon grid in blue, violet and teal behind the name">
-  <img src="../screenshots/ghostgrid-result.png" width="49%" alt="The result screen over the depot: MISSION COMPLETE, time 0:12, seen 0, NEW BEST TIME and the menu">
+  <img src="../screenshots/ghostgrid-result.png" width="49%" alt="The result screen on a dark panel over the depot: MISSION COMPLETE, time, times seen, alerts, score, rank S with its medal, the best time and a menu">
 </p>
 
 ### Testing the game
 
-`demos/ghostgrid/ghostgrid_test.v` plays the whole game. `wait_loaded` first plays the title and the select with the pad, so every test of chapter 4 starts where a player does. The tests of this chapter: the flow title, select, BACK, title, mission (the backdrop goes off, the calm track plays), pause, resume, restart, quit to the select, on NTSC and PAL; the robot completes the mission, the result shows the time, the record is in the EEPROM (the same words in the interpreter's model of the chip), a fresh machine given the chip's contents shows the best time on its mission select, and a record with one bit flipped is none; the music follows the alarm without restarting and keeps ten seconds at 5.5 rows a second on both standards; the GPU draws on the title and stands still in the mission. `jaggame/rt_scenes_test.v`, `rt_menu_test.v`, `rt_sound_test.v` (what reaches the DSP, a calm and an alert recording that differ in energy and in pitch), `rt_save_test.v` (including the cartridge image booted and saved through) and `rt_backdrop_test.v` test the pieces on their own.
+`demos/ghostgrid/flow_test.v` and `records_test.v` play the whole game (chapter 6 lists them): the flow title, select, BACK, title, briefing, mission (the backdrop goes off, the calm track plays), pause, resume, restart, quit to the select, on NTSC and PAL; the record in the EEPROM (the same words in the interpreter's model of the chip); a fresh machine given the chip's contents shows the best time on its mission select, a record with one bit flipped is none, and so is a record of the old version; the music follows the alarm without restarting and keeps ten seconds at 5.5 rows a second on both standards; the GPU draws on the title and stands still in the mission. `jaggame/rt_scenes_test.v`, `rt_menu_test.v`, `rt_sound_test.v` (what reaches the DSP, a calm and an alert recording that differ in energy and in pitch), `rt_save_test.v` (including the cartridge image booted and saved through) and `rt_backdrop_test.v` test the pieces on their own.
 
-The interpreter agrees with the machine across the scenes: the robot test runs it alongside from the title, and compares every variable of the two at the end, the EEPROM included (the interpreter's chip is the array `rt_eeprom`).
+The interpreter agrees with the machine across the scenes: `agree_test.v` runs it alongside from the title through whole missions, and compares every variable of the two at the end, the EEPROM included (the interpreter's chip is the array `rt_eeprom`).
 
 ### What it costs
+
+The numbers in this section are slice 5's, on its one mission; chapter 6 has the final ones for all ten.
 
 The slice began with a worst mission frame of 175,700 of the 221,000 cycles of an NTSC frame (79%), and a target of 60%. Most of that was not the cones: one cone is worked out a frame, as before. It was the end-of-mission screen written in one frame (about 100,000 cycles), and a cone that turned (up to 60 tiles redrawn at 1,700 cycles). The measurement now settles the interrupt after each frame, which counts the part of a frame that runs on past the emulator's frame boundary, and leaves out the frame in which a mission ends (where a scene change has its work):
 
@@ -2336,3 +2394,554 @@ The worst case now has the alert music playing. What brought it down: the result
 | `v -prod -o x file_test.v` runs the tests and shows what they print; `v test` hides it | use it to read a cost table |
 | `vjag_test run` takes `--press=button@frame+frames`, with the options before the path | |
 | a frame of the emulator ends in the middle of the interrupt: a test that pokes a variable then races the tail of the last frame | `Player.settle` (or `settle_cycles`, which counts the tail) before the poke |
+
+## Chapter 6: missions as data, cameras, ranks and the record
+
+Chapter 5 ended with one mission inside a game. This chapter finishes GHOSTGRID: ten missions of four kinds that are rows of a table and not code, cameras that sweep, a rank for each mission, and a record that keeps the best of each and says which missions are open. It also walks through how the whole game is put together, because by now it is about 4,000 lines in nine files and the pieces have to be found.
+
+```sh
+v run demos/ghostgrid                    # writes demos/ghostgrid.jag and .j64
+just run demos/ghostgrid.jag             # play it
+v -prod test jaggame/ demos/hello2/ demos/ghostgrid/      # everything, about four minutes
+```
+
+- [How the whole game is put together](#how-the-whole-game-is-put-together)
+- [A mission is a row of a table](#a-mission-is-a-row-of-a-table)
+- [Adding a mission](#adding-a-mission)
+- [Rooms and doors](#rooms-and-doors)
+- [Chips and the exit](#chips-and-the-exit)
+- [The clock and the countdown](#the-clock-and-the-countdown)
+- [Cameras](#cameras)
+- [Ranks and the result](#ranks-and-the-result)
+- [The record](#the-record)
+- [The mission select, the briefing and the fade](#the-mission-select-the-briefing-and-the-fade)
+- [Testing the missions](#testing-the-missions)
+- [What it costs](#what-it-costs-3)
+- [Playing it in Virtual Jaguar](#playing-it-in-virtual-jaguar)
+- [V traps in this slice](#v-traps-in-this-slice-3)
+
+<img src="../screenshots/ghostgrid-picker.png" width="49%" alt="The mission select: five missions with their best rank and time, some still locked, and the items NEXT PAGE and BACK">
+<img src="../screenshots/ghostgrid-cameras.png" width="49%" alt="The vault: a camera on a pillar throws a cone of light, the figure stands in it and the camera's lens has turned red; a guard is on its way">
+
+<img src="../screenshots/ghostgrid-collect.png" width="49%" alt="ARCHIVE: a data chip taken, the status line shows CHIP 1/3">
+<img src="../screenshots/ghostgrid-timed.png" width="49%" alt="SPRINT: the status line shows LEFT 40 and counts down">
+<img src="../screenshots/ghostgrid-rooms.png" width="49%" alt="The second room of ANNEX: the status line shows ROOM 2/2 and a door back">
+
+### How the whole game is put together
+
+Nine files in [`demos/ghostgrid`](../../demos/ghostgrid) and a robot in [`demos/ghostgrid/robot`](../../demos/ghostgrid/robot):
+
+| File | What is in it |
+|---|---|
+| `main.v` | the constants (speeds, tiles, the size of a room), `main`, which writes the `.jag` and the `.j64` |
+| `maps.v` | the twelve rooms, as text |
+| `missions.v` | the table: ten rows, each a few rooms, their guards and cameras, a limit and the scores for the ranks |
+| `world.v` | what the build works out from the table: every room's routes, the fields of directions, the cones of every tile and of every camera position |
+| `mission.v` | the game's variables and tables, the setup of a room, the update of a frame, the figure, the HUD |
+| `guards.v` | the guards: `watch`, `chase`, `follow`, `around`, the lighting of a cone, the five states |
+| `cameras.v` | the cameras: the sweep, the light, what a camera does to the guards |
+| `scenes.v` | the title, the mission select, the briefing, the mission, the result, and the update that runs in every scene |
+| `sound.v` | the effects and the two tracks |
+
+A frame goes like this. The runtime counts the frame, moves the timers (`clock` and `limit`), and calls the game's own update (`gg_reset`: the four buttons together go back to the title), then the update of the current scene. In the mission scene that is: the pause menu if it is up (and nothing else); the first frame's start of the stopwatch and the countdown; the figure (walk, run, crouch, knock, take a chip, take a door, step on the exit); the guards, each one step of its state; one cone worked out (a guard's or a camera's, whichever is stale); the cameras; the clock; the sprites and the HUD; the camera of the picture; the music. Then the runtime moves the animations, draws the tiles that wait, steps the sound, and builds the display list. A scene change that goes through black (`go_fade`) freezes the update for sixteen frames and dims the colour table in between; the new scene's setup runs while the screen is black.
+
+What is decided where:
+
+- **What a mission is** is in `missions.v` and `maps.v`, and nowhere else.
+- **What the game knows at run time about a room** is in tables made by `world.v`: for each room its guards (first waypoint, how many, the way each starts), its cameras (tile, first angle, positions), where its part of the pool of cones starts. `setup` reads them with the room number.
+- **State that belongs to the mission** (the clock, the times seen, the chips) lives in variables that a door does not reset; **state that belongs to a room** (guards, cameras, lit tiles, the tiles chips were taken from) is made again each time the room is entered.
+
+### A mission is a row of a table
+
+<!-- guide:gg_missions -->
+```v
+return [
+	MissionDef{
+		title: 'DEPOT'
+		kind:  .sneak
+		brief: 'FOUR GUARDS WALK THE DEPOT. WAIT BEHIND COVER, CROUCH WITH B, AND REACH THE GREEN PAD UNSEEN.'
+		rooms: [
+			RoomDef{
+				map:    map_depot
+				guards: [GuardDef{
+					route: '12'
+				}, GuardDef{
+					route: '46'
+				}, GuardDef{
+					route: '3'
+					face:  jaggame.angle_up
+				}, GuardDef{
+					route: '5'
+					face:  jaggame.angle_left
+				}]
+			},
+		]
+		ranks: [
+			9,
+			18,
+			30,
+		]
+	},
+```
+
+The types behind it:
+
+<!-- guide:gg_defs -->
+```v
+// GuardDef is a guard: the waypoints of its route (characters of the map, a
+// guard goes to and fro along them in order) and, for a guard with one, the
+// angle it stands facing.
+struct GuardDef {
+	route string
+	face  int = jaggame.angle_down
+}
+
+// CameraDef is a camera's sweep: the angles it turns between.
+struct CameraDef {
+	from int
+	to   int
+}
+
+// RoomDef is a map and what is in it.
+struct RoomDef {
+	map     string
+	guards  []GuardDef
+	cameras []CameraDef
+}
+
+// MissionDef is a mission.
+struct MissionDef {
+	title string // at most 8 characters
+	kind  Kind
+	brief string
+	rooms []RoomDef
+	limit int
+	ranks []int
+}
+
+```
+
+A `RoomDef` is a map and what is in it. The map says where things are (`@` the start, `1` to `9` waypoints, `A` to `C` cameras, `$` chips, `D` and `U` doors, `X` the exit) and the table says what they do: which waypoints each guard walks, the angles each camera sweeps between. A guard whose route is one waypoint stands there and looks the way `face` says; with two or more it walks to and fro along them.
+
+<!-- guide:gg_map_vault -->
+```v
+const map_vault = '
+############################
+#..........................#
+#.@..........A.............#
+#..........................#
+#...####################...#
+#...#..................#...#
+#...#..................#...#
+#.1.#........cc........#.2.#
+#...#..................#...#
+#...#..................#...#
+#...####################...#
+#..........................#
+#..........................#
+#...........B..............#
+#.......................X..#
+#..........................#
+############################
+############################
+############################
+############################
+'
+
+```
+
+A mission has one to three rooms, up to four guards and three cameras in a room, and a limit in seconds or none. Everything else follows from what its rooms hold, and `kind` is only the word the briefing prints:
+
+| Kind | What it asks | Where that comes from |
+|---|---|---|
+| sneak | reach the exit unseen (it is not forbidden to be seen; it costs rank) | one room with no chips and no limit |
+| collect | take every chip, then the exit | `$` on the map; the exit pad does nothing until `chips_left` is 0 |
+| timed | the exit before the countdown ends | `limit` above 0 |
+| rooms | the exit in the last of several rooms | `D` and `U` doors on the maps |
+
+Ten missions, two or more of each kind: DEPOT, VAULT and FOUNDRY are sneak missions; ARCHIVE and STACKS collect; SPRINT, DASH and GAUNTLET are timed; ANNEX and CROSSING have two rooms. The first mission is the first mission of slice 4 on a smaller map. The difficulty rises with the number of guards, the cameras, and the tighter limits and ranks.
+
+### Adding a mission
+
+1. Draw a map in `maps.v`: a `const` string of 28 by 20 characters (exactly 20 rows; a room that needs fewer ends in rows of wall). Put `@` where the figure starts (`[` instead in a room that follows another), `X` in the last room, `1` to `9` where guards walk, `$` for chips, `A`, `B`, `C` where cameras stand, and `D` and `U` (with `[` and `]` beside them) for doors.
+2. Add a `RoomDef` for it and a `MissionDef` row to the table in `missions.v`: a title of at most eight letters, a kind, a briefing of at most five lines of twenty characters (it is broken at build time), the limit, and the scores for S, A and B.
+3. If the table now has more than ten missions, raise `mission_count` and give the mission select another page (`picker_rows`, the `PAGE 1/2` text, `draw_page` loops over the table, so only the page count is by hand). The record has one word for each mission: `m0` to `m9` in `mission.v`'s `game.save` call grows by one, and the version number goes up, so that an old chip is ignored.
+4. Run `v -prod test demos/ghostgrid/missions_test.v`: it checks that the map is the right size, that everything on it can be reached from where the figure comes in, that every waypoint and camera the table names is on the map, and that the mission is what its kind says. Then add a row to the `expected` table of a `robots_N_test.v`: the robot finds the way and plays it, and the test says what it came to; run it once with a wrong number and it prints the right one.
+
+Nothing in `mission.v`, `guards.v`, `cameras.v` or `scenes.v` mentions a mission by name or number except the briefing's and the picker's loops over the table.
+
+A mission is limited by what the tables are laid out for, and each is a number at the top of a file: rooms of 28 by 20 tiles (the cone tables and the fields of directions are one size; `room_cols` and `room_rows`, and `keys_per_room`), four guards and three cameras, sixteen positions of a camera's sweep, a cone of at most forty cells, a waypoint number below 256 for all rooms together. The image is 450 KB, of which about 320 KB are the cones of the twelve rooms (a table of where each list starts, one of how long it is, and the cells), and it must end below `0x80000`, where the display lists are (496 KB); the cartridge's copy loop counts in 32 bits since this slice, for an image of more than 256 KB.
+
+### Rooms and doors
+
+A room is loaded when the scene begins (`load_room_number` with the mission's first room and `room_at`). A door is a tile with a flag the game chose (`flag_door`, one of the four `flag_user` bits) and one of two pictures, onward or back:
+
+<!-- guide:gg_door -->
+```v
+c.if_(under.and(flag_door).ne(0).both(m.phase.eq(0)))
+tile := game.tile_at(m.pcx(), m.pcy())
+
+c.if_(tile.eq(tile_door_next).either(tile.eq(tile_door_next_lit)))
+c.inc(m.room_at)
+c.set(m.entering, 1)
+c.else_()
+c.dec(m.room_at)
+c.set(m.entering, 2)
+c.end() // onward or back
+game.play(mut c, 'door')
+c.set(m.limit.running, false)
+c.set(m.clock.running, false)
+m.scenes.go_fade(mut c, 'play')
+c.end() // on a door
+```
+
+The rule for what a room remembers is simple, and the tests hold it: **leaving a room forgets it.** When the figure comes back, the room is loaded again from its map and `setup` puts the guards on the first waypoints of their routes, in patrol, and the cameras at the start of their sweeps; the lit tiles are cleared and drawn again. What belongs to the mission is kept: the clock (it stops while the room loads and goes on after), the time left on a countdown, the times seen and the alerts. A chip that was taken comes back with its room, which is why a chip is only on a mission with one room (the test of the table says so); a guard that was chasing is back at his post.
+
+The figure arrives on the tile beside the door it came through: `[` in a room reached by a door onward, `]` in one reached by a door back. A door is only taken once (`go_fade` ignores a second call while a fade is going), the fade out takes eight frames in which the mission stands still, and the new room needs about eighteen to load.
+
+### Chips and the exit
+
+A `$` is a marker with the item flag, so the number of chips in the loaded room is an expression (`marker_count('chip')`). Standing on one takes it: the count goes down, the tile becomes the floor again (the lit floor if a cone is on it), and the status line shows `CHIP 1/3`. The exit works when the count is 0.
+
+<!-- guide:gg_chip -->
+```v
+c.if_(under.and(jaggame.flag_item).ne(0))
+c.dec(m.chips_left)
+game.play(mut c, 'chip')
+
+c.if_(m.lit.at(m.pcell).and(0x7f).ne(0))
+game.set_tile(mut c, m.pcx().shr(4), m.pcy().shr(4), tile_floor_lit)
+c.else_()
+game.set_tile(mut c, m.pcx().shr(4), m.pcy().shr(4), tile_floor)
+c.end() // lit or not
+c.end() // a chip
+```
+
+### The clock and the countdown
+
+Two timers, both from chapter 2. `clock` is a stopwatch, started in the first frame of the first room and stopped while the game is paused, between rooms and when the mission ends; the whole seconds come from counting, not dividing (a division costs more than a frame's whole HUD). `limit` counts down from `seconds(limit)` and its `fired` flag is the end of the mission:
+
+<!-- guide:gg_limit -->
+```v
+c.if_(m.scenes.time().eq(0))
+
+c.if_(m.entering.eq(0))
+m.clock.stopwatch(mut c)
+c.set(m.secs_at, game.fps.as_(.u16))
+c.else_()
+c.set(m.clock.running, true)
+c.end() // the start, or another room
+
+c.if_(m.ms_limit.at(m.mission).gt(0))
+
+c.if_(m.entering.eq(0))
+m.limit.start(mut c, game.seconds(m.ms_limit.at(m.mission)))
+c.set(m.left_secs, m.ms_limit.at(m.mission))
+c.set(m.left_edge, game.seconds(m.ms_limit.at(m.mission)).sub(game.fps.as_(.u16)))
+c.else_()
+c.set(m.limit.running, true)
+c.end() // the start, or another room
+c.end() // a countdown
+c.end() // the first frame
+```
+
+Seconds are real seconds on both standards: the same frames take twenty percent more of them on PAL, so a limit that an NTSC run meets with room to spare has less on PAL. The robot's runs show it: the same pad, frame for frame, is 6 seconds on NTSC and 8 on PAL for a mission of 400 frames.
+
+Running is a trade in a timed mission: it is twice as fast and a guard within five tiles hears it (chapter 4's noise). Nothing in the table says so; the briefing of SPRINT does.
+
+### Cameras
+
+A camera is an actor on a pillar of the map. It sweeps a cone between two angles in positions 11 degrees apart, one every 24 frames. The cones of every position were worked out when the game was built (`world.v` calls `view_cells` for 16 angles, where a guard has four facings), so a camera's step is the same look-up and the same `light` as a guard's, with a source number of 4 to 6 in the `lit` words. **What is lit is what sees** holds for a camera as it does for a guard: the camera looks at `lit`.
+
+The rules, in `cameras.v`:
+
+- a camera holds still while the figure is in its light and sweeps on when it is out of it;
+- cover does not help against a camera: it looks from above;
+- a frame in the light adds one to the camera's exposure, and a frame out of it takes one off every second frame;
+- at 12 the camera has seen the figure: one time seen, and every guard within twelve tiles of the camera (across plus down) that is on patrol or on his way back becomes suspicious about the figure's spot, and the camera's lens turns red;
+- at 60 the guards within that reach that are not chasing already are alert and chase it (each is an alert for the rank);
+- when the exposure is back to 0 the camera can see the figure for the first time again.
+
+<!-- guide:gg_sweep -->
+```v
+c.if_(exposure.eq(0).both(n.gt(1)))
+c.set(m.cf(i, 'wait'), m.cf(i, 'wait').add(1))
+
+c.if_(m.cf(i, 'wait').ge(cam_period))
+c.set(m.cf(i, 'wait'), 0)
+
+c.if_(m.cf(i, 'dir').invert())
+
+c.if_(step.add(1).ge(n))
+c.set(m.cf(i, 'dir'), true)
+c.dec(step)
+c.else_()
+c.inc(step)
+c.end() // the far end, or on
+c.else_()
+
+c.if_(step.eq(0))
+c.set(m.cf(i, 'dir'), false)
+c.inc(step)
+c.else_()
+c.dec(step)
+c.end() // the near end, or back
+c.end() // which way
+c.set(m.cf(i, 'stale'), true)
+c.set(redraw, true)
+c.end() // time to turn
+c.end() // sweeping
+```
+
+<!-- guide:gg_look -->
+```v
+seeing := m.lit.at(m.pcell).and(jaggame.lit(1).as_(.u16).shl(i.add(max_guards))).ne(0)
+
+c.if_(seeing)
+
+c.if_(exposure.lt(255))
+c.inc(exposure)
+c.end() // not at the top
+c.else_if(game.frame.and(1).eq(0).both(exposure.gt(0)))
+c.dec(exposure)
+c.end() // seen or not
+
+c.if_(exposure.eq(0).both(alarm.ne(0)))
+c.set(alarm, 0)
+c.set(redraw, true)
+c.end() // out of the light
+
+c.if_(exposure.ge(cam_notice).both(alarm.eq(0)))
+c.set(alarm, 1)
+c.set(redraw, true)
+c.inc(m.seen)
+game.play(mut c, 'spotted')
+c.call(m.call_guards, i, 1)
+c.end() // it has seen the figure
+
+c.if_(exposure.ge(cam_alarm).both(alarm.lt(2)))
+c.set(alarm, 2)
+c.call(m.call_guards, i, 2)
+c.end() // the alarm
+```
+
+<!-- guide:gg_call -->
+```v
+m.guards.each(mut c, g)
+state := m.ai.state_of(g)
+
+c.if_(m.gcx(g).sub(camx).abs().add(m.gcy(g).sub(camy).abs()).le(cam_reach))
+m.spot_figure(mut c, g)
+
+c.if_(mode.eq(1))
+
+c.if_(state.eq(0).either(state.eq(4)))
+m.ai.start(mut c, g, 'suspicious')
+c.end() // on patrol or on the way back
+c.else_()
+
+c.if_(state.ne(2))
+m.ai.start(mut c, g, 'alert')
+c.end() // not chasing already
+c.end() // which call
+c.end() // near the camera
+c.end() // each guard
+```
+
+The camera's picture is the right-looking frame flipped when it looks left (the sprite's `flip`), and redrawn only when the position or the alarm changes:
+
+<!-- guide:gg_cam_sprite -->
+```v
+c.if_(redraw)
+c.set(face, m.cf(i, 'a0').add(step.mul(cam_turn)).add(32).shr(6).and(3))
+c.set(sprite.flip, face.eq(2))
+c.set(sprite.frame, jaggame.lit(0).as_(.u8))
+
+c.if_(face.eq(1))
+c.set(sprite.frame, 1)
+c.else_if(face.eq(3))
+c.set(sprite.frame, 2)
+c.end() // down or up
+
+c.if_(alarm.ne(0))
+c.set(sprite.frame, sprite.frame.add(3))
+c.end() // alarmed
+c.end() // something changed
+```
+
+`rt_sight_test.v` has the test that a cone at any of 32 angles lights exactly what `can_see` says yes to (8,554 tiles asked in random rooms, no disagreement), and `cameras_test.v` plays the vault: the sweep goes out and back with every position lasting 24 frames, the light on the machine is the list that was worked out for that position, the camera sees after 12 frames, the guard near is called at once and chases after 60, cover does not hide the figure, a guard far away is not called, and the interpreter agrees.
+
+### Ranks and the result
+
+A mission done is given a score: **the seconds, plus 5 for every time seen, plus 15 for every alert; lower is better**. Each mission has the scores that earn S, A and B in its row, and anything above the last is C. The result screen shows the time, the times seen, the alerts, the score, the rank as a letter and a medal (a 24 by 24 picture in 16-bit colour, shown at twice its size), and the best of the mission so far:
+
+<!-- guide:gg_result -->
+```v
+mut c := scenes.on_enter('result')
+changed := c.local_bool('changed')
+packed := c.local_u16('packed')
+old_rank := c.local_u16('old_rank')
+old_time := c.local_u16('old_time')
+time := c.local_u16('time')
+c.set(m.new_best, false)
+c.set(m.has_next, false)
+game.music_stop(mut c)
+
+c.if_(m.phase.eq(1))
+game.play(mut c, 'complete')
+// the score: seconds, and 5 for each time seen, 15 for each alert
+c.set(m.score, m.secs.add(m.seen.mul(5)).add(m.alerts.mul(15)))
+c.set(m.rank,
+	m.score.le(m.ms_rank_b.at(m.mission)).as_(.u8).add(m.score.le(m.ms_rank_a.at(m.mission)).as_(.u8)).add(m.score.le(m.ms_rank_s.at(m.mission)).as_(.u8)).add(1))
+c.set(packed, m.bests.at(m.mission))
+c.set(old_rank, packed.shr(12))
+c.set(old_time, packed.and(0xfff))
+c.set(time, m.secs.min(4095))
+
+c.if_(old_rank.eq(0).either(time.lt(old_time)))
+c.set(m.new_best, true)
+c.set(old_time, time)
+c.end() // a faster time
+c.set(changed, m.new_best.either(m.rank.as_(.u16).gt(old_rank)))
+c.set(m.bests.at(m.mission), old_rank.max(m.rank.as_(.u16)).shl(12).or_(old_time))
+
+// The next mission opens.
+c.if_(m.unlocked.lt(m.mission.as_(.u16).add(2)).both(m.mission.add(1).lt(mission_count)))
+c.set(m.unlocked, m.mission.as_(.u16).add(2))
+c.set(changed, true)
+c.end() // something new is open
+c.set(m.has_next, m.mission.add(1).lt(mission_count))
+
+c.if_(changed)
+m.store_record(mut c)
+c.end() // something to keep
+c.else_if(m.phase.eq(2))
+game.play(mut c, 'caught')
+c.else_()
+game.play(mut c, 'timeup')
+c.end() // done, caught or out of time
+```
+
+The medal is `png_cry` art and a sprite that is `fixed` to the screen and scaled; the panel behind the text is an `art_cry` picture of 28 by 16 pixels of one colour, scaled up to 210 by 120 and put above every sprite of the room. A mission that is not done (caught, or out of time) has a result of two lines and a menu of two items, and writes nothing.
+
+### The record
+
+The saved record is a header word (a mark and the version), eleven fields, and a checksum: thirteen of the chip's 64 words.
+
+| Word | Holds |
+|---|---|
+| 0 | `0x4702`: the mark and version 2 |
+| 1 to 10 | one word for each mission: the best rank (4 S, 3 A, 2 B, 1 C, 0 none) in the top four bits and the best time in seconds in the low twelve |
+| 11 | how many missions are open (at least 1) |
+| 12 | the checksum: `0x5a5a` plus the header and the fields, modulo 65,536 |
+
+The best time and the best rank are kept separately: a faster run with more times seen keeps the better of each. Version 1 (slice 5's record of two fields) is not this layout: it is a record of another version, `load` gives "none", and the fields are not touched, which `records_test.v` checks with a version-1 record that is otherwise valid. The next mission opens when a mission is done. One word a frame is moved in either direction, so the up to ten milliseconds a real chip takes for a word never keeps a frame from being ready.
+
+<!-- guide:gg_record -->
+```v
+for k in 0 .. mission_count {
+	c.set(m.bests.at(k), m.save.field('m${k}'))
+}
+c.set(m.unlocked, m.save.field('open').max(1))
+```
+
+### The mission select, the briefing and the fade
+
+The mission select has five missions on a page and the items NEXT PAGE and BACK: a menu of seven items, the first five blank and written over by `draw_page` with the title, the best rank and time, or LOCKED:
+
+<!-- guide:gg_page -->
+```v
+for k, def in m.world.defs {
+	row := 3 + k % picker_rows
+
+	c.if_(m.page.eq(k / picker_rows))
+	m.print_padded(mut c, 3, row, def.title)
+
+	c.if_(m.unlocked.gt(k))
+	rank := m.bests.at(k).shr(12)
+	secs := m.bests.at(k).and(0xfff)
+	m.msg.print(mut c, 12, row, '  ')
+	m.letter(mut c, 12, row, rank)
+
+	c.if_(rank.ne(0))
+	m.clock_at(mut c, 14, row, secs)
+	c.else_()
+	m.msg.print(mut c, 14, row, '    ')
+	c.end() // a record, or none
+	c.else_()
+	m.msg.print(mut c, 12, row, 'LOCKED')
+	c.end() // open, or locked
+	c.end() // this page
+}
+m.msg.number(mut c, 6, 11, m.page.add(1), 1)
+```
+
+The briefing breaks the mission's text into lines when the game is built (`print_wrapped`; a word wider than the line is a build error, and so is a briefing of more than five lines) and prints the scores for the ranks. Both are set up behind the black of the fade, a step a frame, which is also what keeps the frame that enters them under the frame budget.
+
+Scenes are changed with `go_fade`: the picture dims to black in eight frames, the scenes change, the setup runs, and it comes back in eight. It is a brightness variable (`game.fade`, 0 to 16) that the machine applies to the colour table, so it dims whatever is drawn with the palette (tiles, 8-bit sprites, text) and leaves the 16-bit backdrop and the medal alone; a game may set the variable itself, which GHOSTGRID does for the pause menu (half brightness behind the menu).
+
+### Testing the missions
+
+| File | What it plays |
+|---|---|
+| `missions_test.v` | the table and the maps as data (no emulator): sizes, reachability, markers, kinds, the image fits |
+| `guards_test.v` | the depot's guards: seen, chased, caught; heard; knocked; hidden behind cover; never in a wall, never stuck; the interpreter alongside through a chase |
+| `cameras_test.v` | the vault's cameras, above |
+| `records_test.v` | ranks against the thresholds, the record's words, a restart that shows the best, an old or damaged record, the next mission opening, the countdown and the pause, chips, doors |
+| `flow_test.v` | the title, the mission select (both pages, a locked mission refused), the briefing, the pause menu, the fade, the music, the backdrop, the picture against the map; the guide's screenshots |
+| `robots_1_test.v` to `robots_3_test.v` | the robot plays each mission, then all of a file's missions in one session |
+| `agree_test.v` | the interpreter and the machine, frame by frame, on a whole mission of each kind (sneak, collect, timed, two rooms on PAL) and one with cameras |
+| `cost_test.v` | the cost of the worst frame of every room |
+
+The robot (in `demos/ghostgrid/robot`, a module of its own so that the game's build does not link the emulator, and so that every test file can use it) works as chapter 4 described, and extends it to what the missions have: the game is run in the interpreter with the figure parked in a wall, the lit words of every frame are written down (a camera's bit makes a tile unsafe for a crouching figure too, since cover does not help), and the search finds the way through every goal of a room (the chips, nearest first, then the exit or the door) from tile to tile, in time. A room that follows is planned with the game played in the interpreter through the rooms before it, because each room's guards start when it is entered. The plan is for NTSC and played on both: the guards move by frames, so the same pad is right on PAL.
+
+| Mission | Kind | Guards, cameras | Robot, NTSC | Robot, PAL | Frames | Worst frame, NTSC | Worst frame, PAL | Missed |
+|---|---|---|---|---|---|---|---|---|
+| DEPOT | sneak | 4, 0 | 7 s, S | 8 s, S | 446 | 131,100 (59%) | 131,200 (49%) | 0 |
+| ARCHIVE | collect | 2, 0 | 16 s, S | 19 s, A | 966 | 90,000 (40%) | 87,700 (33%) | 0 |
+| SPRINT | timed | 2, 0 | 7 s, S | 8 s, A | 426 | 102,900 (46%) | 100,000 (37%) | 0 |
+| ANNEX | rooms | 1, 0 | 14 s, S | 17 s, A | 925 | 87,500 (39%) | 87,600 (33%) | 0 |
+| VAULT | sneak | 1, 2 | 6 s, S | 8 s, S | 402 | 94,100 (42%) | 94,100 (35%) | 0 |
+| STACKS | collect | 1, 1 | 13 s, S | 15 s, A | 786 | 98,100 (44%) | 98,100 (37%) | 0 |
+| DASH | timed | 2, 1 | 6 s, A | 8 s, A | 403 | 106,900 (48%) | 107,000 (40%) | 0 |
+| CROSSING | rooms | 1, 1 | 14 s, S | 17 s, A | 925 | 89,800 (40%) | 88,100 (33%) | 0 |
+| FOUNDRY | sneak | 3, 2 | 7 s, S | 9 s, A | 458 | 118,100 (53%) | 118,200 (44%) | 0 |
+| GAUNTLET | timed | 2, 1 | 6 s, A | 7 s, A | 367 | 113,000 (51%) | 113,000 (42%) | 0 |
+
+The robot's runs: the time the clock shows and the rank (S is the best), the frames of the mission, never seen. The worst frame is the dearest frame of the worst room of the mission in the worst case described below (limit: 60% of an NTSC frame, 132,600 of 221,000 cycles; a PAL frame is 265,000); missed is the frames missed in that run on both standards. The frames are the same on both standards; a PAL second is 50 of them.
+
+The robot only walks (it never runs, never knocks); what a running or knocking figure does to the guards is tested in `guards_test.v`.
+
+### What it costs
+
+The target: the dearest frame of every mission, played in its worst case with music, at most 60% of an NTSC frame (132,600 of 221,000 cycles), and no frame missed. The worst case of a room is all of its guards chasing the figure, which runs, in the open middle of the room, the cameras sweeping, the cones moving, the alert music playing. `cost_test.v` plays it on the machine for 500 frames and reports:
+
+| Frame | NTSC | PAL |
+|---|---|---|
+| the worst frame of any room, worst case | 131,100 (59%) | 131,200 (49%) |
+| a frame that changes scene | up to 170,500 | up to 170,700 |
+| a room loading (about 18 frames) | up to 159,900 | up to 159,900 |
+| a fade (the setup behind it included) | up to 170,600 | up to 170,800 |
+| the first frame after power on | 230,700 | 230,800 |
+| any other frame, from the title to the mission | up to 86,600 | up to 86,900 |
+| frames missed, in all of these | 0 | 0 |
+
+The table of every room is in the table above (the worst frame of the mission's worst room); `cost_test.v` prints one line for each of the twelve rooms on both standards.
+
+Missed frames are 0 in all of them, and across every run of the robots and the menus (a room loads in about 18 frames of up to 160,000 cycles; the frames that change a scene run up to 170,000; the first frame after power on is 235,000, which the machine absorbs, since it is before the picture). What got the cost down from the first version of the missions: a cone's cells are looked up in one table and stored once, a camera redraws its picture only when it changes, the seconds are counted and not divided, the tile queue draws at most 7 a frame (4 when fewer wait), and FOUNDRY has three guards where the first design had four.
+
+A cone is the expensive thing: working out one (the three loops of `light`) is 30,000 cycles in the language. It could be machine code with a twin like the tile queries are; the missions fit without, and the room to do it is in `design.md`.
+
+### Playing it in Virtual Jaguar
+
+The robot's pad for missions 1 and 2, played one after the other from the title (1,585 frames), is a file of `button@frame+frames` that both emulators take: `vjag_test run --press` and the second emulator's `front --holds-file` (chapter 5's limit of sixteen holds is gone). The result is in `design.md`: the pictures at five points of the run agree to 0.2 to 0.6 % of the pixels, by up to 6 in a colour channel; the record the game wrote is word for word the same in both chips; a second start with that chip shows the best times.
+
+### V traps in this slice
+
+| Trap | Workaround |
+|---|---|
+| `assert` in a function that is not in a `_test.v` file is not checked | `panic` with a message, as the robot module and `world.v` do |
+| a constant computed from another module's constant (`const flag_door = jaggame.flag_user1`) cannot be passed where a `Val` is wanted | write the number and let a test check it |
+| `int_max` and `int_min` are V's own: a test file that defines them does not compile | use them |
+| a `$` in a V string starts an interpolation | `u8(`$`)` for the chip's character |
+| V builds one `_test.v` at a time, each in about forty seconds | split the tests into files so they run in parallel |

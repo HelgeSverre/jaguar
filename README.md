@@ -182,6 +182,14 @@ just run demos/hero.jag       # or run one that is already built
 
 The demos run in this emulator and, checked with `scripts/crosscheck/run.sh`, in Virtual Jaguar. Real hardware has not seen them.
 
+`jaggame` goes a step further and takes the assembly away too. You describe a game (variables, logic, sprites, rooms, scenes, sound) in V; it checks the description, compiles the logic to 68000 code and writes the image, and the same logic runs in an interpreter that must agree with the compiled code. It brings a frame loop for NTSC and PAL, tile rooms with a camera and collision, guards that see by cone, scenes, menus, music, a saved record in the cartridge EEPROM and a GPU backdrop. Its demo, [GHOSTGRID](demos/README.md#ghostgrid), is a stealth trainer with ten missions, written in V with no assembly in it, and played by a robot in the tests.
+
+| Read | For |
+|---|---|
+| [`jaggame/README.md`](jaggame/README.md) | what it is, in twenty lines of code |
+| [`docs/jaggame/guide.md`](docs/jaggame/guide.md) | the guide, six chapters, from the language to GHOSTGRID's missions |
+| [`docs/jaggame/reference.md`](docs/jaggame/reference.md) | every public name, generated from the source comments |
+
 ## How it is put together
 
 ```
