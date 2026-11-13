@@ -174,19 +174,10 @@ fn (mut p Program) add_var(v Var) Expr {
 fn constant(t Type, v Val) !i64 {
 	match v {
 		int {
-			if t == .fix {
-				if v < -32768 || v > 32767 {
-					return error('${v} does not fit fix (${t.range()})')
-				}
-				return i64(v) * fix_one
-			}
-			if !t.is_integer() {
-				return error('the integer ${v} cannot be a ${t}')
-			}
-			if !t.fits(v) {
-				return error('${v} does not fit ${t} (${t.range()})')
-			}
-			return v
+			return int_constant(t, v)
+		}
+		i64 {
+			return int_constant(t, v)
 		}
 		f64 {
 			if t != .fix {
@@ -207,6 +198,22 @@ fn constant(t Type, v Val) !i64 {
 			return error('an initial value must be a V literal')
 		}
 	}
+}
+
+fn int_constant(t Type, v i64) !i64 {
+	if t == .fix {
+		if v < -32768 || v > 32767 {
+			return error('${v} does not fit fix (${t.range()})')
+		}
+		return v * fix_one
+	}
+	if !t.is_integer() {
+		return error('the integer ${v} cannot be a ${t}')
+	}
+	if !t.fits(v) {
+		return error('${v} does not fit ${t} (${t.range()})')
+	}
+	return v
 }
 
 // global declares a variable that lives as long as the program. Its
@@ -260,12 +267,12 @@ pub fn (mut p Program) i16(name string, init ...int) Expr {
 }
 
 // u32 declares a `u32` global.
-pub fn (mut p Program) u32(name string, init ...int) Expr {
+pub fn (mut p Program) u32(name string, init ...i64) Expr {
 	return p.global(name, .u32, ...init.map(Val(it)))
 }
 
 // i32 declares an `i32` global.
-pub fn (mut p Program) i32(name string, init ...int) Expr {
+pub fn (mut p Program) i32(name string, init ...i64) Expr {
 	return p.global(name, .i32, ...init.map(Val(it)))
 }
 
@@ -374,12 +381,12 @@ pub fn (mut p Program) table_i16(name string, values []int) Expr {
 }
 
 // table_u32 declares a table of `u32`.
-pub fn (mut p Program) table_u32(name string, values []int) Expr {
+pub fn (mut p Program) table_u32(name string, values []i64) Expr {
 	return p.table(name, .u32, values.map(Val(it)))
 }
 
 // table_i32 declares a table of `i32`.
-pub fn (mut p Program) table_i32(name string, values []int) Expr {
+pub fn (mut p Program) table_i32(name string, values []i64) Expr {
 	return p.table(name, .i32, values.map(Val(it)))
 }
 

@@ -10,11 +10,13 @@ module jaggame
 // Interpreter runs a checked program. Its variables start with their
 // initial values and keep them from one call to the next.
 pub struct Interpreter {
-	low Lowered
+	low &Lowered
 mut:
 	memory [][]i64
 	steps  i64
 	result i64 // set by ret
+	// zero_divisions counts divisions and remainders by zero, for the fuzzer.
+	zero_divisions i64
 pub mut:
 	// step_limit stops a program that runs too long: each statement and each
 	// turn of a loop is a step.
@@ -29,7 +31,7 @@ enum Flow {
 }
 
 // interpreter checks the program and prepares to run it.
-pub fn (p &Program) interpreter() !Interpreter {
+pub fn (p &Program) interpreter() !&Interpreter {
 	low := p.lower()!
 	mut memory := [][]i64{}
 	for v in low.vars {
@@ -39,7 +41,7 @@ pub fn (p &Program) interpreter() !Interpreter {
 		}
 		memory << values
 	}
-	return Interpreter{
+	return &Interpreter{
 		low:    low
 		memory: memory
 	}
@@ -216,6 +218,9 @@ fn (mut it Interpreter) eval(e TExpr) !i64 {
 		.binary {
 			a := it.eval(e.args[0])!
 			b := it.eval(e.args[1])!
+			if b == 0 && e.op in [.div, .mod] {
+				it.zero_divisions++
+			}
 			return binary_value(e.op, e.typ, a, b)
 		}
 		.compare {

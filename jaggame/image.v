@@ -9,7 +9,7 @@ pub const load_address = u32(0x4000)
 // Image is a compiled program ready for the emulator, with its symbols
 // and what is needed to read its variables back.
 pub struct Image {
-	low Lowered
+	low &Lowered
 pub:
 	bytes   []u8 // the .jag file
 	payload []u8 // the program as it is in memory from load_address

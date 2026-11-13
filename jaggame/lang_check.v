@@ -23,7 +23,7 @@ pub fn (p &Program) check() ! {
 	p.lower()!
 }
 
-fn (p &Program) lower() !Lowered {
+fn (p &Program) lower() !&Lowered {
 	mut k := Checker{
 		p:    p
 		vars: p.vars.clone()
@@ -43,7 +43,7 @@ fn (p &Program) lower() !Lowered {
 	if all.len > 0 {
 		return error('jaggame program:\n  ' + all.join('\n  '))
 	}
-	return Lowered{
+	return &Lowered{
 		vars:    k.vars
 		records: p.records.clone()
 		funcs:   funcs
@@ -373,7 +373,7 @@ fn literal_val(n &Node) Val {
 	return match n.kind {
 		.float_literal { Val(n.float_value) }
 		.bool_literal { Val(n.int_value != 0) }
-		else { Val(int(n.int_value)) }
+		else { Val(n.int_value) }
 	}
 }
 

@@ -53,10 +53,10 @@ pub fn (p &Program) emit(mut m jagkit.M68k) ! {
 	p.emit_lowered(mut m)!
 }
 
-fn (p &Program) emit_lowered(mut m jagkit.M68k) !Lowered {
+fn (p &Program) emit_lowered(mut m jagkit.M68k) !&Lowered {
 	low := p.lower()!
 	mut g := Gen{
-		low: &low
+		low: low
 		m:   m
 	}
 	for f in low.funcs {

@@ -78,9 +78,9 @@ pub struct Expr {
 	node &Node
 }
 
-// Val is what builder methods take: an expression or a V literal. An `int`
-// takes the type of the other side, an `f64` is a `fix`.
-pub type Val = Expr | int | f64 | bool
+// Val is what builder methods take: an expression or a V literal. An `int` (or an
+// `i64`, for large `u32` values) takes the type of the other side, an `f64` is a `fix`.
+pub type Val = Expr | int | i64 | f64 | bool
 
 // lit turns a literal into an expression. Its type comes from where it is
 // used; `lit(5).as_(.u8)` is a `u8` constant.
@@ -90,6 +90,12 @@ pub fn lit(v Val) Expr {
 			v
 		}
 		int {
+			Expr{&Node{
+				kind:      .int_literal
+				int_value: v
+			}}
+		}
+		i64 {
 			Expr{&Node{
 				kind:      .int_literal
 				int_value: v
