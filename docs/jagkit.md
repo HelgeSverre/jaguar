@@ -575,7 +575,7 @@ Found with V 0.5.2 while writing the kit and the demos.
 
 | Trap | Workaround |
 |---|---|
-| `shared`, `go`, `dump` are keywords | pick another name for a variable or label constant |
+| `shared`, `go`, `dump`, `select` are keywords | pick another name for a variable or label constant |
 | A single capital letter is not a valid type or enum name | use longer names |
 | Constants cannot be imported by name (`import jagkit { d0 }` fails) | `const d0 = jagkit.d0` |
 | `mut x := other.array` aliases the array | add `.clone()` |
