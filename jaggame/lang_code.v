@@ -269,6 +269,20 @@ pub fn (mut c Code) ret_void() {
 	})
 }
 
+// NativeFn is what the interpreter runs in place of the machine code of a
+// `native` statement: it must do to the interpreter's variables what the
+// code does to the machine's.
+pub type NativeFn = fn (mut it Interpreter) !
+
+// native is an `asm` statement that the interpreter can run too: the machine
+// runs `emit`'s code, the interpreter calls `run`. It is how the runtime
+// has hot routines in 68000 code and the same behaviour in tests; a test
+// of the two together (`Image.differences`) keeps them equal.
+pub fn (mut c Code) native(emit AsmFn, run NativeFn) {
+	c.asm(emit)
+	c.prog.natives[c.prog.asms.len - 1] = run
+}
+
 // asm emits 68000 code in place of a statement. The interpreter cannot run
 // it; games should not need it.
 pub fn (mut c Code) asm(emit AsmFn) {

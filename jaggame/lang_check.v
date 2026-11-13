@@ -48,6 +48,7 @@ fn (p &Program) lower() !&Lowered {
 		records: p.records.clone()
 		funcs:   funcs
 		asms:    p.asms.clone()
+		natives: p.natives.clone()
 	}
 }
 

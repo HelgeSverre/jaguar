@@ -300,8 +300,8 @@ fn test_the_interpreter_does_what_the_machine_did() {
 			assert b.value('frame') == n + 1
 		}
 		mut differences := b.img.differences(it, b.p.m.ram)
-		// The machine marks a text row done when it has drawn it.
-		differences = differences.filter(!it.contains('_dirty'))
+		// The machine marks a text cell and row done when it has drawn them.
+		differences = differences.filter(!it.contains('_dirty') && !it.contains('_stale'))
 		assert differences.len == 0, differences.join('\n')
 		// guide:end
 		assert b.value('frame') == script.len

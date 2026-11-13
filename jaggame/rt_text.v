@@ -1,6 +1,6 @@
 module jaggame
 
-import jagkit
+import jagkit { idx, imm, lbl }
 
 // Text. A text layer is a grid of 8x8 character cells drawn over the
 // sprites. Its cells are an array of the program (`<name>_cells`, one byte
@@ -10,6 +10,11 @@ import jagkit
 //
 // A layer has a colour, the variable `<name>_colour` (CRY, see `cry`).
 // The font has capitals, digits and punctuation only.
+//
+// Only what changed is drawn again: `print` and `number` mark a cell (in
+// `<name>_stale`) and its row (in `<name>_dirty`) when they put a different
+// glyph in it, and the machine draws the marked cells once a frame. Printing
+// the same text again costs a compare for each character and nothing more.
 
 struct TextInfo {
 	name    string
@@ -20,6 +25,7 @@ struct TextInfo {
 	colour  Expr
 	cells   Expr
 	dirty   Expr
+	stale   Expr
 mut:
 	print_func  Func
 	number_func Func
@@ -49,7 +55,8 @@ pub:
 	rows    int
 	colour  Expr // u16: the colour of the letters, CRY
 	cells   Expr // u8 array
-	dirty   Expr // u8 array: a row to draw again, one per row
+	dirty   Expr // u8 array: a row that has a cell to draw again, one per row
+	stale   Expr // u8 array: a cell to draw again, one per cell
 	game    &Game
 }
 
@@ -75,6 +82,7 @@ pub fn (mut g Game) text_layer(name string, config TextConfig) TextLayer {
 	colour := g.p.u16('${name}_colour', int(start_colour))
 	cells := g.p.array_u8('${name}_cells', cols * rows)
 	dirty := g.p.array_u8('${name}_dirty', rows)
+	stale := g.p.array_u8('${name}_stale', cols * rows)
 	g.texts << TextInfo{
 		name:        name
 		columns:     cols
@@ -84,6 +92,7 @@ pub fn (mut g Game) text_layer(name string, config TextConfig) TextLayer {
 		colour:      colour
 		cells:       cells
 		dirty:       dirty
+		stale:       stale
 		colour_init: start_colour
 	}
 	return TextLayer{
@@ -94,6 +103,7 @@ pub fn (mut g Game) text_layer(name string, config TextConfig) TextLayer {
 		colour:  colour
 		cells:   cells
 		dirty:   dirty
+		stale:   stale
 		game:    unsafe { g }
 	}
 }
@@ -230,17 +240,26 @@ fn (mut g Game) define_text() {
 		t := g.texts[i]
 		cells := t.cells
 		dirty := t.dirty
+		stale := t.stale
 		if t.uses_print {
 			f := t.print_func
 			mut c := g.p.define(f)
 			k := c.local_u16('k')
+			at := c.local_u16('at')
+			glyph := c.local_u8('glyph')
 			c.for_(k, 0, f.arg('count'))
-			c.set(cells.at(f.arg('cell').add(k)), pool.at(f.arg('from').add(k)))
-			c.end()
+			c.set(glyph, pool.at(f.arg('from').add(k)))
+			c.set(at, f.arg('cell').add(k))
+
+			c.if_(cells.at(at).ne(glyph))
+			c.set(cells.at(at), glyph)
+			c.set(stale.at(at), 1)
 			c.set(dirty.at(f.arg('row')), 1)
+			c.end() // a different glyph
+			c.end() // for each character
 		}
 		if t.uses_number {
-			g.define_number(t.number_func, cells, dirty)
+			g.define_number(t)
 		}
 		if t.uses_clear {
 			f := t.clear_func
@@ -248,6 +267,7 @@ fn (mut g Game) define_text() {
 			k := c.local_u16('k')
 			c.for_(k, 0, t.columns * t.rows)
 			c.set(cells.at(k), 0)
+			c.set(stale.at(k), 1)
 			c.end()
 			c.for_(k, 0, t.rows)
 			c.set(dirty.at(k), 1)
@@ -257,25 +277,115 @@ fn (mut g Game) define_text() {
 }
 
 // define_number writes the function that turns a number into cells: the
-// digits from the right, blanks where the number has run out.
-fn (mut g Game) define_number(f Func, cells Expr, dirty Expr) {
+// digits from the right, blanks where the number has run out. A cell that
+// already shows the right glyph is left alone, and only a changed cell is
+// marked to be drawn. It is machine code (the language's division is the
+// slow part of a number) with the same behaviour in the interpreter.
+fn (mut g Game) define_number(t TextInfo) {
+	f := t.number_func
 	mut c := g.p.define(f)
-	k := c.local_u16('k')
-	rest := c.local_u32('rest')
-	tenth := c.local_u32('tenth')
-	glyph := c.local_u8('glyph')
-	c.set(rest, f.arg('value'))
+	name := t.name
+	c.native(fn [f, name] (mut m jagkit.M68k) {
+		emit_number(mut m, f, name)
+	}, fn [f, name] (mut it Interpreter) ! {
+		run_number(mut it, f, name)!
+	})
+}
 
-	c.for_(k, 0, f.arg('width'))
-	c.set(tenth, rest.div(10)) // one division a digit; the digit is what is left
-	c.if_(rest.eq(0).both(k.gt(0)))
-	c.set(glyph, 0)
-	c.else_()
-	c.set(glyph, rest.sub(tenth.mul(10)).add(glyph_code(`0`)).as_(.u8))
-	c.end()
-	c.set(cells.at(f.arg('cell').add(f.arg('width')).sub(1).sub(k)), glyph)
-	c.set(rest, tenth)
-	c.end() // for each digit
+// emit_number is the machine code of a number function: `f` has the
+// parameters cell, value, width and row, and the layer's arrays are
+// `<name>_cells`, `<name>_stale` and `<name>_dirty`. A value of 65535 or
+// less takes one division by 10 a digit, a larger one two.
+fn emit_number(mut m jagkit.M68k, f Func, name string) {
+	value := lbl('${f.name}.value')
+	more := m.unique('rt.digit')
+	blank := m.unique('rt.blank')
+	store := m.unique('rt.store')
+	next := m.unique('rt.next')
+	wide := m.unique('rt.wide')
+	have := m.unique('rt.have')
+	done := m.unique('rt.number_done')
+	m.move(.l, value, d0)
+	m.moveq(0, d1)
+	m.move(.w, lbl('${f.name}.width'), d1)
+	m.moveq(0, d2)
+	m.move(.w, lbl('${f.name}.cell'), d2)
+	m.lea(lbl('${name}_cells'), a1)
+	m.add(.l, d2, a1)
+	m.lea(lbl('${name}_stale'), a2)
+	m.add(.l, d2, a2)
+	m.move(.l, d1, d3)
+	m.sub(.w, imm(1), d3) // the counter: the cell from the right, width-1 down to 0
+	m.move(.w, d3, d4) // width-1 stands for the first digit
+	m.moveq(0, d6)
+	m.label(more)
+	m.tst(.l, d0)
+	m.b(.ne, blank + '_digit')
+	m.cmp(.w, d4, d3)
+	m.b(.eq, blank + '_digit') // the last cell shows a 0
+	m.moveq(0, d1)
+	m.bra(store)
+	m.label(blank + '_digit')
+	m.move(.l, d0, d1)
+	m.swap(d1)
+	m.tst(.w, d1)
+	m.b(.ne, wide)
+	m.move(.l, d0, d1)
+	m.divu(imm(10), d1) // quotient in the low word, remainder in the high
+	m.moveq(0, d2)
+	m.move(.w, d1, d2)
+	m.bra(have)
+	m.label(wide)
+	m.move(.l, d0, d1)
+	m.clr(.w, d1)
+	m.swap(d1)
+	m.divu(imm(10), d1) // the upper word: quotient low, remainder high
+	m.moveq(0, d2)
+	m.move(.w, d1, d2)
+	m.swap(d2) // the upper half of the answer
+	m.move(.w, d0, d1) // the remainder and the lower word
+	m.divu(imm(10), d1)
+	m.move(.w, d1, d2)
+	m.label(have)
+	m.swap(d1) // the remainder
+	m.add(.w, imm(glyph_code(`0`)), d1)
+	m.move(.l, d2, d0)
+	m.label(store)
+	m.cmp(.b, idx(0, a1, d3), d1)
+	m.b(.eq, next)
+	m.move(.b, d1, idx(0, a1, d3))
+	m.move(.b, imm(1), idx(0, a2, d3))
+	m.moveq(1, d6)
+	m.label(next)
+	m.dbra(d3, more)
+	m.tst(.b, d6)
+	m.b(.eq, done)
+	m.lea(lbl('${name}_dirty'), a3)
+	m.moveq(0, d2)
+	m.move(.w, lbl('${f.name}.row'), d2)
+	m.move(.b, imm(1), idx(0, a3, d2))
+	m.label(done)
+}
 
-	c.set(dirty.at(f.arg('row')), 1)
+// run_number is what the interpreter does for a number function: the same
+// as `emit_number`, digit by digit.
+fn run_number(mut it Interpreter, f Func, name string) ! {
+	cell := int(it.get_label('${f.name}.cell', 0)!)
+	mut rest := it.get_label('${f.name}.value', 0)!
+	width := int(it.get_label('${f.name}.width', 0)!)
+	row := int(it.get_label('${f.name}.row', 0)!)
+	mut changed := false
+	for k in 0 .. width {
+		at := cell + width - 1 - k
+		glyph := if rest == 0 && k > 0 { i64(0) } else { rest % 10 + glyph_code(`0`) }
+		rest /= 10
+		if it.get_label('${name}_cells', at)! != glyph {
+			it.put_label('${name}_cells', at, glyph)!
+			it.put_label('${name}_stale', at, 1)!
+			changed = true
+		}
+	}
+	if changed {
+		it.put_label('${name}_dirty', row, 1)!
+	}
 }

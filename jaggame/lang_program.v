@@ -126,6 +126,7 @@ mut:
 	funcs    []FuncInfo
 	bodies   map[int]&Code
 	asms     []AsmFn
+	natives  map[int]NativeFn
 	problems []string
 	names    map[string]bool
 }

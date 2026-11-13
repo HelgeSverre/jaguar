@@ -791,7 +791,7 @@ assert it.field('sprites', 0, 'x')! == 144 + 50 * speed
 assert it.value('frame')! == 50
 ```
 
-**The test that ties the two together** drives the machine with a script of buttons and the interpreter with the same one, frame for frame, and asks `img.differences` for every variable, parameter and local of the two runs that differ (the marks that say a text row is drawn are the one thing only the machine clears):
+**The test that ties the two together** drives the machine with a script of buttons and the interpreter with the same one, frame for frame, and asks `img.differences` for every variable, parameter and local of the two runs that differ (the marks that say a text cell or row is drawn are the one thing only the machine clears):
 
 <!-- guide:compare -->
 ```v
@@ -802,8 +802,8 @@ for n, mask in script {
 	assert b.value('frame') == n + 1
 }
 mut differences := b.img.differences(it, b.p.m.ram)
-// The machine marks a text row done when it has drawn it.
-differences = differences.filter(!it.contains('_dirty'))
+// The machine marks a text cell and row done when it has drawn them.
+differences = differences.filter(!it.contains('_dirty') && !it.contains('_stale'))
 assert differences.len == 0, differences.join('\n')
 ```
 

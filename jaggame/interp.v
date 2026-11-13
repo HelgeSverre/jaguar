@@ -190,7 +190,10 @@ fn (mut it Interpreter) stmt(s &TStmt) !Flow {
 			return .continued
 		}
 		.asm {
-			return error('the interpreter cannot run an asm statement')
+			run := it.low.natives[s.asm] or {
+				return error('the interpreter cannot run an asm statement')
+			}
+			run(mut it)!
 		}
 	}
 
@@ -386,4 +389,33 @@ fn convert_value(from Type, to Type, a i64) i64 {
 		return Type.fix.wrap(a * fix_one)
 	}
 	return to.wrap(a)
+}
+
+// label_var is the variable stored at a label (a global, parameter or local),
+// for a native routine of the runtime.
+fn (it &Interpreter) label_var(label string) !int {
+	for i, v in it.low.vars {
+		if v.label == label {
+			return i
+		}
+	}
+	return error('there is nothing at the label `${label}`')
+}
+
+// get_label is the raw value of element `index` of what is stored at a label.
+fn (it &Interpreter) get_label(label string, index int) !i64 {
+	var := it.label_var(label)!
+	if index < 0 || index >= it.low.vars[var].len {
+		return error('`${label}` has no element ${index}')
+	}
+	return it.memory[var][index]
+}
+
+// put_label sets element `index` of what is stored at a label, cut to its type.
+fn (mut it Interpreter) put_label(label string, index int, raw i64) ! {
+	var := it.label_var(label)!
+	if index < 0 || index >= it.low.vars[var].len {
+		return error('`${label}` has no element ${index}')
+	}
+	it.memory[var][index] = it.low.vars[var].typ.wrap(raw)
 }

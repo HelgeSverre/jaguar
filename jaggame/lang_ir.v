@@ -78,6 +78,7 @@ struct Lowered {
 	records []RecordInfo
 	funcs   []LFunc
 	asms    []AsmFn
+	natives map[int]NativeFn
 }
 
 fn (l &Lowered) stride(v Var) int {

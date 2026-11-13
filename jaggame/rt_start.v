@@ -1,6 +1,6 @@
 module jaggame
 
-import jagkit { abs, at, imm, inc, lbl, ptr }
+import jagkit { abs, at, imm, inc, ind, lbl, ptr }
 
 // The machine side of the runtime: start-up, the frame interrupt, the
 // drawing of text rows, the colours and the sound.
@@ -163,8 +163,10 @@ fn (g &Game) emit_text_routines(mut m jagkit.M68k, layout Layout) {
 		rows := m.unique('rt.row')
 		cell := m.unique('rt.cell')
 		clean := m.unique('rt.clean')
+		skip := m.unique('rt.skip_cell')
 		cols := t.columns
 		m.lea(lbl('${t.name}_dirty'), a0)
+		m.lea(lbl('${t.name}_stale'), a1)
 		m.lea(lbl('${t.name}_cells'), a2)
 		m.move(.l, a2, a4)
 		m.lea(abs(layout.text[i]), a3)
@@ -174,19 +176,35 @@ fn (g &Game) emit_text_routines(mut m jagkit.M68k, layout Layout) {
 		m.move(.b, inc(a0), d0)
 		m.b(.eq, clean)
 		m.clr(.b, at(-1, a0))
-		m.move(.w, imm(cols - 1), d5)
+		m.move(.w, imm(cols / 4 - 1), d5)
 		m.label(cell)
-		m.moveq(0, d0)
-		m.move(.b, inc(a2), d0)
-		m.lsl(.w, imm(3), d0)
-		m.lea(lbl('rt.font'), a6)
-		m.add(.l, d0, a6)
-		for line in 0 .. 8 {
-			m.move(.b, inc(a6), at(line * cols, a3))
+		// Four cells at a time: most groups have nothing to draw.
+		m.move(.l, ind(a1), d0)
+		m.b(.eq, skip)
+		for k in 0 .. 4 {
+			next_cell := m.unique('rt.next_cell')
+			m.tst(.b, at(k, a1))
+			m.b(.eq, next_cell)
+			m.clr(.b, at(k, a1))
+			m.moveq(0, d0)
+			m.move(.b, at(k, a2), d0)
+			m.lsl(.w, imm(3), d0)
+			m.lea(lbl('rt.font'), a6)
+			m.add(.l, d0, a6)
+			for line in 0 .. 8 {
+				m.move(.b, inc(a6), at(line * cols + k, a3))
+			}
+			m.label(next_cell)
 		}
-		m.add(.l, imm(1), a3)
+		m.label(skip)
+		m.lea(at(4, a1), a1)
+		m.lea(at(4, a2), a2)
+		m.lea(at(4, a3), a3)
 		m.dbra(d5, cell)
+		m.bra('rt.next_${rows}')
 		m.label(clean)
+		m.lea(at(cols, a1), a1)
+		m.label('rt.next_${rows}')
 		m.lea(at(cols, a4), a4)
 		m.move(.l, a4, a2)
 		m.lea(at(8 * cols, a5), a5)
