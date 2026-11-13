@@ -142,3 +142,32 @@ pub fn (img &Image) field_address(name string, index int, field string) !u32 {
 	}
 	return img.symbols[img.low.vars[var].label] + u32(index * r.size + r.offsets[f])
 }
+
+// address_of_element is the address in memory of an element of a global
+// variable or array, and its size in bytes, for a test that sets one by
+// hand (the bytes are big-endian).
+pub fn (img &Image) address_of_element(name string, index int) !(u32, int) {
+	var := img.low.var_named(name)
+	if var < 0 || img.low.vars[var].kind == .records {
+		return error('there is no global variable, array or table `${name}`')
+	}
+	if index < 0 || index >= img.low.vars[var].len {
+		return error('`${name}` has no element ${index}')
+	}
+	size := img.low.vars[var].typ.size()
+	return img.symbols[img.low.vars[var].label] + u32(index * size), size
+}
+
+// field_size is the size in bytes of a field of an array of records.
+pub fn (img &Image) field_size(name string, field string) !int {
+	var := img.low.var_named(name)
+	if var < 0 || img.low.vars[var].kind != .records {
+		return error('there is no array of records `${name}`')
+	}
+	r := img.low.records[img.low.vars[var].record]
+	f := r.field_index(field)
+	if f < 0 {
+		return error('`${name}` has no field `${field}`')
+	}
+	return r.fields[f].typ.size()
+}

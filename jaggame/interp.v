@@ -422,3 +422,42 @@ fn (mut it Interpreter) put_label(label string, index int, raw i64) ! {
 	}
 	it.memory[var][index] = it.low.vars[var].typ.wrap(raw)
 }
+
+// set_element changes an element of a global array, as a test feeds the
+// program an input or moves something by hand. The raw value is cut to the
+// element's type.
+pub fn (mut it Interpreter) set_element(name string, index int, raw i64) ! {
+	var := it.low.var_named(name)
+	if var < 0 || it.low.vars[var].kind != .array {
+		return error('there is no global array `${name}`')
+	}
+	if index < 0 || index >= it.low.vars[var].len {
+		return error('`${name}` has no element ${index}')
+	}
+	it.memory[var][index] = it.low.vars[var].typ.wrap(raw)
+}
+
+// set_field changes a field of an element of an array of records, as
+// `set_element` does.
+pub fn (mut it Interpreter) set_field(name string, index int, field string, raw i64) ! {
+	var := it.low.var_named(name)
+	if var < 0 || it.low.vars[var].kind != .records {
+		return error('there is no array of records `${name}`')
+	}
+	r := it.low.records[it.low.vars[var].record]
+	f := r.field_index(field)
+	if f < 0 || index < 0 || index >= it.low.vars[var].len {
+		return error('`${name}` has no element ${index} with a field `${field}`')
+	}
+	it.memory[var][index * r.fields.len + f] = r.fields[f].typ.wrap(raw)
+}
+
+// array is a copy of the raw values of a global array or table, for a test
+// that looks at all of it at once.
+pub fn (it &Interpreter) array(name string) ![]i64 {
+	var := it.low.var_named(name)
+	if var < 0 || it.low.vars[var].kind == .records {
+		return error('there is no global variable, array or table `${name}`')
+	}
+	return it.memory[var].clone()
+}
