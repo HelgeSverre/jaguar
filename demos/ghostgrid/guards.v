@@ -2,7 +2,7 @@
 // are in and the cone of light each throws on the floor.
 //
 // A guard is an actor (jaggame.Actors) with a position, a facing and the
-// fields below, and one state machine, `guard_ai`, runs all four:
+// fields below, and one state machine, `guard_ai`, runs all of them:
 //
 //   patrol      walk the route, waiting a little at each waypoint
 //   suspicious  saw a flicker or heard a noise: stop, look at the spot, walk to it, look around
@@ -11,26 +11,16 @@
 //   return      walk back to the route
 //
 // Guards walk the route along the centres of tiles, following a field of
-// directions that was worked out when the game was built, so they cannot
-// be stuck on a corner. When they leave the route (to look at a noise, to
+// directions that was worked out when the game was built (world.v), so they
+// cannot be stuck on a corner. When they leave the route (to look at a noise, to
 // chase) they walk freely with `move_and_slide`, and `return` goes back to
 // a tile centre and rejoins the field.
 module main
 
 import jaggame
 
-const guard_count = 4
-const sight_range = 64 // pixels a cone reaches: four tiles
-const sight_half = 24 // angle units either side of the facing: 34 degrees
 const alert_after = 24 // frames in a cone before a suspicious guard is sure
 const lose_after = 50 // frames without sight before a chasing guard searches
-const cone_slots = 32 // cells a cone list holds
-
-// the waypoint markers of the depot, in route order: a guard's route is the
-// names `g<guard>w<k>` for k = 0, 1, ...
-const route_names = [['g0w0', 'g0w1'], ['g1w0', 'g1w1'], ['g2w0'],
-	['g3w0', 'g3w1', 'g3w2', 'g3w3']]
-const post_facing = [jaggame.angle_right, jaggame.angle_down, jaggame.angle_up, jaggame.angle_right]
 
 // guard_fields are what a guard's record holds besides what every actor has.
 fn guard_fields() []jaggame.Field {
@@ -45,71 +35,6 @@ fn guard_fields() []jaggame.Field {
 		jaggame.Field{'cone_x', .i16}, jaggame.Field{'cone_y', .i16},
 		jaggame.Field{'cone_f', .u8}, jaggame.Field{'cone_n', .u8}]
 	// guide:end
-}
-
-// passable is whether a guard can walk on a character of the map.
-fn passable(ch u8) bool {
-	return ch != `#` && ch != `c`
-}
-
-// flow_field is, for every tile of the room, the direction (0 right, 1
-// down, 2 left, 3 up) of the first step of a shortest walk to the target
-// tile; 255 at the target itself and where there is no way. Found by a
-// breadth-first search from the target.
-fn flow_field(rows []string, target jaggame.Point) []int {
-	mut dist := []int{len: room_cols * room_rows, init: -1}
-	mut field := []int{len: room_cols * room_rows, init: 255}
-	mut queue := [target]
-	dist[target.y * room_cols + target.x] = 0
-	mut head := 0
-	steps := [jaggame.Point{1, 0}, jaggame.Point{0, 1}, jaggame.Point{-1, 0},
-		jaggame.Point{0, -1}]
-	for head < queue.len {
-		here := queue[head]
-		head++
-		for d, step in steps {
-			next := jaggame.Point{here.x + step.x, here.y + step.y}
-			if next.x < 0 || next.y < 0 || next.x >= room_cols || next.y >= room_rows {
-				continue
-			}
-			cell := next.y * room_cols + next.x
-			if !passable(rows[next.y][next.x]) || dist[cell] >= 0 {
-				continue
-			}
-			dist[cell] = dist[here.y * room_cols + here.x] + 1
-			field[cell] = (d + 2) % 4 // from `next`, the way back to `here`
-			queue << next
-		}
-	}
-	return field
-}
-
-// Routes is what the build works out about the guards' routes.
-struct Routes {
-mut:
-	first  []int // the number of each guard's first waypoint
-	count  []int
-	tx     []int // the tile of every waypoint
-	ty     []int
-	fields []int // a field of directions for every waypoint, one after the other
-}
-
-// routes reads the waypoint markers of the depot and works out the fields.
-fn routes(mut game jaggame.Game, room jaggame.Room) Routes {
-	rows := depot.trim('\n').split('\n')
-	mut r := Routes{}
-	for names in route_names {
-		r.first << r.tx.len
-		r.count << names.len
-		for name in names {
-			found := game.markers_of(room, name)
-			point := if found.len > 0 { found[0] } else { jaggame.Point{1, 1} }
-			r.tx << point.x
-			r.ty << point.y
-			r.fields << flow_field(rows, point)
-		}
-	}
-	return r
 }
 
 // define_guard_functions writes what the states use: seeing, walking along
@@ -130,7 +55,7 @@ fn (mut m Mission) define_guard_functions() {
 	ptx := c.local_i32('ptx')
 	pty := c.local_i32('pty')
 	exposure := m.gf(i, 'exposure')
-	bit := jaggame.lit(1).as_(.u8).shl(i)
+	bit := jaggame.lit(1).as_(.u16).shl(i)
 
 	c.if_(m.lit.at(m.pcell).and(bit).ne(0))
 	c.set(sees, true)
@@ -268,12 +193,13 @@ fn (mut m Mission) define_guard_functions() {
 	m.define_cone()
 }
 
-// define_cone writes `light_cone` and `show_tile`: the tiles a guard's cone
-// reaches are lit on the floor. A guard's cone is a list of cells that the
-// build worked out for the tile it stands on and the way it faces
-// (`view_cells`, walls taken into account), and a byte for each tile (`lit`)
-// says which guards' cones are on it; a tile is drawn lit while any
-// guard's bit is set. Moving a cone changes only the tiles that are in one
+// define_cone writes `light` and `light_cone`: the tiles a cone reaches are lit
+// on the floor. A cone is a list of cells that the build worked out (world.v;
+// walls taken into account) for the tile a guard stands on and the way it
+// faces, or for a camera's position in its sweep. A cone has a source number
+// (a guard's number, or 4 and up for a camera) and a byte of `lit` for each
+// tile says which sources' cones are on it; a tile is drawn lit while any
+// source's bit is set. Moving a cone changes only the tiles that are in one
 // list and not in the other.
 fn (mut m Mission) define_cone() {
 	mut game := m.game
@@ -290,32 +216,23 @@ fn (mut m Mission) define_cone() {
 	c.end() // moved or turned
 
 	// guide:gg_cone
-	c = p.define(m.cone)
-	i := m.cone.arg('i')
-	f := c.local_u8('f')
+	c = p.define(m.light)
+	src := m.light.arg('src')
+	key := m.light.arg('key')
+	old_n := m.light.arg('old_n')
 	k := c.local_u16('k')
 	n := c.local_u8('n')
-	gx := c.local_i32('gx')
-	gy := c.local_i32('gy')
-	key := c.local_u16('key')
-	start := c.local_u16('start')
+	start := c.local_u32('start')
 	cell := c.local_u16('cell')
-	slot := c.local_u16('slot')
-	bit := c.local_u8('bit')
-	marked := c.local_u8('marked')
-	bits := c.local_u8('bits')
-	old_n := c.local_u8('old_n')
+	bit := c.local_u16('bit')
+	marked := c.local_u16('marked')
+	bits := c.local_u16('bits')
 	first := c.local_u16('first')
-	c.set(f, m.guards.face(i).shr(6))
-	c.set(gx, m.gcx(i).shr(4))
-	c.set(gy, m.gcy(i).shr(4))
-	c.set(bit, jaggame.lit(1).as_(.u8).shl(i))
-	c.set(marked, bit.shl(4))
-	c.set(key, gy.mul(room_cols).add(gx).as_(.u16).shl(2).add(f.as_(.u16)))
-	c.set(start, m.view_at.at(key))
+	c.set(bit, jaggame.lit(1).as_(.u16).shl(src))
+	c.set(marked, bit.shl(8))
+	c.set(start, m.pool_base.at(game.room_number).add(m.view_at.at(key)))
 	c.set(n, m.view_len.at(key))
-	c.set(old_n, m.gf(i, 'cone_n'))
-	c.set(first, i.mul(cone_slots).as_(.u16))
+	c.set(first, src.mul(cone_slots).as_(.u16))
 
 	// Mark the cells of the new cone, so that the cells that stay are not
 	// drawn twice.
@@ -334,7 +251,7 @@ fn (mut m Mission) define_cone() {
 	c.set(bits, bits.and(bit.not()))
 	c.set(m.lit.at(cell), bits)
 
-	c.if_(bits.and(0x0f).eq(0))
+	c.if_(bits.and(0x7f).eq(0))
 	game.set_cell(mut c, cell, m.dim_of.at(game.tile_cell(cell))) // no cone is on it any more
 	c.end() // dark
 	c.end() // gone
@@ -342,26 +259,39 @@ fn (mut m Mission) define_cone() {
 
 	// The cells that are lit now and were not; the list is kept for next time.
 	c.for_(k, 0, n)
-	c.set(slot, start.add(k))
-	c.set(cell, m.pool_cell.at(slot))
+	c.set(cell, m.pool_cell.at(start.add(k)))
 	c.set(bits, m.lit.at(cell))
 
 	c.if_(bits.and(bit).eq(0))
 
-	c.if_(bits.and(0x0f).eq(0))
+	c.if_(bits.and(0x7f).eq(0))
 	game.set_cell(mut c, cell, m.glow_of.at(game.tile_cell(cell))) // the first cone on it
 	c.end() // lit
 	c.set(bits, bits.or_(bit))
 	c.end() // new
 	c.set(m.lit.at(cell), bits.and(marked.not()))
-	c.set(m.old_cell.at(first.add(k)), m.pool_cell.at(slot))
+	c.set(m.old_cell.at(first.add(k)), cell)
 	c.end() // each new cell
-	c.set(m.gf(i, 'cone_n'), n)
+	c.ret(n)
+	// guide:end
+
+	// light_cone: work out a guard's cone, from the tile it stands on and
+	// the way it faces.
+	c = p.define(m.cone)
+	i := m.cone.arg('i')
+	f := c.local_u8('f')
+	gx := c.local_i32('gx')
+	gy := c.local_i32('gy')
+	c.set(f, m.guards.face(i).shr(6))
+	c.set(gx, m.gcx(i).shr(4))
+	c.set(gy, m.gcy(i).shr(4))
+	c.set(m.gf(i, 'cone_n'), m.light.call(i,
+		game.room_number.as_(.u16).mul(keys_per_room).add(gy.mul(room_cols).add(gx).as_(.u16).shl(2)).add(f.as_(.u16)), m.gf(i,
+		'cone_n')))
 	c.set(m.gf(i, 'cone_x'), gx.as_(.i16))
 	c.set(m.gf(i, 'cone_y'), gy.as_(.i16))
 	c.set(m.gf(i, 'cone_f'), f)
 	c.set(m.gf(i, 'stale'), false)
-	// guide:end
 }
 
 // spot_figure makes the place where the figure is the guard's spot.
@@ -458,19 +388,12 @@ fn (mut m Mission) define_states() {
 	c.end() // in view
 	c.call(m.chase, i, m.gf(i, 'spot_x').as_(.i32), m.gf(i, 'spot_y').as_(.i32), 2.0)
 
-	c.if_(jaggame.overlap(jaggame.Rect{
-		x: m.guards.x(i).as_(.i16).add(2)
-		y: m.guards.y(i).as_(.i16).add(3)
-		w: 12
-		h: 12
-	}, jaggame.Rect{
-		x: m.px.as_(.i16).add(2)
-		y: m.py.as_(.i16).add(3)
-		w: 12
-		h: 12
-	}))
+	c.if_(m.guards.x(i).sub(m.px).abs().lt(13.0).both(m.guards.y(i).sub(m.py).abs().lt(13.0)))
+
+	c.if_(jaggame.overlap(m.guards.sprite(i).rect(catch_box), m.player.rect(catch_box)))
 	c.set(m.phase, 2) // caught
 	c.end() // touched the figure
+	c.end() // near it
 
 	c.if_(m.gf(i, 'lost').gt(lose_after))
 	c.to('search')
@@ -537,6 +460,7 @@ fn (mut m Mission) define_states() {
 		}
 		if name == 'alert' {
 			game.play(mut e, 'spotted')
+			e.inc(m.alerts)
 		}
 	}
 	// guide:end

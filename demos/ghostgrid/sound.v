@@ -68,6 +68,33 @@ fn (mut m Mission) define_sounds() {
 		decay:    3
 		steps:    [jaggame.SfxStep{660, 0.05}, jaggame.SfxStep{990, 0.1}]
 	})
+	game.sfx('denied', jaggame.Sfx{
+		priority: 5
+		volume:   1500
+		decay:    3
+		steps:    [jaggame.SfxStep{180, 0.09}, jaggame.SfxStep{140, 0.12}]
+	})
+	game.sfx('chip', jaggame.Sfx{
+		priority: 6
+		volume:   1800
+		decay:    3
+		steps:    [jaggame.SfxStep{1320, 0.05}, jaggame.SfxStep{1760, 0.09}]
+	})
+	game.sfx('door', jaggame.Sfx{
+		noise:    true
+		priority: 6
+		volume:   1500
+		decay:    3
+		slide:    3
+		steps:    [jaggame.SfxStep{400, 0.12}, jaggame.SfxStep{250, 0.12}]
+	})
+	game.sfx('timeup', jaggame.Sfx{
+		priority: 9
+		volume:   2400
+		decay:    5
+		steps:    [jaggame.SfxStep{300, 0.2}, jaggame.SfxStep{300, 0.05},
+			jaggame.SfxStep{200, 0.4}]
+	})
 	// guide:end
 
 	// guide:gg_tracks
