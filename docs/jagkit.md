@@ -139,7 +139,15 @@ m.bra('sleep')
 
 The example is built for NTSC only. To support both standards, test bit 4 of `joybuts` (set on NTSC machines) and pick between two sets of values and display lists; `start_up` in [`demos/wirewing/flight.v`](../demos/wirewing/flight.v) does this.
 
-**Memory.** The Jaguar has 2 MB of RAM from address 0. The demos load at `0x4000`, let the stack grow down from there, and place buffers at round addresses above the image (`0x80000` and up). Nothing checks that your image stays below your buffers; compare `payload.len` yourself if it gets large.
+**Memory.** The Jaguar has 2 MB of RAM from address 0. The demos load at `0x4000`, let the stack grow down from there, and place buffers at round addresses above the image (`0x80000` and up). Nothing on the Jaguar stops a program from drawing over its own code, so check the layout at build time with `jagkit.check_regions`. It reports regions that overlap or run past the end of memory:
+
+```v
+payload := m.assemble()!
+jagkit.check_regions([
+	jagkit.Region{'image', load_address, payload.len},
+	jagkit.Region{'display list', list_address, list_bytes},
+])!
+```
 
 ## The frame interrupt
 
@@ -320,9 +328,9 @@ The destination is always the second operand.
 
 | Rule | Consequence |
 |---|---|
-| Every jump has a **delay slot** | the instruction after `jr` or `jump` always executes, taken or not; put a useful instruction or `nop` there |
+| Every jump has a **delay slot** | the instruction after `jr` or `jump` always executes, taken or not; put a useful instruction or `nop` there. The assembler reports a `movei` or a jump in a delay slot |
 | `jr` reaches 16 words back, 15 ahead | the assembler reports a `jr` that is too far; for longer jumps load the address with `movei_label` and use `jump` |
-| `movei` is three words | never put it in a delay slot |
+| `movei` is three words | it cannot go in a delay slot |
 | Quick values are small | `addq`/`subq`/shifts take 1..32, `moveq` 0..31, `cmpq` −16..15; the assembler reports others |
 | `cmp a, b` computes `b − a` | afterwards `cs` means b < a unsigned, `mi` means b < a signed |
 | `addqt`/`subqt` leave the flags alone | use them in a delay slot after a flag-setting instruction |
@@ -344,7 +352,7 @@ m.move(.l, imm(jagkit.gpu_ram), abs(jagkit.g_pc))
 m.move(.l, imm(jagkit.risc_go), abs(jagkit.g_ctrl))
 ```
 
-Check `code.len` against `jagkit.gpu_ram_size` or `dsp_ram_size` at build time.
+`assemble()` reports a program that runs past the end of the GPU's or the DSP's RAM.
 
 ### Sharing values with the 68000
 

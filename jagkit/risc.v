@@ -67,6 +67,7 @@ mut:
 	labels   map[string]u32
 	fixups   []RiscFixup
 	problems []string
+	slot     int = -1 // word index of the delay slot of the last jump
 }
 
 // new_risc starts a program that will run at `origin`.
@@ -115,6 +116,14 @@ pub fn (mut r Risc) assemble() ![]u8 {
 			r.words[f.index + 2] = u16(target >> 16)
 		}
 	}
+	// A program that starts in the RAM of the GPU or the DSP has to end
+	// there as well.
+	for ram in [[gpu_ram, u32(gpu_ram_size)], [dsp_ram, u32(dsp_ram_size)]] {
+		end := ram[0] + ram[1]
+		if r.origin >= ram[0] && r.origin < end && r.here() > end {
+			r.problems << 'the program ends ${r.here() - end} bytes past the end of its RAM at 0x${end:06x}'
+		}
+	}
 	if r.problems.len > 0 {
 		return error('RISC program at 0x${r.origin:06x}:\n  ' + r.problems.join('\n  '))
 	}
@@ -124,6 +133,15 @@ pub fn (mut r Risc) assemble() ![]u8 {
 		bytes << u8(w)
 	}
 	return bytes
+}
+
+// not_in_slot reports an instruction that cannot follow a jump: the
+// processor executes the instruction after a jump before it leaves, and
+// neither a three-word `movei` nor another jump survives that.
+fn (mut r Risc) not_in_slot(name string) {
+	if r.words.len == r.slot {
+		r.problems << '${name} at 0x${r.here():06x} is in the delay slot of a jump'
+	}
 }
 
 fn (mut r Risc) emit(opcode int, first int, second Reg) {
@@ -303,6 +321,7 @@ pub fn (mut r Risc) moveq(n int, dst Reg) {
 // movei loads any 32-bit value. It takes three words and must not sit in
 // the delay slot of a jump.
 pub fn (mut r Risc) movei(value u32, dst Reg) {
+	r.not_in_slot('movei')
 	r.emit(38, 0, dst)
 	r.words << u16(value)
 	r.words << u16(value >> 16)
@@ -376,17 +395,21 @@ pub fn (mut r Risc) store_r14(src Reg, offset int) {
 
 // jr jumps to a label at most 16 words back or 15 words ahead.
 pub fn (mut r Risc) jr(cond Cond, name string) {
+	r.not_in_slot('jr')
 	r.fixups << RiscFixup{
 		index: r.words.len
 		label: name
 		jump:  true
 	}
 	r.words << u16(53 << 10) | u16(cond)
+	r.slot = r.words.len
 }
 
 // jump goes to the address in a register.
 pub fn (mut r Risc) jump(cond Cond, addr Reg) {
+	r.not_in_slot('jump')
 	r.words << u16(52 << 10) | (u16(addr) << 5) | u16(cond)
+	r.slot = r.words.len
 }
 
 // nop does nothing.

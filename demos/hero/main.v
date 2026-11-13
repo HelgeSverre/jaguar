@@ -82,6 +82,16 @@ fn build() !Built {
 	g.pictures()!
 	g.profiles()!
 	payload := m.assemble()!
+	// Nothing the program writes to may lie on top of the image or of
+	// anything else.
+	jagkit.check_regions([
+		jagkit.Region{'image', load_address, payload.len},
+		jagkit.Region{'display list a', list_a, 32 + list_slots * 32},
+		jagkit.Region{'display list b', list_b, 32 + list_slots * 32},
+		jagkit.Region{'text', text_address, text_bytes},
+		jagkit.Region{'echo', echo_address, echo_mask + 2},
+		jagkit.Region{'note state', note_state, max_notes},
+	])!
 	return Built{
 		image:   jagkit.jag_image(load_address, m.address_of('entry'), payload)
 		symbols: m.symbols()

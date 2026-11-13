@@ -239,6 +239,16 @@ fn build() !Built {
 	}
 
 	payload := m.assemble()!
+	// Nothing the program writes to may lie on top of the image or of
+	// anything else.
+	jagkit.check_regions([
+		jagkit.Region{'image', load_address, payload.len},
+		jagkit.Region{'display list', list_address, list_bytes},
+		jagkit.Region{'text', text_address, text_columns * text_rows * 8},
+		jagkit.Region{'scroller', strip_address, strip_bytes * strip_lines},
+		jagkit.Region{'buffer a', buffer_a, 0x10000},
+		jagkit.Region{'buffer b', buffer_b, 0x10000},
+	])!
 	return Built{
 		image:   jagkit.jag_image(load_address, m.address_of('entry'), payload)
 		symbols: m.symbols()

@@ -9,6 +9,7 @@ A V module for writing Atari Jaguar programs in V: you call it from an ordinary 
 | `objects.v` | display lists from a list of `Bitmap` descriptions |
 | `hardware.v` | register addresses and NTSC/PAL display timing |
 | `image.v` | the `.jag` writer, big-endian helpers, RGB to CRY |
+| `memory.v` | a build-time check that buffers, lists and the image do not overlap |
 | `font.v` | an 8x8 font |
 | `synth.v` | a three-voice DSP synthesizer |
 

@@ -102,7 +102,7 @@ nop
 stop #$2000'
 
 const expected_risc = 'movei #12345678,r1
-movei #00f0305c,r2
+movei #00f03060,r2
 add r1,r2
 addq #32,r3
 addqt #1,r3
@@ -140,8 +140,10 @@ load (r14+4),r2
 store r2,(r14+128)
 jr ne,f0304e
 nop
-jr f0305c
+jr f03060
+nop
 jump eq,(r7)
+nop
 nop
 mtoi r21,r13
 store r15,(r23)'
@@ -261,7 +263,9 @@ fn test_risc_instructions_disassemble_as_written() {
 	g.jr(.ne, 'near')
 	g.nop()
 	g.jr(.always, 'data')
+	g.nop()
 	g.jump(.eq, .r7)
+	g.nop()
 	g.nop()
 	g.align_long()
 	g.label('data')
