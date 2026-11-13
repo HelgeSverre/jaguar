@@ -160,11 +160,12 @@ gpu.jr(.ne, 'next')
 gpu.addqt(2, target)           // delay slot
 ```
 
-`demos/maw` and `demos/wirewing` are whole games built this way, and the `.jag` files next to them are their output, so there is something to run out of the box:
+`demos/maw`, `demos/wirewing` and `demos/hero` are whole games built this way, and the `.jag` files next to them are their output, so there is something to run out of the box:
 
 ```sh
 just run demos/maw.jag        # play one
 just run demos/wirewing.jag
+just run demos/hero.jag
 just demo maw                 # rebuild an image from its V source first, then play
 ```
 
@@ -182,7 +183,14 @@ WIREWING (`demos/wirewing`, an 8 KB image) is a wireframe flying game. Bank with
   <img src="docs/screenshots/wirewing-crash.png" width="49%" alt="WIREWING after a crash: WHERE DID YOU LEARN TO FLY?">
 </p>
 
-Both games have only ever run in this emulator. Real hardware has not seen them.
+Jaguar Hero (`demos/hero`) is a five-lane rhythm game. Five original songs, from a 113 BPM synthwave anthem to a 180 BPM finale, are written as patterns in `songs.v` and played by a ten-voice DSP synthesizer with drums, bass, distorted rhythm guitar, keys, twin leads and a stereo echo. Each chart is derived from the song's lead guitar, so what you press is what you hear: miss a note and the guitar drops out. Play the lanes with keys 1 to 5 (or Left, Up, Right, B, A on a pad), pause with Enter. Its test has a robot read the chart out of memory and play the finale perfectly inside the frame budget.
+
+<p align="center">
+  <img src="docs/screenshots/jaguar-hero-title.png" width="49%" alt="Jaguar Hero title screen">
+  <img src="docs/screenshots/jaguar-hero-play.png" width="49%" alt="Jaguar Hero mid-song: a 150 note streak on a neon highway">
+</p>
+
+The games have only ever run in this emulator. Real hardware has not seen them.
 
 ## How it is put together
 
