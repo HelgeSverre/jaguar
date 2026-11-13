@@ -1613,3 +1613,34 @@ fn test_the_title_shows_the_backdrop_and_the_mission_does_not() {
 	run_frames(mut s, 30, 0)
 	assert b.p.m.peek32(mailbox + 40) == stopped, 'and is left alone in the mission'
 }
+
+// save_picture writes what the emulator shows as a PNG.
+fn save_picture(b &Booted, path string) ! {
+	pic := b.p.picture()
+	mut canvas := jaggame.new_canvas(pic.width, pic.height)
+	for y in 0 .. pic.height {
+		for x in 0 .. pic.width {
+			px := pic.at(x, y)
+			canvas.put(x, y, int((px >> 16) & 0xff), int((px >> 8) & 0xff), int(px & 0xff), 255)
+		}
+	}
+	canvas.save(path)!
+}
+
+// The screenshots of the guide, made from the real image when
+// GHOSTGRID_SHOTS names a directory: the title, and the result of the robot's mission.
+fn test_the_screenshots_of_the_title_and_the_result() {
+	dir := os.getenv('GHOSTGRID_SHOTS')
+	if dir == '' {
+		return
+	}
+	mut t := boot(false)
+	run_frames_booted(mut t, 110)
+	save_picture(t, os.join_path(dir, 'ghostgrid-title.png'))!
+	plans := make_plans(Options{}) or {
+		assert false, 'no plan'
+		return
+	}
+	b := finish_mission(plans, false)
+	save_picture(b, os.join_path(dir, 'ghostgrid-result.png'))!
+}

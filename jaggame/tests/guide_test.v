@@ -303,7 +303,7 @@ fn guide_sources() []string {
 	}
 	files << os.join_path(dir, '..', '..', 'demos', 'hello2', 'main.v')
 	files << os.join_path(dir, '..', '..', 'demos', 'hello2', 'hello2_test.v')
-	for name in ['main.v', 'mission.v', 'guards.v'] {
+	for name in ['main.v', 'mission.v', 'guards.v', 'scenes.v', 'sound.v'] {
 		files << os.join_path(dir, '..', '..', 'demos', 'ghostgrid', name)
 	}
 	files << os.join_path(dir, '..', '..', 'demos', 'ghostgrid', 'ghostgrid_test.v')

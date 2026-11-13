@@ -2,9 +2,9 @@
 
 `jaggame` is a V module for writing Atari Jaguar programs without writing assembly. A program *describes* its variables and logic to a builder; the builder checks the description, compiles it to 68000 code and writes a `.jag` image. The same description also runs in an interpreter written in V, and the two must agree.
 
-This guide grows with the module. Chapter 1 is the language: the programs there compute values that tests read back. Chapter 2 is the runtime (the frame loop, video, sprites, pad, text, timers), built around the demo [`hello2`](../../demos/hello2/main.v). Chapter 3 is assets, rooms, the camera and collision, built around [`demos/ghostgrid`](../../demos/ghostgrid/main.v). Chapter 4 is state machines, actors, line of sight, cones and hearing, built around the guards of the same demo. Scenes and real sound come in later chapters. [`design.md`](design.md) is the plan and the contract; [`reference.md`](reference.md) lists every public name with its comment.
+This guide grows with the module. Chapter 1 is the language: the programs there compute values that tests read back. Chapter 2 is the runtime (the frame loop, video, sprites, pad, text, timers), built around the demo [`hello2`](../../demos/hello2/main.v). Chapter 3 is assets, rooms, the camera and collision, built around [`demos/ghostgrid`](../../demos/ghostgrid/main.v). Chapter 4 is state machines, actors, line of sight, cones and hearing, built around the guards of the same demo. Chapter 5 is scenes, menus, sound and music, save data and the GPU backdrop, which turn the mission into a game with a title, a menu and a result. [`design.md`](design.md) is the plan and the contract; [`reference.md`](reference.md) lists every public name with its comment.
 
-Every V block in this guide is quoted from tested code, and every text block is output that a test produces. A V block is named by a comment on the line above it, `<!-- guide:NAME -->`, and must be a run of lines from the region of that name: the lines between `// guide:NAME` and `// guide:end` in a test in [`jaggame/tests`](../../jaggame/tests), or in `demos/hello2/main.v` or its test, or in `demos/ghostgrid/main.v`, `mission.v`, `guards.v` or its test. `jaggame/tests/guide_test.v` fails if a block is unnamed, names a region that does not exist, or has drifted from it.
+Every V block in this guide is quoted from tested code, and every text block is output that a test produces. A V block is named by a comment on the line above it, `<!-- guide:NAME -->`, and must be a run of lines from the region of that name: the lines between `// guide:NAME` and `// guide:end` in a test in [`jaggame/tests`](../../jaggame/tests), or in `demos/hello2/main.v` or its test, or in `demos/ghostgrid/main.v`, `mission.v`, `guards.v`, `scenes.v`, `sound.v` or its test. `jaggame/tests/guide_test.v` fails if a block is unnamed, names a region that does not exist, or has drifted from it.
 
 ## Contents
 
@@ -61,6 +61,17 @@ Every V block in this guide is quoted from tested code, and every text block is 
   - [What it costs](#what-it-costs-1)
   - [Making it fit](#making-it-fit)
   - [V traps in this slice](#v-traps-in-this-slice-1)
+- [Chapter 5: scenes, menus, sound, save data and the backdrop](#chapter-5-scenes-menus-sound-save-data-and-the-backdrop)
+  - [Scenes](#scenes)
+  - [Menus](#menus)
+  - [Sound effects](#sound-effects)
+  - [Music](#music)
+  - [Save data](#save-data)
+  - [The backdrop](#the-backdrop)
+  - [GHOSTGRID as a game](#ghostgrid-as-a-game)
+  - [Testing the game](#testing-the-game)
+  - [What it costs](#what-it-costs-2)
+  - [V traps in this slice](#v-traps-in-this-slice-2)
 
 ## Chapter 1: the language
 
@@ -541,8 +552,8 @@ Once started, the machine does nothing but wait for the vertical interrupt, whic
 
 1. the object processor is pointed at the display list that was finished last time;
 2. the pad is read into `pad` and `pad_pressed`;
-3. `rt_frame` runs: it counts the frame, moves the timers, calls the game's update, moves the animations and fades the beep;
-4. the rows of text that changed are drawn, the layers' colours are copied into the colour table and the beep's note and volume into the synthesizer;
+3. `rt_frame` runs: it counts the frame, moves the timers, calls the game's update, moves the animations, runs the scenes and ticks the sound;
+4. the rows of text that changed are drawn, the layers' colours are copied into the colour table and the sound's voice mailbox into the synthesizer;
 5. a new display list is built from the visible sprites;
 6. if another interrupt is already waiting, `missed_frames` goes up by one.
 
@@ -753,7 +764,19 @@ In hello2 the beat timer restarts itself each time it fires, which gives a regul
 
 ### A beep
 
-`game.beep(c, note, volume)` plays a short note on the sawtooth voice of the sound chip and lets it fade in about twenty frames: `note` is a MIDI note number (69 is the A at 440 Hz), `volume` a few thousand. It is **provisional**: it exists so that a game can make a sound now. Sound proper, with effects and music, is a later slice and will replace it. The synthesizer program is only started and put in the image when a game calls `beep`.
+A sound is declared and played by name. A short A that fades out, from hello2 (chapter 5 has the rest of the sound API: priorities, music, tempo):
+
+<!-- guide:beep -->
+```v
+// A short A that fades out: the A above concert pitch, 880 Hz.
+game.sfx('beep', jaggame.Sfx{
+	volume: 3000
+	decay:  3
+	steps:  [jaggame.SfxStep{880, 0.4}]
+})
+```
+
+The update plays it with `game.play(mut c, 'beep')`. The synthesizer is only started and put in the image when a game declares a sound.
 
 ### Mistakes in the description
 
@@ -833,7 +856,7 @@ assert differences.len == 0, differences.join('\n')
 
 `demos/hello2/hello2_test.v` runs this on NTSC and PAL, over 400 frames in which the ball goes in every direction and fire is pressed once. It then checks the same things in the picture: that the ball is where its variable says, that it follows the pad, that the layers come in order, that the small ball is cut at the top (the display list says twenty of its lines are left), that the numbers are right at 60 frames and that 2.5 seconds are five beats on both standards.
 
-`jaggame/rt_*_test.v` test the pieces on their own: layer order, clipping on both standards, scale, flip, 8-bit pictures, frames, the list that alternates, animation timing, timers, the pad (every button), text, the beep, a normal load that misses no frames and an update that is too slow and does.
+`jaggame/rt_*_test.v` test the pieces on their own: layer order, clipping on both standards, scale, flip, 8-bit pictures, frames, the list that alternates, animation timing, timers, the pad (every button), text, a normal load that misses no frames and an update that is too slow and does.
 
 ### What a frame costs
 
@@ -1891,7 +1914,7 @@ for i in 0 .. 4 {
 }
 ```
 
-**Second emulator.** `scripts/crosscheck/run.sh 300 demos/ghostgrid.jag` runs the image in Virtual Jaguar. With input (`front` with pad holds, the same holds as `vjag_test run --press`): the figure walks right from frame 40 for 70 frames and walks into the first guard, and the frames at 90 (calm), 150 (the guard has seen the figure: the question mark and CAUTION), 190 (the guard chases: the exclamation mark, ALERT!), 230 (caught: the end screen) and 300 (after A, the room loading again) are identical to this emulator's: 0.00% of the pixels differ at one fixed offset of the two pictures (Virtual Jaguar shows the whole 352-pixel window, this one the middle 325). Guards, cones, signs and the HUD match. The robot's own run was not replayed in Virtual Jaguar: `front` takes at most 16 holds and the robot's pad has about a hundred.
+**Second emulator.** `scripts/crosscheck/run.sh 300 demos/ghostgrid.jag` runs the image in Virtual Jaguar. With input (`front` with pad holds, the same holds as `vjag_test run --press`): the figure walks right from frame 40 for 70 frames and walks into the first guard, and the frames at 90 (calm), 150 (the guard has seen the figure: the question mark and CAUTION), 190 (the guard chases: the exclamation mark, ALERT!), 230 (caught: the end screen) and 300 (after A, the room loading again; since slice 5 the game starts on a title, so these holds start with the two As that reach the mission) are identical to this emulator's: 0.00% of the pixels differ at one fixed offset of the two pictures (Virtual Jaguar shows the whole 352-pixel window, this one the middle 325). Guards, cones, signs and the HUD match. The robot's own run was not replayed in Virtual Jaguar: `front` takes at most 16 holds and the robot's pad has about a hundred.
 
 ### What it costs
 
@@ -1929,3 +1952,387 @@ The measured worst case was 97,000 on average before the code generator's change
 | `jaggame.Room{...}` with positional fields only works inside the module | name the fields, or keep a `const` |
 | the formatter wraps a call inside a string interpolation and breaks a `// guide:` region's line match | keep the long messages in a variable |
 | `front` takes at most 16 holds | merge a pad's holds, or use `vjag_test --press` |
+
+## Chapter 5: scenes, menus, sound, save data and the backdrop
+
+Chapter 4 ended with one mission that starts at once. This chapter makes it a game: a title, a mission select, the mission with a pause menu, a result; sound effects and two tracks of music; the best time kept on the cartridge's EEPROM; and a backdrop that the GPU draws behind the menus. Every piece is ordinary program code, so the interpreter runs it too and the tests compare the two.
+
+### Scenes
+
+A scene is a state of a global state machine called `scene` (chapter 4), with a few additions. `game.scenes()` returns the handle; `scene(name)` returns the block for the scene's update, which runs every frame while the scene is the current one; `on_enter(name)` and `on_leave(name)` run when it begins and ends; `setup(name, steps)` is work spread over frames; `go(mut c, name)` is the transition; `start(name)` says where the game begins, after its `init`. The title shows the shape of it:
+
+<!-- guide:gg_title -->
+```v
+mut c := scenes.on_enter('title')
+m.menu_screen(mut c)
+c.set(m.msg.colour, jaggame.cry(150, 235, 255))
+m.msg.print(mut c, 7, 3, 'GHOSTGRID')
+m.msg.print(mut c, 3, 5, 'A STEALTH TRAINER')
+game.music_play(mut c, 'calm')
+
+c = scenes.scene('title')
+c.if_(scenes.time().mod(60).eq(0))
+m.msg.print(mut c, 8, 9, 'PRESS A')
+c.else_if(scenes.time().mod(60).eq(35))
+m.msg.print(mut c, 8, 9, '       ')
+c.end() // blink
+
+c.if_(game.pressed(.a).either(game.pressed(.pause)))
+game.play(mut c, 'menu_select')
+scenes.go(mut c, 'picker')
+c.end() // go on
+```
+
+- **`go` is immediate.** The scene that is left runs its `on_leave`, the new one its `on_enter`; the new scene's update (or its setup) begins next frame. The statements after `go` still run, so follow it with `ret_void()` where they should not.
+- **A setup is a step a frame.** `setup(name, steps)` runs its block once a frame for `steps` frames after the scene begins, `scenes.step` saying which; the scene's update starts when the last is done (`scenes.settled()`). A step that has to wait calls `scenes.wait(mut c)`, and the same step runs again next frame. The mission's setup waits while the room loads and then puts the figure and each guard on their start in a frame of its own:
+
+<!-- guide:gg_setup -->
+```v
+c.if_(game.loading)
+game.camera_follow(mut c, m.pcx(), m.pcy())
+c.for_(k, m.clear_at, m.clear_at.add(128).min(room_cols * room_rows))
+c.set(m.lit.at(k), 0)
+c.end() // each tile of a slice
+c.set(m.clear_at, m.clear_at.add(128))
+m.scenes.wait(mut c) // the same step again next frame
+c.ret_void()
+c.end() // loading
+c.call(m.setup, m.scenes.step)
+```
+
+- **The play scene** is those and an update:
+
+<!-- guide:gg_play -->
+```v
+mut c := scenes.on_enter('play')
+game.backdrop_hide(mut c)
+game.load_room(mut c, m.room)
+c.set(m.clear_at, 0)
+game.music_play(mut c, 'calm')
+
+c = scenes.setup('play', guard_count + 1)
+m.define_play_setup(mut c)
+
+c = scenes.scene('play')
+m.define_play_update(mut c)
+```
+
+- **Mistakes are build errors:** a scene declared twice, `go` to a scene that does not exist, an `on_leave` or a setup of a scene that does not exist, no scenes, no `start`, a `start` that names no scene. All are reported together, with the scenes that do exist.
+- **Not in this slice:** transitions that fade through the colour table (the design asked for them; a scene change is a cut), and scenes that stack (a pause is a mode of the play scene, below).
+
+### Menus
+
+`game.menu(name, layer, col, row, items)` is a list of text items on a text layer with a cursor in column `col` that the pad moves: up and down, once at the press and again and again while the button is held (0.3 seconds, then every 0.1: in seconds, so the same on NTSC and PAL), A or Pause to choose, B to go back. The menu's variables are valid for the frame in which `update` ran: `chosen` (the item, 255 for none), `backed`, `moved`, `cursor`:
+
+<!-- guide:gg_menus -->
+```v
+save:   game.save(1, ['best_time', 'least_seen'])
+picker: game.menu('picker', msg, 3, 5, items)
+pause:  game.menu('pause', msg, 5, 4, ['RESUME', 'RESTART', 'QUIT'])
+after:  game.menu('after', msg, 3, 9, ['PLAY AGAIN', 'MISSION SELECT'])
+```
+
+`open(mut c)` writes the items and puts the cursor on the first; `update(mut c)` runs every frame. The mission select (the list of missions is `mission_titles` plus a way back, so more missions are a name and a room):
+
+<!-- guide:gg_picker -->
+```v
+mut c := scenes.on_enter('picker')
+m.menu_screen(mut c)
+c.set(m.msg.colour, jaggame.cry(255, 255, 255))
+m.msg.print(mut c, 5, 1, 'SELECT MISSION')
+m.picker.open(mut c)
+c.set(m.best_up, false)
+m.save.load(mut c)
+
+c = scenes.scene('picker')
+m.picker.update(mut c)
+
+c.if_(m.picker.moved)
+game.play(mut c, 'menu_move')
+c.end() // the cursor moved
+
+// The record is read a word a frame; when it is in, the best is shown.
+c.if_(m.save.busy().invert().both(m.best_up.invert()))
+c.set(m.best_up, true)
+m.print_best(mut c, m.msg, 3, 3)
+c.end() // the record arrived
+
+c.if_(m.picker.chosen.eq(0))
+game.play(mut c, 'menu_select')
+scenes.go(mut c, 'play')
+c.else_if(m.picker.chosen.eq(mission_titles.len).either(m.picker.backed))
+game.play(mut c, 'menu_select')
+scenes.go(mut c, 'title')
+c.end() // what was chosen
+```
+
+The pause menu is a mode of the mission, not a scene: a scene change would load the room again. While `paused` is set the update runs the menu and nothing else, so the guards and the clock stand still:
+
+<!-- guide:gg_pause -->
+```v
+c.if_(m.paused)
+m.pause.update(mut c)
+
+c.if_(m.pause.moved)
+game.play(mut c, 'menu_move')
+c.end() // the cursor moved
+
+c.if_(m.pause.chosen.eq(0).either(m.pause.backed))
+game.play(mut c, 'menu_select')
+c.set(m.paused, false)
+m.msg.clear(mut c)
+c.else_if(m.pause.chosen.eq(1))
+game.play(mut c, 'menu_select')
+m.scenes.go(mut c, 'play')
+c.else_if(m.pause.chosen.eq(2))
+game.play(mut c, 'menu_select')
+m.scenes.go(mut c, 'picker')
+c.end() // what was chosen
+c.ret_void()
+c.end() // paused
+
+c.if_(game.pressed(.option).either(game.pressed(.pause)).both(m.phase.eq(0)))
+c.set(m.paused, true)
+m.msg.print(mut c, 9, 2, 'PAUSED')
+m.pause.open(mut c)
+c.ret_void()
+c.end() // pause pressed
+```
+
+### Sound effects
+
+The sound chip is a small synthesizer that runs on the DSP: six voices, two square waves and a triangle for the melody and the bass, a noise voice for drums, and a square wave and a noise voice for effects. The DSP only makes the waves; the program writes each voice's pitch and volume into the array `rt_voice` and the machine copies it to the DSP once a frame. What decides those numbers (the effects, the sequencer, the decay of the volumes) is code of the program, `rt_sound_tick` at the end of every frame, so the interpreter has it and the tests compare its `rt_voice` with the machine's.
+
+`game.sfx(name, Sfx{...})` declares an effect: steps of a pitch in Hz and a length in seconds (a pitch of 0 is silence), a volume, `decay` (the volume loses 1/2^decay of itself each frame), `slide` (the same for the pitch: a thud that drops), `noise` (the noise voice instead of the square wave) and a `priority`. `game.play(mut c, name)` starts it. An effect takes its voice if that is free or plays something of lower or equal priority, and is dropped otherwise:
+
+<!-- guide:gg_sfx -->
+```v
+// Footsteps are soft bursts of low noise; a run is louder. A knock is two
+// thuds. The tone voice has the stings: the more important a sound, the
+// higher its priority, and a sound cuts off one of lower or equal priority.
+game.sfx('step', jaggame.Sfx{
+	noise:    true
+	priority: 2
+	volume:   700
+	decay:    2
+	steps:    [jaggame.SfxStep{150, 0.06}]
+})
+game.sfx('run', jaggame.Sfx{
+	noise:    true
+	priority: 3
+	volume:   1300
+	decay:    2
+	steps:    [jaggame.SfxStep{220, 0.07}]
+})
+```
+
+(The rest of the file declares the knock, the sting when a guard sees you, the sounds of being caught and of completing a mission, and the two menu sounds.) Footsteps are a call of `play` every so often while the figure walks or runs; a crouching figure is silent:
+
+<!-- guide:gg_steps -->
+```v
+c.if_(moving.both(m.crouched.invert()))
+c.inc(m.stride)
+
+c.if_(m.stride.ge(14).either(m.stride.ge(8).both(speed.eq(run_speed)).both(game.frame.and(7).eq(4))))
+c.set(m.stride, 0)
+
+c.if_(speed.eq(run_speed))
+game.play(mut c, 'run')
+c.else_()
+game.play(mut c, 'step')
+c.end() // run or walk
+c.end() // time for a step
+c.else_()
+c.set(m.stride, 0)
+c.end() // moving
+```
+
+Mistakes are build errors: an effect declared twice, one with no steps or a volume outside 1..4000, a `play` of a name that was not declared first.
+
+### Music
+
+A track is data made when the game is built: patterns of 16 rows for four channels (lead, harmony, bass, drums), written as text. A note is a name (`A4`, `C#5`, `Bb3`; C4 is 60, A4 is 69), `.` holds what plays, `-` stops it; the drums are `k` (kick), `s` (snare), `h` (hat) and `.`. An order lists the patterns in the sequence they are played (a pattern may come again; the track starts over at the end), and the speed is in rows a second:
+
+<!-- guide:gg_tracks -->
+```v
+// The calm track: slow, in D minor, a lot of air. The alert track: twice
+// as fast, pulsing on the root and its neighbour a semitone above, with
+// the drums driving. Each pattern is sixteen rows; `.` holds a note and
+// `-` stops it.
+game.track('calm', jaggame.Track{
+	rows_per_second: 5.5
+	patterns:        [
+		jaggame.Pattern{
+			lead:    'D4 . . . . . F4 . . . A3 . . . . .'
+			harmony: 'A3 . . . . . . . G3 . . . . . . .'
+			bass:    'D2 . . . . . . . . . A1 . . . . .'
+			drums:   'k . . . . . . . . . . . h . . .'
+		},
+```
+
+(The listing is cut here: the file has four patterns for the calm track and two for the alert one.) `game.music_play(mut c, name)` starts a track unless it is the one that plays, so it can be called every frame; `music_stop` stops the music; `music_is(name)` and `music_rows()` are expressions. **The tempo is in wall-clock time:** the sequencer adds `rows_per_second / fps` to a counter each frame and plays a row for each 1.0, so the calm track plays 55 rows in ten seconds on NTSC (600 frames) and on PAL (500 frames) alike; the design's double-tick trick of `demos/hero/pal.v` is not needed with a fractional counter. GHOSTGRID follows the alarm: alert while a guard is chasing, calm when no guard is suspicious, and while one is only suspicious, whichever plays:
+
+<!-- guide:gg_music -->
+```v
+c.if_(m.level.eq(2))
+game.music_play(mut c, 'alert')
+c.else_if(m.level.eq(0))
+game.music_play(mut c, 'calm')
+c.end() // the level
+```
+
+The sound costs 2,800 cycles a frame on average above an empty game's (4,483 against 1,700 with the alert track playing) and 5,400 at most, in a frame that plays a row. The volumes' decay is machine code with a V twin (`emit_envelopes` and `run_envelopes`), since the loop in the language cost 4,000 cycles a frame.
+
+### Save data
+
+**What storage is real.** A Jaguar cartridge can carry a serial EEPROM, a 93C46 type part: 64 words of 16 bits, 128 bytes. It is on the cartridge board, wired to three addresses of JERRY's range: a read of `$F15000` is the chip select, a word write to `$F14800` sends a bit (in bit 0), a read of `$F14800` is the clock strobe that moves the next bit out, and bit 0 of `$F14000` is the data out. A `.jag` image is loaded into RAM by a tool and runs on whatever cartridge board it was loaded through, so **it has an EEPROM only if that board has one**. A game that must keep its record therefore also comes as a cartridge image, `Image.cartridge()` (GHOSTGRID writes `demos/ghostgrid.j64` next to its `.jag`): the boot area of a cartridge, a few instructions that copy the program into RAM and jump into it, and the program. It starts in this emulator and does not carry the signature a retail console checks; it has not been run on hardware. The emulator has the chip for every image, saves its contents under the image's hash in the user's data directory (`vjag/saves`) and gives it back at the next start.
+
+**What this does.** `game.save(version, fields)` declares a record of up to 16 fields of 16 bits, held in variables (`save.field(name)`, named `save_<field>` in the program). `save.store(mut c)` writes it and `save.load(mut c)` reads it; `save.busy()` is true while that goes on, because one word of the EEPROM is moved a frame, so that the wait for a real chip's write (up to 10 milliseconds a word) never keeps a frame from being ready. The record is a header word (a mark and the version), the fields and a checksum; `load` accepts it only if all three are right. **A chip that is missing, blank, written by another version or damaged gives "none":** `loaded` stays false, the fields keep their values and the game goes on. A `store` that does not read back as written sets `failed`. GHOSTGRID keeps the best time and the fewest times seen, and the result scene works them out:
+
+<!-- guide:gg_result -->
+```v
+mut c := scenes.on_enter('result')
+changed := c.local_bool('changed')
+best := m.save.field('best_time')
+least := m.save.field('least_seen')
+c.set(m.new_best, false)
+game.music_stop(mut c)
+
+c.if_(m.phase.eq(1))
+game.play(mut c, 'complete')
+
+c.if_(best.eq(0))
+c.set(best, m.secs)
+c.set(least, m.seen)
+c.set(m.new_best, true)
+c.set(changed, true)
+c.else_()
+
+c.if_(m.secs.lt(best))
+c.set(best, m.secs)
+c.set(m.new_best, true)
+c.set(changed, true)
+c.end() // a faster time
+
+c.if_(m.seen.lt(least))
+c.set(least, m.seen)
+c.set(changed, true)
+c.end() // fewer times seen
+c.end() // a first time, or not
+c.else_()
+game.play(mut c, 'caught')
+c.end() // done or caught
+
+c.if_(changed)
+m.save.store(mut c)
+c.end() // something to keep
+
+c = scenes.setup('result', 4)
+step := scenes.step
+c.if_(step.eq(0))
+m.msg.clear(mut c)
+c.set(m.msg.colour, jaggame.cry(255, 255, 255))
+
+c.if_(m.phase.eq(1))
+m.msg.print(mut c, 4, 0, 'MISSION COMPLETE')
+c.else_()
+m.msg.print(mut c, 4, 0, 'YOU WERE CAUGHT')
+c.end() // done or caught
+c.end() // title
+
+c.if_(step.eq(1))
+m.msg.print(mut c, 4, 2, 'TIME')
+m.msg.number(mut c, 10, 2, m.secs.div(60), 1)
+m.msg.print(mut c, 11, 2, ':')
+m.msg.number(mut c, 12, 2, m.secs.mod(60).div(10), 1)
+m.msg.number(mut c, 13, 2, m.secs.mod(10), 1)
+m.msg.print(mut c, 4, 3, 'SEEN')
+m.msg.number(mut c, 10, 3, m.seen, 3)
+c.end() // this mission
+
+c.if_(step.eq(2))
+m.print_best(mut c, m.msg, 4, 5)
+
+c.if_(m.new_best)
+m.msg.print(mut c, 4, 6, 'NEW BEST TIME!')
+c.end() // a record
+c.end() // the best
+c.if_(step.eq(3))
+m.after.open(mut c)
+c.end() // the menu
+
+c = scenes.scene('result')
+m.after.update(mut c)
+
+c.if_(m.after.moved)
+game.play(mut c, 'menu_move')
+c.end() // the cursor moved
+
+c.if_(m.after.chosen.eq(0))
+game.play(mut c, 'menu_select')
+scenes.go(mut c, 'play')
+c.else_if(m.after.chosen.eq(1).either(m.after.backed))
+game.play(mut c, 'menu_select')
+scenes.go(mut c, 'picker')
+c.end() // what was chosen
+```
+
+The emulator's EEPROM was changed for this: a driver clocks data out by reading `$F14800` (as Virtual Jaguar's core, which the standard driver was checked against, does); the emulator had only clocked by writing. Both work now, a byte write of the data line no longer reads the word it merges with, and a board without the chip can be modelled (`eeprom.present = false`: nothing is stored and the data line stays high).
+
+### The backdrop
+
+`game.backdrop(Backdrop{colours: [...]})` gives the game a picture that the GPU draws, as the first object of the display list: under the sprites and the text. It is a neon grid that drifts, a bright bar that sweeps across it diagonally and a gradient (the colours given, blended top to bottom, scrolling). A pixel is `grid[across + x] + grid[down + y] + band[slant + x + y] + hues[hue + y]`: three table look-ups for the brightness and one for the colour, 160 by 120 pixels of 16-bit CRY that the object processor shows at double size. Each frame the 68000 moves four numbers (language code) and tells the GPU to draw; `backdrop_show(mut c)` and `backdrop_hide(mut c)` switch it, and while it is hidden the GPU is left alone and the object is not in the list. It lives in 38,400 bytes at `0x90000` (declared with `check_regions`, as the tile buffer at `0x100000`, which the GPU program does not touch), and it costs the 68000 about 900 cycles a frame while shown. It is meant for a title or a menu: a room's tile layer is opaque and would cover it, so the title and the menus hide the room and the mission hides the backdrop:
+
+<!-- guide:gg_screen -->
+```v
+for s in 0 .. 9 {
+	game.sprite(s).hide(mut c)
+}
+game.hide_room(mut c)
+game.backdrop_show(mut c)
+m.hud.clear(mut c)
+m.status.clear(mut c)
+m.msg.clear(mut c)
+```
+
+The test reads the GPU's picture and compares it, pixel for pixel, with a V model of the formula, accepting this frame's numbers or the last frame's for each pixel (the GPU starts drawing from the top while the emulator's frame ends), as `demos/plasma`'s test does.
+
+### GHOSTGRID as a game
+
+The four scenes are `title` (the backdrop, the calm track, a blinking prompt), `picker` (the missions, the best time and the fewest times seen of the saved record), `play` (the mission; the pause menu is a mode of it) and `result` (the room as it was with the result over it: time, times seen, the best, `NEW BEST TIME!` if it is one, and a menu: play again or the mission select). The result is written a few lines a frame, in a setup of four steps; written in one frame it cost about 100,000 cycles. The title and the result:
+
+<p>
+  <img src="../screenshots/ghostgrid-title.png" width="49%" alt="The GHOSTGRID title: a drifting neon grid in blue, violet and teal behind the name">
+  <img src="../screenshots/ghostgrid-result.png" width="49%" alt="The result screen over the depot: MISSION COMPLETE, time 0:12, seen 0, NEW BEST TIME and the menu">
+</p>
+
+### Testing the game
+
+`demos/ghostgrid/ghostgrid_test.v` plays the whole game. `wait_loaded` first plays the title and the select with the pad, so every test of chapter 4 starts where a player does. The tests of this chapter: the flow title, select, BACK, title, mission (the backdrop goes off, the calm track plays), pause, resume, restart, quit to the select, on NTSC and PAL; the robot completes the mission, the result shows the time, the record is in the EEPROM (the same words in the interpreter's model of the chip), a fresh machine given the chip's contents shows the best time on its mission select, and a record with one bit flipped is none; the music follows the alarm without restarting and keeps ten seconds at 5.5 rows a second on both standards; the GPU draws on the title and stands still in the mission. `jaggame/rt_scenes_test.v`, `rt_menu_test.v`, `rt_sound_test.v` (what reaches the DSP, a calm and an alert recording that differ in energy and in pitch), `rt_save_test.v` (including the cartridge image booted and saved through) and `rt_backdrop_test.v` test the pieces on their own.
+
+The interpreter agrees with the machine across the scenes: the robot test runs it alongside from the title, and compares every variable of the two at the end, the EEPROM included (the interpreter's chip is the array `rt_eeprom`).
+
+### What it costs
+
+The slice began with a worst mission frame of 175,700 of the 221,000 cycles of an NTSC frame (79%), and a target of 60%. Most of that was not the cones: one cone is worked out a frame, as before. It was the end-of-mission screen written in one frame (about 100,000 cycles), and a cone that turned (up to 60 tiles redrawn at 1,700 cycles). The measurement now settles the interrupt after each frame, which counts the part of a frame that runs on past the emulator's frame boundary, and leaves out the frame in which a mission ends (where a scene change has its work):
+
+| | before (slice 4) | after, NTSC | after, PAL |
+|---|---|---|---|
+| calm, four patrolling guards: mean | 46,900 | 49,800 | 50,000 |
+| calm: most | 118,700 | 101,700 | 101,800 |
+| worst case (four chasing, running, cones moving): mean | 80,400 (36%) | 87,100 (39%) | 87,200 (33%) |
+| worst case: most | 175,700 (79%) | **131,700 (59.6%)** | 129,700 (48.9%) |
+| the frame that ends a mission | | 148,200 | 148,200 |
+| missed frames | 0 | 0 | 0 |
+
+The worst case now has the alert music playing. What brought it down: the result screen written over four frames; a tile redraw ring that draws at most 12 changes a frame (5 when fewer wait, so that a frame that moves a cone does not also draw all it queued; a ring of 128 waits for the rest, and `load_room` empties it); the cones' cells held as one table of cell numbers instead of columns and rows multiplied together at every access; and the volumes' decay in machine code. The picture can trail the map by a few frames after a big change, which the tests allow for.
+
+### V traps in this slice
+
+| Trap | Workaround |
+|---|---|
+| `select` and `chan` are V keywords | `picker`, `lane` |
+| `for x in 0 .. some_const {` parses the constant as a struct literal | `int(some_const)` |
+| `v -prod -o x file_test.v` runs the tests and shows what they print; `v test` hides it | use it to read a cost table |
+| `vjag_test run` takes `--press=button@frame+frames`, with the options before the path | |
+| a frame of the emulator ends in the middle of the interrupt: a test that pokes a variable then races the tail of the last frame | `Player.settle` (or `settle_cycles`, which counts the tail) before the poke |
