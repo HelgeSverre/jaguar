@@ -26,6 +26,7 @@ mut:
 	loudest int
 	samples i64
 	audio   []i16 // everything heard, when HERO_WAV asks for it
+	pad_log []u32 // the buttons held in every frame run, as `jerry.Button` bits
 }
 
 fn boot() Player {
@@ -55,6 +56,7 @@ fn (p &Player) long(name string) u32 {
 fn (mut p Player) frames(count int) {
 	mut audio := []i16{len: 4096}
 	for _ in 0 .. count {
+		p.pad_log << p.m.jerry.pads.buttons[0]
 		p.m.run_frame()
 		p.run++
 		got := p.m.drain_audio(mut audio)
@@ -244,6 +246,44 @@ fn test_a_robot_plays_the_finale_perfectly() {
 	p.tap(.a)
 	assert p.word('state') == state_select
 	eprintln('finale: ${notes} notes, score ${p.long('score')}, ${p.run - run_before} frames, busiest frame ${busiest} of ${frame_cycles} 68000 cycles')
+}
+
+// roboplay_path is the robot's run of the finale as a press script, for
+// `just roboplay hero`: the desktop app holds the buttons it names, frame
+// for frame.
+const roboplay_path = os.join_path(os.dir(@FILE), 'roboplay.press')
+
+// The robot's run of the finale, from the title to the results, is kept as a
+// press script. The script must be what the robot presses today, and played
+// on a fresh machine the way the desktop app plays `--press-file` (a press
+// applied before each frame, nothing else) it must come to the same perfect
+// score. HERO_ROBOPLAY=1 rewrites the file.
+fn test_the_robots_run_replays_from_its_press_file() {
+	mut p := boot()
+	finale := p.songs.len - 1
+	p.start_song(finale)
+	for p.word('state') == state_play {
+		p.autoplay()
+	}
+	p.frames(70)
+	script := cli.script_of(cli.presses_of(p.pad_log))
+	if os.getenv('HERO_ROBOPLAY') != '' {
+		os.write_file(roboplay_path, script)!
+	}
+	assert os.read_file(roboplay_path)! == script, '${roboplay_path} is stale: rewrite it with HERO_ROBOPLAY=1'
+	presses := cli.read_presses(roboplay_path)!
+	mut q := boot()
+	for frame in 0 .. p.run {
+		cli.apply_presses(mut q.m, presses, frame)
+		q.frames(1)
+	}
+	notes := q.word('note_count')
+	assert q.word('state') == state_results
+	assert q.word('song') == finale
+	assert q.word('perfects') == notes && q.word('misses') == 0 && q.word('strays') == 0
+	assert q.word('max_combo') == notes
+	assert q.long('score') == p.long('score')
+	eprintln('replay: ${presses.len} presses over ${p.run} frames, ${notes} perfects, score ${q.long('score')}')
 }
 
 // hero_level is the lead guitar's envelope, read out of the DSP.
