@@ -137,6 +137,41 @@ fn statements() string {
 	return ''
 }
 
+// asset_mistakes is a game whose files and map are wrong, and what the
+// build says about it, without the folder the files are in.
+fn asset_mistakes() string {
+	dir := os.join_path(os.temp_dir(), 'jaggame_guide_${os.getpid()}')
+	os.rmdir_all(dir) or {}
+	os.mkdir_all(dir) or { panic(err) }
+	mut wide := jaggame.new_canvas(40, 16)
+	wide.fill(0, 0, 40, 16, 20, 40, 60)
+	wide.save(dir + '/tiles.png') or { panic(err) }
+	// guide:asset_mistakes
+	mut game := jaggame.new_game(jaggame.Config{ sprites: 2 })
+	game.tileset(dir + '/tiles.png') // 40 pixels wide: not whole tiles of 16
+	game.png_cry('logo', dir + '/logo.png', 16, 16) // there is no such file
+	game.legend_tile(`#`, 1, jaggame.flag_solid)
+	game.legend_tile(`#`, 2, 0) // a character is given once
+	game.room('lab', '
+#####
+#..@#
+##
+')
+	game.build() or { return err.msg().replace(dir + '/', '') }
+	// guide:end
+	return ''
+}
+
+fn test_the_asset_mistakes_are_reported_together() {
+	text := asset_mistakes()
+	assert text.contains('tiles.png: the picture is 40x16 pixels, which a grid of 16x16 does not divide')
+	assert text.contains('logo.png: the file does not exist')
+	assert text.contains('the character `#` is given twice')
+	assert text.contains('row 3 has 2 characters, row 1 has 5')
+	assert text.contains('`.` at row 2, column 2 is not in the legend')
+	assert text.count('\n') == 6
+}
+
 fn test_the_game_mistakes_are_reported_together() {
 	assert game_mistakes().count('\n') == 6
 }
@@ -163,7 +198,8 @@ fn game_mistakes() string {
 
 // texts are the ```text blocks the guide may show.
 fn texts() []string {
-	return [mistakes(), listing(), expressions(), game_mistakes()]
+	return [mistakes(), listing(), expressions(), game_mistakes(),
+		asset_mistakes()]
 }
 
 struct Region {
@@ -195,6 +231,8 @@ fn guide_sources() []string {
 	}
 	files << os.join_path(dir, '..', '..', 'demos', 'hello2', 'main.v')
 	files << os.join_path(dir, '..', '..', 'demos', 'hello2', 'hello2_test.v')
+	files << os.join_path(dir, '..', '..', 'demos', 'ghostgrid', 'main.v')
+	files << os.join_path(dir, '..', '..', 'demos', 'ghostgrid', 'ghostgrid_test.v')
 	return files
 }
 

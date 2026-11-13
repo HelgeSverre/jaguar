@@ -134,6 +134,9 @@ Every public name in `jaggame`, with the comment from its source. This file is g
 | `fn (mut c Code) call(f Func, args ...Val)` | call calls a function as a statement; a result is thrown away. |
 | `fn (mut c Code) ret(value Val)` | ret returns a value from the function. |
 | `fn (mut c Code) ret_void()` | ret_void returns from a function that has no result. |
+| `type NativeFn = fn (mut it Interpreter) !` | NativeFn is what the interpreter runs in place of the machine code of a `native` statement: it must do to the interpreter's variables what the code does to the machine's. |
+| `fn (mut c Code) native(emit AsmFn, run NativeFn)` | native is an `asm` statement that the interpreter can run too: the machine runs `emit`'s code, the interpreter calls `run`. It is how the runtime has hot routines in 68000 code and the same behaviour in tests; a test of the two together (`Image.differences`) keeps them equal. |
+| `fn (mut c Code) native_ret(emit AsmFn, run NativeFn)` | native_ret is `native` for a function that has a result: the code leaves the result in `d0` as a compiled `ret` does, and the function returns from there (so the function needs nothing after it); the interpreter's `run` leaves the result in `Interpreter.result`. |
 | `fn (mut c Code) asm(emit AsmFn)` | asm emits 68000 code in place of a statement. The interpreter cannot run it; games should not need it. |
 | `fn (mut c Code) local(name string, t Type) Expr` | local declares a variable of the function. It is set to 0 each time the function is called. |
 | `fn (mut c Code) local_bool(name string) Expr` | local_bool declares a `bool` local. |
@@ -236,6 +239,85 @@ Every public name in `jaggame`, with the comment from its source. This file is g
 | `fn (mut g Game) sequence(name string, steps []Step)` | sequence declares a named animation: the frames to show one after the other, each for its time. A time is in seconds, so that the animation runs at the same speed on both television standards; it is rounded to whole frames, at least 1. |
 | `fn (s Sprite) play(mut c Code, name string, repeat bool)` | play starts a named animation on the sprite: it shows the first step now and the runtime moves on every frame. With `repeat` it starts again after the last step; without, the sprite stays on the last frame and `playing` becomes false. |
 | `fn (s Sprite) stop(mut c Code)` | stop ends the animation of a sprite; it keeps the frame it shows. |
+
+## Assets: PNG import
+
+`jaggame/assets_png.v`
+
+| Declaration | |
+|---|---|
+| `fn (mut g Game) png_cry(name string, path string, cell_w int, cell_h int) Art` | png_cry reads a PNG as art of 16-bit CRY pixels, cut into frames by a grid of `cell_w` by `cell_h` pixels. The frames are numbered across and then down. The cell width must be a multiple of 4. |
+| `fn (mut g Game) png_pal(name string, path string, cell_w int, cell_h int) Art` | png_pal reads a PNG as art of 8-bit pixels that index the game's palette, cut into frames by a grid like `png_cry`. The cell width must be a multiple of 8. If the game declared its palette (`palette`), every colour in the picture must be in it; if not, the colours of the picture are added to a palette that grows with each picture, in the order they are found (entry 0 is the transparent colour). |
+
+## Assets: drawing pictures for a game
+
+`jaggame/assets_canvas.v`
+
+| Declaration | |
+|---|---|
+| `struct Canvas` | Canvas is a picture to draw on and save as a PNG: for the small programs that make a game's art (see demos/ghostgrid/art) and for tests that need a file to import. A pixel is red, green, blue and alpha, 0..255; an alpha of 0 is transparent. |
+| `fn new_canvas(width int, height int) Canvas` | new_canvas makes a transparent picture. |
+| `fn (mut c Canvas) put(x int, y int, r int, g int, b int, a int)` | put sets one pixel; a place outside the canvas is ignored. |
+| `fn (mut c Canvas) fill(x int, y int, w int, h int, r int, g int, b int)` | fill paints an opaque rectangle. |
+| `fn (c Canvas) save(path string) !` | save writes the canvas as a PNG file, making the directory if it is missing. |
+
+## Assets: tile sets, legends and rooms
+
+`jaggame/assets_map.v`
+
+| Declaration | |
+|---|---|
+| `const flag_solid = 1` | flag_solid is a tile flag: the tile blocks movement (`move_and_slide`, `solid_at`). A tile has the flags the legend gives it; the game reads them with `flags_at`. |
+| `const flag_cover = 2` | flag_cover is a tile flag: a place to hide behind. |
+| `const flag_exit = 4` | flag_exit is a tile flag: the tile leads out of the room. |
+| `const flag_item = 8` | flag_item is a tile flag: something to pick up. |
+| `const flag_user1 = 16` | flag_user1 is a tile flag the game may use as it likes. |
+| `const flag_user2 = 32` | flag_user2 is a tile flag the game may use as it likes. |
+| `const flag_user3 = 64` | flag_user3 is a tile flag the game may use as it likes. |
+| `const flag_user4 = 128` | flag_user4 is a tile flag the game may use as it likes. |
+| `const tile_size = 16` | tile_size is the width and the height of a tile in pixels. |
+| `const tile_none = 255` | tile_none is what `tile_at` returns outside the room; it is solid. |
+| `struct Point` | Point is a position in a room, in tiles. |
+| `struct Room` | Room is a handle on a room: `index` is the number to give `load_room`. |
+| `fn (mut g Game) tileset(path string) Tileset` | tileset reads the PNG as the game's tile set: tiles of 16x16 pixels, cut across and then down and numbered from 0. A game has one tile set, which shares the game's palette with the other 8-bit art. At most 255 tiles (255 is `tile_none`). |
+| `struct Tileset` | Tileset is a handle on the tile set. |
+| `fn (mut g Game) legend_tile(ch rune, tile int, flags int)` | legend_tile says that the character `ch` in a room is tile `tile` of the tile set, with `flags` (the `flag_` constants, added together). A tile's flags are a property of the tile: two characters that show one tile must give it the same flags. |
+| `fn (mut g Game) legend_marker(ch rune, name string, tile int, flags int)` | legend_marker says that the character `ch` in a room is a place called `name`: the game asks for its position (`marker_x`, `marker_y`) and the picture shows tile `tile` there, with `flags` as for `legend_tile`. Several characters may share a name; the places of a name are numbered in reading order, rows from the top. |
+| `fn (mut g Game) room(name string, text string) Room` | room declares a room from a text of rows, one character a tile (a leading and a trailing line break are ignored). Rooms are numbered from 0 in the order they are declared. Rows must be of equal length, the room from 1x1 to 64x64 tiles and 4096 tiles at most. |
+| `fn (mut g Game) markers_of(room Room, name string) []Point` | markers_of are the places of a marker name in a room, in tiles, in reading order. Rooms are read when the game is built, or by this call. |
+| `fn (mut g Game) room_size(room Room) (int, int)` | room_size is the width and height of a room in tiles. |
+
+## The runtime: the tile layer, rooms and the camera
+
+`jaggame/rt_tiles.v`
+
+| Declaration | |
+|---|---|
+| `fn (mut g Game) load_room(mut c Code, room Room)` | load_room starts loading a room (see `room`). The tile layer and the sprites are not drawn until it is done, `loading` is true meanwhile, and the game's update goes on running: leave the room alone while `loading`. The room's size (`room_width`, `room_height`) and its markers are right at once; `tile_at` and the tiles are not until the room is loaded. |
+| `fn (mut g Game) load_room_number(mut c Code, number Val)` | load_room_number is `load_room` for a room number that is not known when the game is built: an expression, from 0. A number past the last room loads the last one. |
+| `fn (mut g Game) set_tile(mut c Code, column Val, row Val, tile Val)` | set_tile puts a tile at a column and a row of the room (in tiles) and redraws it. Up to 64 changes can be drawn in one frame; more are counted in `rt_tile_lost` and not drawn. A place outside the room is ignored. |
+| `fn (mut g Game) tile_at(x Val, y Val) Expr` | tile_at is the tile number at a world position in pixels, as a `u8` expression: `tile_none` (255) outside the room. The position is an `i32` or narrower; turn a `fix` into pixels with `as_(.i32)`. |
+| `fn (mut g Game) flags_at(x Val, y Val) Expr` | flags_at is the flags of the tile at a world position (the `flag_` constants, added together), as a `u8` expression; outside the room it is `flag_solid`. |
+| `fn (mut g Game) solid_at(x Val, y Val) Expr` | solid_at is true when the tile at a world position blocks movement. |
+| `fn (mut g Game) marker_count(name string) Expr` | marker_count is how many places of the marker `name` the loaded room has, a `u8` expression. |
+| `fn (mut g Game) marker_x(name string, k Val) Expr` | marker_x is the column, in tiles, of place number `k` (from 0) of the marker `name` in the loaded room, an `i16` expression; -1 if there is no such place. Multiply by 16 for pixels. |
+| `fn (mut g Game) marker_y(name string, k Val) Expr` | marker_y is the row of a marker's place, like `marker_x`. |
+| `fn (mut g Game) camera_follow(mut c Code, x Val, y Val)` | camera_follow moves the camera so that the world position (x, y) is in the middle of the screen, as far as the room allows: the camera stops at the edges of the room, and a room smaller than the screen is centred. The position is in pixels, an `i32` or narrower. |
+
+## The runtime: collision
+
+`jaggame/rt_collide.v`
+
+| Declaration | |
+|---|---|
+| `struct Hitbox` | Hitbox is the part of a sprite that collides: a rectangle of `w` by `h` pixels whose top left corner is `ox`, `oy` pixels from the sprite's position. A hitbox smaller than the picture lets the corners pass walls. |
+| `struct Rect` | Rect is a rectangle in the world, for `overlap`. |
+| `fn (s Sprite) rect(b Hitbox) Rect` | rect is the world rectangle of a sprite's hitbox. The sprite's position is an `i16`, so the other rectangle's numbers must be one too. |
+| `fn overlap(a Rect, b Rect) Expr` | overlap is true when two rectangles share at least one pixel. All their numbers must be of one type (integers; a `fix` position needs `as_`). |
+| `const max_step = 16` | max_step is the most a box moves along one axis in one `move_and_slide`: one tile. A larger step is cut to it; a faster mover calls again. |
+| `fn (mut g Game) move_and_slide(mut c Code, x Expr, y Expr, box Hitbox, dx Val, dy Val)` | move_and_slide moves the box of a mover, whose position is `x` and `y` (`fix` variables, in world pixels), by `dx` and `dy` (`fix` values) against the solid tiles: first along x, then along y, each stopping flush against a wall. Moving diagonally into a wall therefore slides along it. Afterwards `blocked_x` and `blocked_y` say which way a wall stopped it.  A step along one axis is at most `max_step` (16) pixels, one tile, so that only one new column or row of tiles can be entered and nothing is tunnelled through; a larger step is cut to that. The box must not start inside a wall. Outside the room counts as solid. The edge of the box is the whole pixel the position is in: the position's fraction is kept while the box is free and dropped when a wall stops it. |
+| `fn (mut g Game) blocked_x() Expr` | blocked_x is true when the last `move_and_slide` was stopped by a wall along x. |
+| `fn (mut g Game) blocked_y() Expr` | blocked_y is true when the last `move_and_slide` was stopped by a wall along y. |
 
 ## The runtime: text
 

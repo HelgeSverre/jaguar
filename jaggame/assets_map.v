@@ -18,15 +18,30 @@ module jaggame
 // Rooms are read when the game is built, so the legend may come after them,
 // and every mistake in every room is reported together.
 
-// The flags of a tile. A tile has the flags the legend gives it; the game
-// reads them with `flags_at`. The last four are free for the game.
-pub const flag_solid = 1 // blocks movement (`move_and_slide`, `solid_at`)
-pub const flag_cover = 2 // a place to hide behind
-pub const flag_exit = 4 // leads out of the room
-pub const flag_item = 8 // something to pick up
+// flag_solid is a tile flag: the tile blocks movement (`move_and_slide`,
+// `solid_at`). A tile has the flags the legend gives it; the game reads them
+// with `flags_at`.
+pub const flag_solid = 1
+
+// flag_cover is a tile flag: a place to hide behind.
+pub const flag_cover = 2
+
+// flag_exit is a tile flag: the tile leads out of the room.
+pub const flag_exit = 4
+
+// flag_item is a tile flag: something to pick up.
+pub const flag_item = 8
+
+// flag_user1 is a tile flag the game may use as it likes.
 pub const flag_user1 = 16
+
+// flag_user2 is a tile flag the game may use as it likes.
 pub const flag_user2 = 32
+
+// flag_user3 is a tile flag the game may use as it likes.
 pub const flag_user3 = 64
+
+// flag_user4 is a tile flag the game may use as it likes.
 pub const flag_user4 = 128
 
 // tile_size is the width and the height of a tile in pixels.

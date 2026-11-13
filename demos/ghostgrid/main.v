@@ -54,6 +54,7 @@ const hall = '
 '
 
 // annex is smaller than the screen (14 by 10 tiles), so the camera centres it.
+// guide:gg_annex
 const annex = '
 ##############
 #@...........#
@@ -66,6 +67,8 @@ const annex = '
 #..c.......X.#
 ##############
 '
+
+// guide:end
 
 fn main() {
 	output := if os.args.len > 1 { os.args[1] } else { 'demos/ghostgrid.jag' }
@@ -100,7 +103,7 @@ fn describe() &jaggame.Game {
 		background: jaggame.cry(6, 8, 20)
 	})
 
-	// guide:declare
+	// guide:gg_declare
 	game.tileset(os.join_path(art_dir(), 'tiles.png'))
 	game.png_pal('player', os.join_path(art_dir(), 'player.png'), 16, 16)
 
@@ -116,7 +119,7 @@ fn describe() &jaggame.Game {
 
 	// The figure's animations: frame 0 of each direction stands, 1 and 2 are
 	// the two steps. Running is the same walk, faster.
-	// guide:animations
+	// guide:gg_animations
 	directions := ['down', 'up', 'left', 'right']
 	for d, name in directions {
 		first := d * 3
@@ -129,10 +132,10 @@ fn describe() &jaggame.Game {
 	}
 	// guide:end
 
-	// guide:variables
+	// guide:gg_variables
 	hud := game.text_layer('hud', jaggame.TextConfig{
 		columns: 16
-		rows:    2
+		rows:    3
 		x:       8
 		y:       8
 		colour:  jaggame.cry(255, 225, 90)
@@ -147,17 +150,17 @@ fn describe() &jaggame.Game {
 	player := game.sprite(0)
 	// guide:end
 
-	// guide:init
+	// guide:gg_init
 	mut c := game.define_init()
 	game.load_room(mut c, training_hall)
 	enter_room(mut c, mut game, px, py, chips, total)
 	player.put(mut c, 'player', px.as_(.i16), py.as_(.i16), 1)
 	hud.print(mut c, 0, 0, 'CHIPS')
 	hud.print(mut c, 8, 0, '/')
-	hud.print(mut c, 0, 1, 'ROOM')
+	hud.print(mut c, 0, 2, 'ROOM')
 	// guide:end
 
-	// guide:update
+	// guide:gg_update
 	c = game.define_update()
 
 	// While a room is loading the picture is blank; only keep the camera on
@@ -199,7 +202,7 @@ fn describe() &jaggame.Game {
 	game.move_and_slide(mut c, px, py, player_box, dx, dy)
 	// guide:end
 
-	// guide:animate
+	// guide:gg_animate
 	// The figure walks while it moves, and stands when it does not. The
 	// animation is started once, when the direction or the speed changes.
 	moving := dx.ne(0).either(dy.ne(0))
@@ -222,7 +225,7 @@ fn describe() &jaggame.Game {
 	c.end()
 	// guide:end
 
-	// guide:world
+	// guide:gg_world
 	c.set(player.x, px.as_(.i16))
 	c.set(player.y, py.as_(.i16))
 	game.camera_follow(mut c, px.add(8).as_(.i32), py.add(9).as_(.i32))
@@ -251,7 +254,7 @@ fn describe() &jaggame.Game {
 
 	hud.number(mut c, 6, 0, chips, 2)
 	hud.number(mut c, 9, 0, total, 2)
-	hud.number(mut c, 6, 1, game.room_number.add(1), 2)
+	hud.number(mut c, 6, 2, game.room_number.add(1), 2)
 	// guide:end
 	return game
 }

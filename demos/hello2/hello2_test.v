@@ -333,5 +333,6 @@ fn test_a_frame_of_work_is_a_small_part_of_a_frame() {
 	mut b := boot(false)
 	b.p.frames(10)
 	cycles := b.p.busy_cycles(30)
-	assert cycles < 100000, 'cycles a frame: ${cycles}'
+	println('hello2: ${cycles} cycles a frame')
+	assert cycles < 40000, 'cycles a frame: ${cycles}'
 }

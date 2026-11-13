@@ -362,13 +362,83 @@ fn test_a_sprite_takes_world_coordinates_unless_it_is_fixed() {
 	}
 }
 
-fn test_the_markers_come_back_as_positions() {
+fn test_the_markers_come_back_as_positions_in_the_loaded_room() {
 	dir := workdir('markers')
 	mut g := map_game(dir)
-	start := g.marker_x('start', 0)
-	_ = start
-	big := Room{0, 'big'}
-	assert g.markers_of(big, 'start') == [Point{1, 1}, Point{28, 18}]
-	assert g.markers_of(Room{1, 'small'}, 'start') == [Point{2, 2}]
-	_ = os.exists(dir)
+	first_x := g.p.i16('first_x')
+	first_y := g.p.i16('first_y')
+	second_x := g.p.i16('second_x')
+	missing := g.p.i16('missing')
+	count := g.p.u8('count')
+	// The update of map_game is already defined; add a second function the
+	// test calls by name.
+	probe := g.p.func('probe', [], .void)
+	mut c := g.p.define(probe)
+	c.set(first_x, g.marker_x('start', 0))
+	c.set(first_y, g.marker_y('start', 0))
+	c.set(second_x, g.marker_x('start', 1))
+	c.set(missing, g.marker_x('start', 2))
+	c.set(count, g.marker_count('start'))
+	mut it := g.interpreter(.ntsc)!
+	for _ in 0 .. 30 {
+		g.step(mut it, 0)!
+	}
+	it.run('probe')!
+	// The big room has two places for the player: (1, 1) and (28, 18).
+	assert [it.value('first_x')!, it.value('first_y')!, it.value('second_x')!,
+		it.value('missing')!, it.value('count')!] == [i64(1), 1, 28, -1, 2]
+	// The small room has one: (2, 2).
+	it.set_value('want', 1)!
+	g.step(mut it, button_mask(.a))!
+	it.run('probe')!
+	assert [it.value('first_x')!, it.value('first_y')!, it.value('second_x')!,
+		it.value('count')!] == [
+		i64(2),
+		2,
+		-1,
+		1,
+	]
+	assert g.markers_of(Room{0, 'big'}, 'start') == [Point{1, 1},
+		Point{28, 18}]
+}
+
+fn test_what_the_tile_layer_costs() {
+	// The same game without a tile layer.
+	mut plain := new_game(Config{ sprites: 2, layers: 1, background: background })
+	plain.art_cry('box', 16, 16, 1, []u16{len: 256, init: cry(0, 255, 0)})
+	plain.define_init()
+	plain.define_update()
+	plain_img := plain.build() or { panic(err) }
+	mut q := emulated.boot(plain_img.bytes, false) or { panic(err) }
+	q.frames(30)
+	without := q.busy_cycles(30)
+
+	mut r := new_rig('cost', false)
+	r.wait_loaded()
+	with_layer := r.p.busy_cycles(30)
+	r.poke8('following', 1)
+	r.p.frames(3)
+	following := r.p.busy_cycles(30)
+	r.poke8('following', 0)
+	for cam in 0 .. 60 {
+		r.poke16('camera_x', cam)
+		r.p.frames(1)
+	}
+	println('tile layer: ${with_layer - without} cycles a frame (empty game ${without}), with the camera following ${following - without}')
+	assert with_layer - without < 3500, 'the layer costs ${with_layer - without}'
+	assert following - without < 7000
+
+	// A room loading: what its frames cost.
+	mut l := new_rig('loadcost', false)
+	l.p.frames(2)
+	mut worst := 0
+	mut n := 2
+	for l.value('loading') != 0 {
+		worst = int_max(worst, l.p.busy_cycles(1))
+		n++
+		assert n < 100
+	}
+	println('room load: the 30x20 room takes ${n} frames, at most ${worst} cycles a frame')
+	assert worst < 180000
+	assert l.value('missed_frames') == 0
 }

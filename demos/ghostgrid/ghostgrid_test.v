@@ -140,6 +140,7 @@ fn hold_pad(mut p emulated.Player, mask u32) {
 // (16 tx, 16 ty - 1) (the centre of its box is the centre of the tile). It
 // runs while it is far, and walks to be exact.
 fn steer(px f64, py f64, target Cell) u32 {
+	// guide:gg_steer
 	want_x := f64(target.x * 16)
 	want_y := f64(target.y * 16 - 1)
 	mut mask := u32(0)
@@ -162,6 +163,7 @@ fn steer(px f64, py f64, target Cell) u32 {
 		mask |= jaggame.button_mask(.a)
 	}
 	return mask
+	// guide:end
 }
 
 fn (mut b Booted) wait_loaded() {
@@ -251,10 +253,12 @@ fn test_the_figure_cannot_enter_a_wall_however_it_is_pushed() {
 	for pal in [false, true] {
 		mut b := boot(pal)
 		b.wait_loaded()
+		// guide:gg_corner
 		// Pushing into the corner: left and up, then flush against both walls.
 		hold_pad(mut b.p, jaggame.button_mask(.left) | jaggame.button_mask(.up))
 		b.p.frames(40)
 		assert b.fixed('px') == 13 && b.fixed('py') == 12, 'flush in the corner: ${b.fixed('px')}, ${b.fixed('py')}'
+		// guide:end
 
 		// Running into it changes nothing: no tunnelling at 3 pixels a frame.
 		hold_pad(mut b.p,
@@ -427,7 +431,7 @@ fn (b &Booted) room_pixel(tiles [][]u32, cx int, cy int, sx int, sy int) u32 {
 // covered tells whether a pixel of the logical screen belongs to something
 // that is not the room: the figure, or the text.
 fn (b &Booted) covered(cx int, cy int, sx int, sy int) bool {
-	if sx < 140 && sy < 28 {
+	if sx < 140 && sy < 36 {
 		return true // the HUD
 	}
 	fx := int(b.fixed('px')) - cx
@@ -578,6 +582,7 @@ fn test_the_interpreter_does_what_the_machine_did() {
 			b.frame(jaggame.button_mask(.right) | jaggame.button_mask(.a))
 		}
 
+		// guide:gg_compare
 		mut g := describe()
 		mut it := g.interpreter(if pal { jaggame.Region.pal } else { jaggame.Region.ntsc })!
 		mut again := boot(pal)
@@ -592,6 +597,7 @@ fn test_the_interpreter_does_what_the_machine_did() {
 		mut differences := again.img.differences(it, again.p.m.ram)
 		differences = differences.filter(!it.contains('_dirty') && !it.contains('_stale'))
 		assert differences.len == 0, differences.join('\n')
+		// guide:end
 		assert again.value('room_number') == 1 && b.pad_log.len > 600
 	}
 }

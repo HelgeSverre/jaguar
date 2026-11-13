@@ -12,6 +12,7 @@ v -prod test demos/maw/       # its test
 |---|---|---|---|
 | [`hello`](hello/main.v) | the smallest complete program: text, a ball, a beep | 4 KB | arrows move; Z, X, C beep |
 | [`hello2`](hello2/main.v) | `hello` again, written with [jaggame](../docs/jaggame/guide.md) and no assembly, plus a spinning coin, a scaled and a flipped sprite, and counting numbers | 13 KB | arrows move; Z, X, C beep |
+| [`ghostgrid`](ghostgrid/main.v) | **in progress.** The start of GHOSTGRID, a stealth trainer written with [jaggame](../docs/jaggame/guide.md) and no assembly: two rooms drawn from text (one bigger than the screen, one smaller), a figure that walks, runs and slides along walls, a camera that follows, chips to pick up and an exit pad that loads the next room. Art is made by [a small program](ghostgrid/art/make_art.v) and imported from PNG. No guards yet | 24 KB | arrows move; Z, X, C run |
 | [`plasma`](plasma/main.v) | a first GPU program: three waves, one picture a frame | 2 KB | none |
 | [`wirewing`](wirewing) | a wireframe flying game | 8 KB | left and right bank, Down climbs, Up dives; Z, X, C start |
 | [`maw`](maw) | a tunnel flyer | 438 KB | left and right turn the tunnel; Z, X, C start |
@@ -20,6 +21,15 @@ v -prod test demos/maw/       # its test
 `hello` and `plasma` are the examples the [guide](../docs/jagkit.md) walks through. Keys are the emulator's defaults; on a pad the fire buttons are A, B and C.
 
 All of them handle NTSC and PAL, and all run in this emulator and in Virtual Jaguar (`scripts/crosscheck/run.sh`). None has run on real hardware.
+
+## GHOSTGRID
+
+<p>
+  <img src="../docs/screenshots/ghostgrid-room.png" width="49%" alt="GHOSTGRID's second room: a glowing grid floor, block walls, purple cover blocks, a chip, an exit pad and the player">
+  <img src="../docs/screenshots/ghostgrid-scrolled.png" width="49%" alt="GHOSTGRID's first room scrolled to the exit pad in its south east corner">
+</p>
+
+GHOSTGRID is an original stealth trainer, built one slice at a time on jaggame. So far there is a player and two training rooms: walk with the arrows, hold Z, X or C to run, pick up the four chips (a counter at the top left) and step on the green pad to go to the other room. [Chapter 3 of the guide](../docs/jaggame/guide.md#chapter-3-assets-rooms-and-collision) walks through it. Its test is a robot that finds a route through the room's text and plays it on NTSC and PAL, and the movement then runs again in the interpreter with the same pad. It also runs in Virtual Jaguar with the same output.
 
 ## MAW
 

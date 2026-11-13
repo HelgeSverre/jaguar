@@ -2,9 +2,9 @@
 
 `jaggame` is a V module for writing Atari Jaguar programs without writing assembly. A program *describes* its variables and logic to a builder; the builder checks the description, compiles it to 68000 code and writes a `.jag` image. The same description also runs in an interpreter written in V, and the two must agree.
 
-This guide grows with the module. Chapter 1 is the language: the programs there compute values that tests read back. Chapter 2 is the runtime (the frame loop, video, sprites, pad, text, timers), built around the demo [`hello2`](../../demos/hello2/main.v). Sprite sheets and PNG import, maps, collision, scenes and real sound come in later chapters. [`design.md`](design.md) is the plan and the contract; [`reference.md`](reference.md) lists every public name with its comment.
+This guide grows with the module. Chapter 1 is the language: the programs there compute values that tests read back. Chapter 2 is the runtime (the frame loop, video, sprites, pad, text, timers), built around the demo [`hello2`](../../demos/hello2/main.v). Chapter 3 is assets, rooms, the camera and collision, built around [`demos/ghostgrid`](../../demos/ghostgrid/main.v). Scenes, real sound, state machines and guards come in later chapters. [`design.md`](design.md) is the plan and the contract; [`reference.md`](reference.md) lists every public name with its comment.
 
-Every V block in this guide is quoted from tested code, and every text block is output that a test produces. A V block is named by a comment on the line above it, `<!-- guide:NAME -->`, and must be a run of lines from the region of that name: the lines between `// guide:NAME` and `// guide:end` in a test in [`jaggame/tests`](../../jaggame/tests), or in `demos/hello2/main.v` or its test. `jaggame/tests/guide_test.v` fails if a block is unnamed, names a region that does not exist, or has drifted from it.
+Every V block in this guide is quoted from tested code, and every text block is output that a test produces. A V block is named by a comment on the line above it, `<!-- guide:NAME -->`, and must be a run of lines from the region of that name: the lines between `// guide:NAME` and `// guide:end` in a test in [`jaggame/tests`](../../jaggame/tests), or in `demos/hello2/main.v` or its test, or in `demos/ghostgrid/main.v` or its test. `jaggame/tests/guide_test.v` fails if a block is unnamed, names a region that does not exist, or has drifted from it.
 
 ## Contents
 
@@ -37,6 +37,17 @@ Every V block in this guide is quoted from tested code, and every text block is 
   - [Testing a game, twice](#testing-a-game-twice)
   - [What a frame costs](#what-a-frame-costs)
   - [V traps in the runtime](#v-traps-in-the-runtime)
+- [Chapter 3: assets, rooms and collision](#chapter-3-assets-rooms-and-collision)
+  - [Pictures from PNG files](#pictures-from-png-files)
+  - [Tiles and rooms from text](#tiles-and-rooms-from-text)
+  - [Loading a room](#loading-a-room)
+  - [The tile layer and the camera](#the-tile-layer-and-the-camera)
+  - [Collision](#collision)
+  - [The game's frame](#the-games-frame)
+  - [Numbers are cheaper](#numbers-are-cheaper)
+  - [Testing GHOSTGRID](#testing-ghostgrid)
+  - [What it costs](#what-it-costs)
+  - [V traps in this slice](#v-traps-in-this-slice)
 
 ## Chapter 1: the language
 
@@ -817,12 +828,12 @@ Measured on the emulated 68000 (`Player.busy_cycles`), where a frame is about 22
 
 | | Cycles a frame |
 |---|---|
-| hello2, NTSC and PAL | 66,000 |
+| hello2, NTSC and PAL | 19,400 (66,000 before chapter 3's cheaper numbers) |
 | an empty game with a pool of 64 sprites and 4 layers | 11,600 |
 | one more visible sprite | 1,300 (1,400 when scaled) |
 | 16 / 32 / 64 visible sprites | 33,000 / 54,000 / 96,000 |
 
-Finding the sprites to draw costs about 45 cycles for each place in the pool for each layer, whether it is visible or not: a pool no larger than the game needs, and few layers, keep that low. Text is the expensive part, because it is compiled code that is not tuned: a number that changes every frame costs about 17,000 cycles (its digits, and drawing its row of 24 cells again), and a text layer that does not change costs nothing. hello2 has three numbers, which is 51,000 of its 66,000. A game that prints much should print what changed, not everything. On the 68000 alone, about 150 visible sprites fit in a frame; whether the object processor can draw that many on each line is a different limit that this slice has not measured (the pool is at most 255).
+Finding the sprites to draw costs about 45 cycles for each place in the pool for each layer, whether it is visible or not: a pool no larger than the game needs, and few layers, keep that low. Text used to be the expensive part: a number that changed every frame cost about 17,000 cycles, and hello2's three numbers 51,000 of its 66,000. Chapter 3 made it machine code that draws only what changed: a number that counts costs about 2,300, and a text layer that does not change costs nothing. On the 68000 alone, about 150 visible sprites fit in a frame; whether the object processor can draw that many on each line is a different limit that this slice has not measured (the pool is at most 255).
 
 ### V traps in the runtime
 
@@ -835,3 +846,363 @@ Found with V 0.5.2 while writing the runtime, in addition to the ones above:
 | `select` is a keyword here too: a variable of that name does not compile | `row_select` |
 | A struct with a reference field (an `Expr` holds one) cannot be left out of a struct literal, even if it is never used | give it an invalid expression |
 | `v test` prints nothing for a passing test | `v -stats test` shows `println` output |
+
+## Chapter 3: assets, rooms and collision
+
+Chapter 2 drew sprites on a flat colour. This chapter adds what a game with a world needs: pictures from PNG files, rooms written as text, a tile layer that scrolls behind the sprites, a camera that follows the player, and walls that stop it. [`demos/ghostgrid`](../../demos/ghostgrid/main.v) is the start of GHOSTGRID, a stealth trainer: a figure walks and runs through two training rooms, slides along walls, picks up data chips and takes the exit pad to the next room. It is about 250 lines with no assembly. The pictures are made by [a small program](../../demos/ghostgrid/art/make_art.v) in the demo and kept as PNG files.
+
+```sh
+v run demos/ghostgrid/art           # draws art/tiles.png and art/player.png again
+v run demos/ghostgrid               # writes demos/ghostgrid.jag
+just run demos/ghostgrid.jag        # play it
+v -prod test demos/ghostgrid/       # a robot plays it on NTSC and PAL
+```
+
+<img src="../screenshots/ghostgrid-room.png" width="325" alt="GHOSTGRID's small room: a dark floor with a glowing grid, blue block walls with a lit top edge, three purple cover blocks, a yellow data chip, a green exit pad and the figure in the top left corner; a HUD line counts chips and gives the room">
+
+The second room is smaller than the screen, so the camera centres it. The floor, the walls, the purple cover blocks, the exit pad, the chip and the figure are all in this picture; the first room is 34 by 24 tiles (544 by 384 pixels), bigger than the screen both ways:
+
+<img src="../screenshots/ghostgrid-scrolled.png" width="325" alt="GHOSTGRID's first room scrolled to its south east corner, with the exit pad on the right and walls and a cover block around it">
+
+- [Pictures from PNG files](#pictures-from-png-files)
+- [Tiles and rooms from text](#tiles-and-rooms-from-text)
+- [Loading a room](#loading-a-room)
+- [The tile layer and the camera](#the-tile-layer-and-the-camera)
+- [Collision](#collision)
+- [The game's frame](#the-games-frame)
+- [Numbers are cheaper](#numbers-are-cheaper)
+- [Testing GHOSTGRID](#testing-ghostgrid)
+- [What it costs](#what-it-costs)
+- [V traps in this slice](#v-traps-in-this-slice)
+
+### Pictures from PNG files
+
+A PNG is read when the game is described and cut into frames by a grid, across and then down: `png_cry` gives 16-bit CRY art, `png_pal` 8-bit art that indexes the game's palette. A pixel with an alpha below 128 is transparent and becomes the pixel value 0; an opaque black is not 0, it becomes the darkest colour above it.
+
+The palette of 8-bit art is built by the pictures: every colour a `png_pal` picture uses, converted to CRY, takes the next free entry, in the order the colours are met (entry 0 is the transparent one). If you declare the palette yourself with `palette` before the first picture, a colour that is not in it is a build error that says which and where. Whichever you do, the palette is checked against the room the text layers leave (`256 - 2 * layers`), and the message names the files that added the colours.
+
+`jaggame.new_canvas` is a picture to draw on and `save` as a PNG; the art program of the demo is built on it, and so are the tests that need a file to import.
+
+<!-- guide:gg_declare -->
+```v
+game.tileset(os.join_path(art_dir(), 'tiles.png'))
+game.png_pal('player', os.join_path(art_dir(), 'player.png'), 16, 16)
+
+game.legend_tile(`.`, tile_floor, 0)
+game.legend_tile(`#`, tile_wall, jaggame.flag_solid)
+game.legend_tile(`c`, tile_cover, jaggame.flag_solid | jaggame.flag_cover)
+game.legend_tile(`X`, tile_exit, jaggame.flag_exit)
+game.legend_marker(`@`, 'start', tile_floor, 0)
+game.legend_marker(`o`, 'chip', tile_chip, jaggame.flag_item)
+training_hall := game.room('hall', hall)
+training_annex := game.room('annex', annex)
+```
+
+`tileset` is a `png_pal` of 16 by 16 pixel tiles, numbered across and then down from 0; a game has one tile set, at most 255 tiles. The figure's sheet is three frames across (standing, one foot, the other foot) and a row for each direction, so the animations pick frames by number:
+
+<!-- guide:gg_animations -->
+```v
+directions := ['down', 'up', 'left', 'right']
+for d, name in directions {
+	first := d * 3
+	game.sequence('walk_${name}', [jaggame.Step{first + 1, 0.14},
+		jaggame.Step{first, 0.14}, jaggame.Step{first + 2, 0.14},
+		jaggame.Step{first, 0.14}])
+	game.sequence('run_${name}', [jaggame.Step{first + 1, 0.07},
+		jaggame.Step{first, 0.07}, jaggame.Step{first + 2, 0.07},
+		jaggame.Step{first, 0.07}])
+}
+```
+
+Every mistake in a file is a build error that names the file, and all of them come out together with the others:
+
+<!-- guide:asset_mistakes -->
+```v
+	mut game := jaggame.new_game(jaggame.Config{ sprites: 2 })
+	game.tileset(dir + '/tiles.png') // 40 pixels wide: not whole tiles of 16
+	game.png_cry('logo', dir + '/logo.png', 16, 16) // there is no such file
+	game.legend_tile(`#`, 1, jaggame.flag_solid)
+	game.legend_tile(`#`, 2, 0) // a character is given once
+	game.room('lab', '
+#####
+#..@#
+##
+')
+	game.build() or { return err.msg().replace(dir + '/', '') }
+```
+
+```text
+jaggame program:
+  game: art `tileset`: tiles.png: the picture is 40x16 pixels, which a grid of 16x16 does not divide (8 columns and 0 lines are left over)
+  game: art `logo`: logo.png: the file does not exist
+  game: legend: the character `#` is given twice
+  game: room `lab`: row 3 has 2 characters, row 1 has 5
+  game: room `lab`: `.` at row 2, column 2 is not in the legend
+  game: room `lab`: `@` at row 2, column 4 is not in the legend
+```
+
+A cell whose width does not fill whole phrases (a multiple of 4 pixels for CRY, 8 for 8-bit art), a file that is not a PNG, more than 255 frames and too many colours are reported the same way.
+
+### Tiles and rooms from text
+
+A room is a V string with one character for each tile. The legend says what a character is: `legend_tile(ch, tile, flags)` a tile number with its flags, `legend_marker(ch, name, tile, flags)` a named place that is drawn as a tile and that the game can ask for. The flags belong to the tile (two characters for one tile must give it the same), and there are eight: `flag_solid`, `flag_cover`, `flag_exit`, `flag_item` and four for the game (`flag_user1` to `flag_user4`).
+
+Rooms are read when the game is built, so the legend may come after them, and every mistake (a character that is not in the legend, with its row and column; a row of another length; a room larger than 64 by 64 tiles; a tile the tile set does not have; a tile with two sets of flags) is reported together. A room is at most 64 by 64 tiles and the tile size is 16 by 16.
+
+The demo's small room, as it is in `main.v` (the hall is the same with 34 by 24 tiles): `#` is a wall, `c` a cover block, `@` where the player starts, `o` a chip and `X` the exit pad.
+
+<!-- guide:gg_annex -->
+```v
+const annex = '
+##############
+#@...........#
+#..c.....c...#
+#............#
+#....####....#
+#....#..#..o.#
+#....#..#....#
+#............#
+#..c.......X.#
+##############
+'
+```
+
+The game asks for places by name, as expressions that are right for the room that is loaded: `marker_count(name)`, and `marker_x(name, k)` and `marker_y(name, k)`, in tiles, for place `k` in reading order (-1 when there is no such place). A name that was never declared is a build error that lists the ones that were. `game.markers_of(room, name)` gives the same positions at build time, for tests.
+
+### Loading a room
+
+`game.load_room(mut c, room)` (or `load_room_number` with an expression) starts loading a room. It sets the room's size (`game.room_width`, `game.room_height`, in pixels) and `game.room_number` at once, so markers can be read in the same statement list, but the tiles take a few frames: the room is drawn into a picture buffer in memory, 48 tiles a frame, copied from the room's data and drawn by machine code. While it loads, `game.loading` is true and the picture is blank (the tile layer and the sprites are not drawn; the text stays), and it starts one frame late: the picture that is already on its way to the screen is blank before the buffer is touched. The game's update goes on running; read `loading` and leave the room alone, as GHOSTGRID does:
+
+<!-- guide:gg_update -->
+```v
+// While a room is loading the picture is blank; only keep the camera on
+// the figure, so that it is right when the picture comes back.
+c.if_(game.loading)
+game.camera_follow(mut c, px.add(8).as_(.i32), py.add(9).as_(.i32))
+c.ret_void()
+c.end()
+```
+
+Loading is spread over frames so that a handler never lasts longer than the picture: a room of 600 tiles takes 15 frames, GHOSTGRID's 816-tile hall 18, and one of the largest (40 by 30 tiles, 1,200) would take about 27, half a second. The most any frame of loading costs is about 125,000 of the 221,000 cycles of an NTSC frame, so `missed_frames` stays 0.
+
+`game.set_tile(mut c, column, row, tile)` changes a tile at run time and redraws it in the same frame (up to 64 changes a frame). `tile_at` and `flags_at` describe the room as it is, after the change.
+
+### The tile layer and the camera
+
+A room is drawn once into a buffer of one byte a pixel (the game's palette) at address 0x100000: a line after a line, the whole room wide, so a room of 34 by 24 tiles is 544 by 384 bytes. Every frame the display list gets one object, first so that it is behind the sprites, that shows a window of that picture. The object's data pointer picks the line and the 8-pixel phrase the camera is at; the 0 to 7 pixels that are left over move the object's position left of where it would be, and the line buffer clips what falls outside the display. The object is 41 phrases (328 pixels) wide, so there is always a phrase for the fine part.
+
+`game.camera_x` and `game.camera_y` are ordinary `i16` variables: the world position at the left and top of the screen. Set them yourself, or call `camera_follow(mut c, x, y)`, which puts a world position in the middle of the screen as far as the room allows: it stops at the edges of the room, and in a room smaller than the screen it sets a negative camera, which centres the room. The tile layer and every sprite are drawn from the camera, so sprite positions are world positions; a sprite with `fixed` set stays where it is on the screen (a HUD sprite). The text layers are never moved.
+
+**What was checked in both emulators.** The fine scroll is the part most likely to differ: shifting an object to the left of the display window clips on the line buffer in this emulator, and the same in Virtual Jaguar. The tests set the camera to 14 positions (every fine offset from 0 to 7, edges, corners) and compare the whole logical screen with what the room should show: every pixel agrees, on NTSC and PAL. `scripts/crosscheck` ran GHOSTGRID in Virtual Jaguar with the pad held to scroll across the first room and through the exit, and compared it with this emulator at the same frame with the same input: the frames at 120, 200 (scrolling), 287, 290, 296 (the room loading, blank), 300 and 330 (the second room, centred) are identical over the 72,525 pixels both show (the colours differ by at most 2 in a channel, the two emulators convert CRY a little differently), at one fixed offset of the two pictures. So the object's first-pixel field and a wider object were not needed. What differs is only how much of the display window each emulator shows: this one crops the middle 325 pixels, so the overhang of the layer, up to 7 pixels to the left and 8 to the right of the logical screen, is visible only in Virtual Jaguar, as the next column of the room (seen there at frame 120: 7 columns of tile pixels left of the logical screen and 1 right of it).
+
+### Collision
+
+`flags_at(x, y)`, `tile_at(x, y)` and `solid_at(x, y)` ask about a world position in pixels, as expressions; outside the room the tile is `tile_none` (255) and the flags are `flag_solid`. They are machine code that the interpreter has an exact copy of: about 400 cycles each.
+
+`move_and_slide(mut c, x, y, box, dx, dy)` moves a mover whose position is the `fix` variables `x` and `y` by `dx`, `dy` against the solid tiles. The box is a `Hitbox{ox, oy, w, h}`, the part of the sprite that collides. It moves along x first, stopping flush against a wall, then along y with the new x, so pushing diagonally into a wall slides along it; afterwards `blocked_x()` and `blocked_y()` say which way a wall stopped it. **The limit is one tile: 16 pixels along an axis in one call**, so that only one new column of tiles can be entered and nothing can be tunnelled through; a larger step is cut to 16, and a faster mover calls again. The box must not start inside a wall, and the position's fraction is kept while the box is free and dropped when a wall stops it. A call costs about 4,300 cycles in the open.
+
+`overlap(a, b)` is an expression for two rectangles, `Rect{x, y, w, h}`, sharing a pixel; `sprite.rect(hitbox)` is a sprite's.
+
+### The game's frame
+
+The demo's update, in the order it happens. First the pad turns into a movement, and the movement into a call:
+
+<!-- guide:gg_update -->
+```v
+speed := c.local_fix('speed')
+dx := c.local_fix('dx')
+dy := c.local_fix('dy')
+c.set(speed, walk_speed)
+
+c.if_(game.held(.fire))
+c.set(speed, run_speed)
+c.end()
+
+c.if_(game.held(.up))
+c.set(dy, speed.neg())
+c.set(facing, 1)
+c.end()
+
+c.if_(game.held(.down))
+c.set(dy, speed)
+c.set(facing, 0)
+c.end()
+
+c.if_(game.held(.left))
+c.set(dx, speed.neg())
+c.set(facing, 2)
+c.end()
+
+c.if_(game.held(.right))
+c.set(dx, speed)
+c.set(facing, 3)
+c.end()
+
+game.move_and_slide(mut c, px, py, player_box, dx, dy)
+```
+
+The figure walks while it moves and stands when it does not; an animation is started once, when the direction or the speed changes, because `play` starts it over:
+
+<!-- guide:gg_animate -->
+```v
+// The figure walks while it moves, and stands when it does not. The
+// animation is started once, when the direction or the speed changes.
+moving := dx.ne(0).either(dy.ne(0))
+for d, name in directions {
+	for run in [false, true] {
+		which := 1 + d + if run { 4 } else { 0 }
+		speed_is := if run { speed.eq(run_speed) } else { speed.eq(walk_speed) }
+
+		c.if_(moving.both(facing.eq(d)).both(speed_is).both(playing.ne(which)))
+		c.set(playing, which)
+		player.play(mut c, '${if run { 'run' } else { 'walk' }}_${name}', true)
+		c.end()
+	}
+}
+
+c.if_(moving.invert().both(playing.ne(0)))
+c.set(playing, 0)
+player.stop(mut c)
+c.set(player.frame, facing.mul(3))
+c.end()
+```
+
+Then the world: the sprite goes where the figure is, the camera follows, a chip under the middle of the figure is picked up (its tile becomes floor, and the picture changes) and the exit pad loads the other room:
+
+<!-- guide:gg_world -->
+```v
+c.set(player.x, px.as_(.i16))
+c.set(player.y, py.as_(.i16))
+game.camera_follow(mut c, px.add(8).as_(.i32), py.add(9).as_(.i32))
+
+// What is under the middle of the figure: a chip to pick up, or the exit.
+here_x := c.local_i32('here_x')
+here_y := c.local_i32('here_y')
+here := c.local_u8('here')
+c.set(here_x, px.add(8).as_(.i32))
+c.set(here_y, py.add(9).as_(.i32))
+c.set(here, game.flags_at(here_x, here_y))
+
+c.if_(here.and(jaggame.flag_item).ne(0))
+game.set_tile(mut c, here_x.shr(4), here_y.shr(4), tile_floor)
+c.inc(chips)
+c.end()
+
+c.if_(here.and(jaggame.flag_exit).ne(0))
+c.if_(game.room_number.eq(0))
+game.load_room(mut c, training_annex)
+c.else_()
+game.load_room(mut c, training_hall)
+c.end() // which room
+enter_room(mut c, mut game, px, py, chips, total)
+c.end() // on the exit pad
+
+hud.number(mut c, 6, 0, chips, 2)
+hud.number(mut c, 9, 0, total, 2)
+hud.number(mut c, 6, 2, game.room_number.add(1), 2)
+```
+
+### Numbers are cheaper
+
+Chapter 2 measured about 17,000 cycles a frame for a number that changes every frame. The slice replaced that: a `number` is machine code now (the language gained `native` and `native_ret`, an `asm` statement that the interpreter can run too, with a V copy of the same behaviour for the interpreter), one `divu` for a digit instead of the language's division, and only a cell that shows a different glyph is marked, and only a marked cell is drawn again.
+
+| A number of 5 cells in a changing game | before | now |
+|---|---|---|
+| counts up by one every frame | 19,800 | 2,300 |
+| every digit changes (a 16-bit value) | 19,700 | 3,100 |
+| a 32-bit value, every digit changes | 20,400 | 3,900 |
+| does not change | 19,700 | 1,600 |
+
+`jaggame/rt_number_test.v` measures each and fails above a bound. The same text work took hello2 from 66,000 cycles a frame to 19,400. `print` also skips a character that is already there, so printing a HUD every frame costs a compare a character.
+
+### Testing GHOSTGRID
+
+A robot plays the game through the pad and reads where the figure is from the machine's memory by name. It finds a route through the room's text (a breadth-first search over the open tiles) and steers to each tile in turn:
+
+<!-- guide:gg_steer -->
+```v
+want_x := f64(target.x * 16)
+want_y := f64(target.y * 16 - 1)
+mut mask := u32(0)
+if want_x - px > 1.6 {
+	mask |= jaggame.button_mask(.right)
+} else if px - want_x > 1.6 {
+	mask |= jaggame.button_mask(.left)
+}
+if want_y - py > 1.6 {
+	mask |= jaggame.button_mask(.down)
+} else if py - want_y > 1.6 {
+	mask |= jaggame.button_mask(.up)
+}
+far := (if want_x > px { want_x - px } else { px - want_x }) + (if want_y > py {
+	want_y - py
+} else {
+	py - want_y
+})
+if far > 24 {
+	mask |= jaggame.button_mask(.a)
+}
+return mask
+```
+
+With it the test walks the first room to the chips and the exit, and checks every frame that the camera is where `camera_follow` should put it; that the chip count goes up and the tile is gone from the picture (the whole screen is compared with the room as the tile data and the map say it should look, with the figure and the text left out); that the second room loads, is centred and has the figure on its start; and that the way back works. Two more tests push at the walls:
+
+<!-- guide:gg_corner -->
+```v
+// Pushing into the corner: left and up, then flush against both walls.
+hold_pad(mut b.p, jaggame.button_mask(.left) | jaggame.button_mask(.up))
+b.p.frames(40)
+assert b.fixed('px') == 13 && b.fixed('py') == 12, 'flush in the corner: ${b.fixed('px')}, ${b.fixed('py')}'
+```
+
+Pushing into the corner leaves the figure flush against both walls, running into it changes nothing, and a random pad for 3,000 frames never puts its box inside a wall (checked every frame). All of it runs on NTSC and PAL with no missed frames.
+
+The logic then runs again in the interpreter, with the pad the robot used, frame for frame:
+
+<!-- guide:gg_compare -->
+```v
+mut g := describe()
+mut it := g.interpreter(if pal { jaggame.Region.pal } else { jaggame.Region.ntsc })!
+mut again := boot(pal)
+for n, mask in b.pad_log {
+	again.frame(mask)
+	g.step(mut it, mask)!
+	for name in ['px', 'py', 'chips', 'room_number', 'loading', 'camera_x', 'camera_y',
+		'facing', 'playing', 'total'] {
+		assert again.value(name) == int(it.value(name)!), 'frame ${n}: ${name}: machine ${again.value(name)}, interpreter ${it.value(name)!}'
+	}
+}
+mut differences := again.img.differences(it, again.p.m.ram)
+differences = differences.filter(!it.contains('_dirty') && !it.contains('_stale'))
+assert differences.len == 0, differences.join('\n')
+```
+
+The movement, the chips, the camera, the room changes and every variable of the program agree after each frame.
+
+### What it costs
+
+Measured on the emulated 68000 (`Player.busy_cycles`); a frame is about 221,000 cycles on NTSC and 265,000 on PAL.
+
+| | Cycles |
+|---|---|
+| GHOSTGRID standing in the first room | 14,700 a frame |
+| GHOSTGRID running | 18,900 a frame |
+| the tile layer's object (in a test game with a few checks) | 1,800 a frame |
+| `camera_follow` | 900 |
+| `flags_at`, `tile_at` | 400 |
+| `move_and_slide` in the open | 4,300 |
+| loading, at most | 125,000 a frame, 48 tiles a frame |
+| a changed tile | 1,500 |
+| a number that counts | 2,300 |
+
+A frame of GHOSTGRID leaves about 200,000 cycles for the work of guards.
+
+### V traps in this slice
+
+| Trap | Workaround |
+|---|---|
+| `map[string]Expr` cannot be read without an `or {}` block (the value holds a pointer) | keep the runtime's declarations in a heap struct (`&TileVars`) made when it is first needed |
+| a struct with an `Expr` field cannot be left out of a literal | build it with `invalid('')` placeholders, as `new_game` does |
+| a local named `map` or `i32` is refused | `grid`, `xy` |
+| `_test.v` files compile alone: a helper in one is not in another | repeat the small helpers, or put what the tool needs in the module (`Canvas`) |
+| zsh does not split `$H` into words, so `front core game 100 out.bmp scratch $H` passes one argument | write the holds out, or use an array |
