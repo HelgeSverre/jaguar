@@ -172,26 +172,28 @@ fn test_word_writes_start_the_blit_on_the_low_half() {
 	assert bus.read16(target_base) == 0x0bad
 }
 
-fn test_negative_x_addresses_the_previous_line() {
-	// Source lines of 4 pixels stored back to back in a window declared 64
-	// wide: the step of 1 line and -64 pixels walks them contiguously.
+fn test_x_counts_past_32767_upwards_from_the_base() {
+	// Memory cleared as two "lines" of 32768 pixels with no step between
+	// them: the second line carries on where the first stopped.
+	base := u32(0x4_0000)
+	pixels := u32(0x1_0000)
 	mut bus := hwtypes.new_ram_bus(0x10_0000)
 	mut b := Blitter{}
-	for i in u32(0) .. 8 {
-		bus.write16(source_base + i * 2, u16(0x100 + i))
+	for a := base - 0x2_0000; a < base + pixels * 2 + 16; a += 2 {
+		bus.write16(a, 0xeeee)
 	}
-	b.set(mut bus, b_a1_base, target_base)
-	b.set(mut bus, b_a1_flags, flags_16bpp_w64 | xadd_pix)
-	b.set(mut bus, b_a1_step, (1 << 16) | u32(u16(-4)))
-	b.set(mut bus, b_a2_base, source_base)
-	b.set(mut bus, b_a2_flags, flags_16bpp_w64 | xadd_pix)
-	b.set(mut bus, b_a2_step, (1 << 16) | u32(u16(-64)))
-	b.set(mut bus, b_count, (2 << 16) | 4)
-	b.set(mut bus, b_cmd, cmd_srcen | cmd_upda1 | cmd_upda2 | (0xc << 21))
-	for i in u32(0) .. 4 {
-		assert bus.read16(target_base + i * 2) == u16(0x100 + i)
-		assert bus.read16(target_base + (64 + i) * 2) == u16(0x104 + i)
+	b.set(mut bus, b_a1_base, base)
+	b.set(mut bus, b_a1_flags, 4 << 3) // 16 bits a pixel, a phrase at a time
+	b.set(mut bus, b_a1_pixel, 0)
+	b.set(mut bus, b_count, (2 << 16) | 0x8000)
+	b.set(mut bus, b_cmd, 0)
+	for a := base - 0x2_0000; a < base; a += 2 {
+		assert bus.read16(a) == 0xeeee, 'below the base at ${a:06x}'
 	}
+	for a := base; a < base + pixels * 2; a += 2 {
+		assert bus.read16(a) == 0, 'not cleared at ${a:06x}'
+	}
+	assert bus.read16(base + pixels * 2) == 0xeeee
 }
 
 fn test_y_add_flag_needs_a_stationary_x() {
