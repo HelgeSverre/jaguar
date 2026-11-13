@@ -29,7 +29,10 @@ pub:
 	stalled Expr // u8: set by `wait`
 	steps   Expr // u8: how many steps the current scene's setup has; 0 when it has none
 	live    Expr // bool: some scene has been entered
+	fading  Expr // u8: 0 no fade, 1 fading out to another scene, 2 fading in
 mut:
+	fade_to  Expr // u8: the scene a fade out goes to
+	fades    map[string]Func
 	game     &Game
 	machine  &Machine
 	names    []string
@@ -56,6 +59,8 @@ pub fn (mut g Game) scenes() &Scenes {
 		stalled: p.u8('scenes_stalled')
 		steps:   p.u8('scenes_steps')
 		live:    p.bool('scenes_live')
+		fading:  p.u8('scenes_fading')
+		fade_to: p.u8('scenes_fade_to')
 		game:    unsafe { g }
 		machine: p.machine_global('scene')
 		tick:    p.func('scenes_tick', [], .void)
@@ -143,6 +148,32 @@ pub fn (mut s Scenes) go(mut c Code, name string) {
 	c.call(s.go_func(name))
 }
 
+// fade_step is how much of the 16 steps of brightness a fade moves in a frame:
+// a fade takes 8 frames out and 8 in.
+const fade_step = 2
+
+// go_fade leaves the current scene for another one through black: the
+// picture fades out over 8 frames (the scene's update is not run meanwhile),
+// the scenes change as `go` does while it is black, the new scene's setup
+// runs, and the picture fades in over 8 frames before its update begins. It
+// works on what the colour table draws (tiles, sprites of 8-bit art, text);
+// a picture in 16-bit colour, like the backdrop, is not faded. The
+// statements after it still run: follow it with `ret_void()`.
+pub fn (mut s Scenes) go_fade(mut c Code, name string) {
+	c.call(s.fade_func(name))
+}
+
+// fade_func is the function that starts a fade to a scene.
+fn (mut s Scenes) fade_func(name string) Func {
+	if name in s.fades {
+		return s.fades[name]
+	}
+	f := s.game.p.func('scenefade_${name}', [], .void)
+	s.fades[name] = f
+	s.go_func(name)
+	return f
+}
+
 // wait makes the setup step that is running run again next frame instead of
 // moving on.
 pub fn (s &Scenes) wait(mut c Code) {
@@ -219,7 +250,24 @@ fn (mut s Scenes) finish() {
 	for name in s.asked {
 		s.define_go(name)
 	}
+	for name in s.fades.keys() {
+		s.define_fade(name)
+	}
 	s.define_tick()
+}
+
+// define_fade writes the start of a fade: where it goes, and that it begins.
+fn (mut s Scenes) define_fade(name string) {
+	mut p := s.game.p
+	mut c := p.define(s.fades[name])
+	i := s.names.index(name)
+	if i < 0 {
+		return
+	}
+	c.if_(s.fading.eq(0))
+	c.set(s.fade_to, i)
+	c.set(s.fading, 1)
+	c.end() // not fading already
 }
 
 // has_start is true when the start scene is named and exists.
@@ -257,6 +305,35 @@ fn (mut s Scenes) define_go(name string) {
 fn (mut s Scenes) define_tick() {
 	mut p := s.game.p
 	mut c := p.define(s.tick)
+	level := s.game.fade
+	if s.fades.len > 0 {
+		c.if_(s.fading.eq(1))
+
+		c.if_(level.gt(fade_step))
+		c.set(level, level.sub(fade_step))
+		c.else_()
+		c.set(level, 0)
+		c.set(s.fading, 2)
+		for i, name in s.names {
+			if name in s.gos {
+				c.if_(s.fade_to.eq(i))
+				c.call(s.gos[name])
+				c.end() // this scene
+			}
+		}
+		c.end() // dark: change scenes
+		c.ret_void()
+		c.end() // fading out
+
+		c.if_(s.fading.eq(2).both(s.settled()))
+		c.set(level, level.add(fade_step).min(16))
+
+		c.if_(level.eq(16))
+		c.set(s.fading, 0)
+		c.end() // fully in
+		c.ret_void()
+		c.end() // fading in
+	}
 	c.if_(s.settled())
 	s.machine.run(mut c, 0)
 	c.ret_void()

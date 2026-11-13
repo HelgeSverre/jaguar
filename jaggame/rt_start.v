@@ -137,6 +137,7 @@ fn (g &Game) emit_handler(mut m jagkit.M68k) {
 	}
 	m.bsr('rt.render_text')
 	m.bsr('rt.sync_colours')
+	m.bsr('rt.fade_clut')
 	if g.sounds {
 		m.bsr('rt.send_voices')
 	}
@@ -223,9 +224,49 @@ fn (g &Game) emit_text_routines(mut m jagkit.M68k, layout Layout) {
 	m.rts()
 
 	m.label('rt.sync_colours')
+	m.moveq(0, d0)
+	m.move(.b, lbl('rt_fade'), d0)
 	for i, t in g.texts {
 		// A one-bit object with palette 254 - 2i draws its set pixels in colour 255 - 2i.
-		m.move(.w, lbl('${t.name}_colour'), abs(jagkit.clut + u32(2 * (255 - 2 * i))))
+		m.move(.w, lbl('${t.name}_colour'), d2)
+		m.bsr('rt.dim')
+		m.move(.w, d2, abs(jagkit.clut + u32(2 * (255 - 2 * i))))
+	}
+	m.rts()
+
+	// rt.dim scales the intensity (the low byte) of the CRY colour in d2 by
+	// d0/16; the colour part (the high byte) stays.
+	m.label('rt.dim')
+	m.cmp(.b, imm(16), d0)
+	m.b(.eq, 'rt.dim_done')
+	m.move(.w, d2, d3)
+	m.and(.w, imm(0xff), d3)
+	m.mulu(d0, d3)
+	m.lsr(.w, imm(4), d3)
+	m.and(.w, imm(0xff00), d2)
+	m.orr(.w, d3, d2)
+	m.label('rt.dim_done')
+	m.rts()
+
+	// rt.fade_clut puts the palette in the colour table at the brightness
+	// `rt_fade` says, when that is not what it holds (the text layers' colours
+	// are done by `rt.sync_colours` every frame).
+	m.label('rt.fade_clut')
+	if g.palette.len > 0 {
+		m.moveq(0, d0)
+		m.move(.b, lbl('rt_fade'), d0)
+		m.cmp(.b, lbl('rt_fade_applied'), d0)
+		m.b(.eq, 'rt.fade_done')
+		m.move(.b, d0, lbl('rt_fade_applied'))
+		m.lea(lbl('rt.palette'), a0)
+		m.lea(abs(jagkit.clut), a1)
+		m.move(.w, imm(g.palette.len - 1), d1)
+		m.label('rt.fade_entry')
+		m.move(.w, inc(a0), d2)
+		m.bsr('rt.dim')
+		m.move(.w, d2, inc(a1))
+		m.dbra(d1, 'rt.fade_entry')
+		m.label('rt.fade_done')
 	}
 	m.rts()
 }

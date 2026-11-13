@@ -170,6 +170,48 @@ pub fn (t TextLayer) print(mut c Code, col Val, row Val, text string) {
 	c.call(f, t.cell(col, row), offset, text.len, t.row_of(row))
 }
 
+// wrap_words breaks text into lines of at most `width` characters at the
+// spaces between words, the way a briefing is laid out. A word longer than
+// a line is on a line of its own (and `print_wrapped` reports it).
+pub fn wrap_words(text string, width int) []string {
+	mut lines := []string{}
+	mut line := ''
+	for word in text.split(' ') {
+		if word == '' {
+			continue
+		}
+		if line == '' {
+			line = word
+		} else if line.len + 1 + word.len <= width {
+			line += ' ' + word
+		} else {
+			lines << line
+			line = word
+		}
+	}
+	if line != '' {
+		lines << line
+	}
+	return lines
+}
+
+// print_wrapped writes a string constant as lines of at most `width` cells
+// from a column and a row, breaking it between words when the game is built
+// (so it costs what the lines cost). It returns the number of lines, so the
+// next piece of text can start below. A word wider than `width` is a build
+// error.
+pub fn (t TextLayer) print_wrapped(mut c Code, col int, row int, width int, text string) int {
+	mut g := t.game
+	lines := wrap_words(text, width)
+	for k, line in lines {
+		if line.len > width {
+			g.problem('text layer `${t.name}`: the word `${line}` is wider than the ${width} cells of the lines')
+		}
+		t.print(mut c, col, row + k, line)
+	}
+	return lines.len
+}
+
 // number writes an unsigned number at a column and a row, right-aligned in
 // `width` cells (1 to 10). A number with more digits shows its low digits.
 // The value may be any unsigned integer expression.

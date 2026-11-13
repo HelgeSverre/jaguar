@@ -159,3 +159,113 @@ fn test_a_start_scene_that_does_not_exist_and_a_game_with_no_scenes_are_refused(
 	other := build_error(mut h)
 	assert other.contains('there are no scenes'), other
 }
+
+// fade_game has a palette, a text layer and two scenes: A on the first goes
+// to the second through black, B goes back by a plain `go`. The second has a
+// two step setup. `trail` records the scene's name (1, 2) each frame its
+// update ran.
+fn fade_game() &Game {
+	mut g := new_game(Config{ sprites: 1, layers: 1 })
+	g.palette([u16(0), cry(200, 100, 50), cry(0, 255, 0)])
+	g.art_pal('box', 8, 8, 1, []u8{len: 64, init: 1})
+	hud := g.text_layer('hud', TextConfig{
+		columns: 8
+		rows:    1
+		colour:  cry(255, 255, 255)
+	})
+	trail := g.p.array_u8('trail', 64)
+	used := g.p.u8('used')
+	mut scenes := g.scenes()
+	mut c := scenes.on_enter('second')
+	hud.print(mut c, 0, 0, 'TWO')
+	c = scenes.setup('second', 2)
+	c = scenes.scene('first')
+	c.if_(used.lt(64))
+	c.set(trail.at(used), 1)
+	c.inc(used)
+	c.end()
+
+	c.if_(g.pressed(.a))
+	scenes.go_fade(mut c, 'second')
+	c.end()
+	c = scenes.scene('second')
+	c.if_(used.lt(64))
+	c.set(trail.at(used), 2)
+	c.inc(used)
+	c.end()
+
+	c.if_(g.pressed(.b))
+	scenes.go(mut c, 'first')
+	c.end()
+	scenes.start('first')
+	return g
+}
+
+// intensity is the low byte of colour table entry `i` as the machine has it.
+fn intensity(p &emulated.Player, i int) int {
+	return int(p.m.tom.clut[i]) & 0xff
+}
+
+fn test_a_fade_goes_through_black_and_the_colour_table_follows_on_both_sides() {
+	mut g := fade_game()
+	img := g.build()!
+	mut h := fade_game()
+	mut it := h.interpreter(.ntsc)!
+	mut p := emulated.boot(img.bytes, false)!
+	p.frames(2)
+	h.step(mut it, 0)!
+	h.step(mut it, 0)!
+	full := intensity(&p, 1)
+	assert full > 40
+	text_full := intensity(&p, 255)
+	assert text_full > 100
+	mut levels := []int{}
+	mut shown := []int{}
+	mut scenes_seen := []int{}
+	for n in 0 .. 60 {
+		held := if n == 4 { button_mask(.a) } else { u32(0) }
+		h.step(mut it, held)!
+		if held != 0 {
+			p.press(jerry.Button.a)
+		} else {
+			p.release(jerry.Button.a)
+		}
+		p.frames(1)
+		p.settle()
+		levels << int(it.value('rt_fade')!)
+		shown << intensity(&p, 1)
+		scenes_seen << int(it.element('scene_state', 0)!)
+		assert int(img.value(p.m.ram, 'rt_fade')!) == levels.last(), 'frame ${n}: the brightness is the same on both sides'
+	}
+	// it dims in steps of 2 down to 0, the scene changes while it is black,
+	// and it comes back up, after the two setup steps
+	assert levels[..4] == [16, 16, 16, 16]
+	assert levels[5..9] == [14, 12, 10, 8]
+	assert levels.contains(0)
+	first_dark := levels.index(0)
+	assert scenes_seen[first_dark - 1] == 0 && scenes_seen[first_dark + 1] == 1, 'the scene changes while it is black: ${scenes_seen[first_dark - 1..
+		first_dark + 2]}'
+	assert levels.last() == 16
+	for k in 0 .. levels.len {
+		// the colour table has the brightness the variable says (the machine is a frame
+		// behind the settled variable by at most a frame)
+		if k > 0 && levels[k] == levels[k - 1] {
+			assert shown[k] == full * levels[k] / 16, 'frame ${k}: ${shown[k]} for level ${levels[k]} and full ${full}'
+		}
+	}
+	assert shown[first_dark + 1] == 0, 'black while it is dark'
+	assert shown.last() == full, 'and back to the colours as drawn'
+	assert intensity(&p, 255) == text_full, 'the text colour is back too'
+	mut dark_text := false
+	for k, l in levels {
+		if l == 0 && k > 0 {
+			dark_text = true
+		}
+	}
+	assert dark_text
+	// the second scene's update ran only after the fade in finished
+	used := int(it.value('used')!)
+	assert used > 10
+	left := img.differences(it, p.m.ram).filter(!it.contains('_dirty') && !it.contains('_stale'))
+	assert left.len == 0, left.join('\n')
+}

@@ -304,3 +304,37 @@ fn test_the_image_loads_and_starts_on_the_entry() {
 	assert img.symbols['rt.start'] == load_address
 	assert img.symbols['sprites'] % 4 == 0
 }
+
+fn test_words_wrap_at_the_spaces() {
+	assert wrap_words('GET THE CHIPS AND LEAVE BY THE GREEN PAD', 12) == ['GET THE', 'CHIPS AND',
+		'LEAVE BY THE', 'GREEN PAD']
+	assert wrap_words('  ONE   TWO ', 20) == ['ONE TWO']
+	assert wrap_words('', 10).len == 0
+	assert wrap_words('ABCDEFGHIJKL MN', 5) == ['ABCDEFGHIJKL', 'MN']
+}
+
+fn test_a_wrapped_text_is_printed_line_by_line_and_a_long_word_is_an_error() {
+	mut g := new_game(Config{ sprites: 1, layers: 1 })
+	g.art_cry('box', 8, 8, 1, []u16{len: 64, init: 1})
+	layer := g.text_layer('note', TextConfig{
+		columns: 16
+		rows:    6
+	})
+	mut c := g.define_init()
+	used := layer.print_wrapped(mut c, 1, 1, 10, 'SNEAK PAST THE GUARDS AND REACH THE EXIT')
+	assert used == 4
+	g.build()!
+	mut h := new_game(Config{ sprites: 1, layers: 1 })
+	h.art_cry('box', 8, 8, 1, []u16{len: 64, init: 1})
+	l2 := h.text_layer('note', TextConfig{
+		columns: 16
+		rows:    6
+	})
+	mut c2 := h.define_init()
+	l2.print_wrapped(mut c2, 0, 0, 5, 'EXTRAORDINARY DAY')
+	h.build() or {
+		assert err.msg().contains('EXTRAORDINARY')
+		return
+	}
+	assert false, 'a word wider than the lines is reported'
+}

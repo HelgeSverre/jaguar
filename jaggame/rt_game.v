@@ -63,11 +63,13 @@ pub:
 	room_number   Expr // u8: the room that is loaded or loading
 	room_width    Expr // i16: the width of that room in pixels
 	room_height   Expr // i16: its height in pixels
+	fade          Expr // u8: the brightness of everything drawn with the palette, 0 (black) to 16 (as drawn); see `Scenes.go_fade`
 pub mut:
 	p &Program
 mut:
 	record  Record
 	pal     Expr // u8: 0 on NTSC, 1 on PAL
+	applied Expr // u8: the brightness the colour table has now
 	arts    []ArtInfo
 	palette []u16
 	// palette_fixed is true once the author declared the palette; until
@@ -136,9 +138,11 @@ pub fn new_game(config Config) &Game {
 		room_number:   p.u8('room_number')
 		room_width:    p.i16('room_width')
 		room_height:   p.i16('room_height')
+		fade:          p.u8('rt_fade', 16)
 		p:             p
 		record:        record
 		pal:           p.u8('rt_pal')
+		applied:       p.u8('rt_fade_applied', 16)
 		init_func:     p.func('rt_user_init', [], .void)
 		update_func:   p.func('rt_user_update', [], .void)
 	}
