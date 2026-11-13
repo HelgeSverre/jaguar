@@ -401,20 +401,25 @@ fn assignable(from Type, to Type) bool {
 	return from.is_integer() && to == .fix
 }
 
+// a_type is a type with its article: "a u8", "an i16".
+fn a_type(t Type) string {
+	return if t.str().starts_with('i') { 'an ${t}' } else { 'a ${t}' }
+}
+
 fn store_problem(from Type, to Type) string {
 	if to == .bool {
-		return 'a ${from} cannot be stored in a bool; compare it instead, e.g. .ne(0)'
+		return '${a_type(from)} cannot be stored in a bool; compare it instead, e.g. .ne(0)'
 	}
 	if from == .bool {
-		return 'a bool cannot be stored in a ${to}; convert it with as_(.${to})'
+		return 'a bool cannot be stored in ${a_type(to)}; convert it with as_(.${to})'
 	}
 	if from == .fix {
-		return 'a fix cannot be stored in a ${to}; convert it with as_(.${to}), which rounds down'
+		return 'a fix cannot be stored in ${a_type(to)}; convert it with as_(.${to}), which rounds down'
 	}
 	if from.is_signed() != to.is_signed() {
-		return 'a ${from} cannot be stored in a ${to}: one is signed and the other is not; convert it with as_(.${to})'
+		return '${a_type(from)} cannot be stored in ${a_type(to)}: one is signed and the other is not; convert it with as_(.${to})'
 	}
-	return 'a ${from} does not fit a ${to}; narrow it with as_(.${to})'
+	return '${a_type(from)} does not fit ${a_type(to)}; narrow it with as_(.${to})'
 }
 
 // assign checks a value that is stored in, or passed as, a `to`.
