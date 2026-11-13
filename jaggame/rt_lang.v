@@ -22,6 +22,9 @@ fn (mut g Game) define_runtime() {
 	if g.map_ready {
 		g.define_map()
 	}
+	if g.sight_ready {
+		g.define_sight()
+	}
 
 	init := g.p.func('rt_init', [], .void)
 	mut c := g.p.define(init)
@@ -41,6 +44,11 @@ fn (mut g Game) define_runtime() {
 	frame := g.p.func('rt_frame', [], .void)
 	c = g.p.define(frame)
 	c.inc(g.frame)
+	if g.sight_ready {
+		c.if_(g.sight.noise_left.ne(0))
+		c.dec(g.sight.noise_left)
+		c.end() // a noise dies away
+	}
 	if g.map_ready {
 		c.set(g.tv.queued, 0) // the tiles changed last frame were drawn
 	}
