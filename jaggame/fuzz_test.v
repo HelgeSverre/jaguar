@@ -147,6 +147,11 @@ mut:
 	order      []Func
 	main       Func
 	results    []int // the variables expression cases store into
+	// the state machines the machine cases made, for the coverage check
+	machines    int
+	transitions int
+	enters      int
+	starts      int
 }
 
 fn new_fuzzer(seed u64) Fuzzer {
@@ -611,6 +616,83 @@ fn (mut f Fuzzer) statement_case(k int) Func {
 	return fun
 }
 
+// machine_case is a case that is a state machine: a few states over a few
+// records, each state a random body that also reads `me()` and
+// `time_in_state()`, random transitions on time and on random conditions
+// (some followed by a return, some not, some to the state itself), some
+// `on_enter` bodies, and a function that runs every record for some frames.
+fn (mut f Fuzzer) machine_case(k int) Func {
+	n := 2 + f.r.below(4)
+	size := 2 + f.r.below(2)
+	own_type := f.r.pick_type()
+	own := f.p.array('o${k}', own_type, 4)
+	own_records := f.p.array_of('q${k}', f.rec, 2)
+	recs := f.p.array_of('mr${k}', f.rec, size)
+	mut m := f.p.machine('mach${k}', recs)
+	f.machines++
+	mut names := []string{}
+	for j in 0 .. n {
+		names << 's${j}'
+	}
+	for name in names {
+		mut c := m.state(name)
+		f.scope = []Typed{}
+		for l in 0 .. 2 {
+			t := f.r.pick_type()
+			f.scope << Typed{c.local('l${l}', t), t}
+		}
+		f.statements(mut c, 1 + f.r.below(3), 1, own, own_type, own_records)
+		c.set(own.at(c.me().and(3)), c.time_in_state().as_(own_type))
+		for _ in 0 .. 1 + f.r.below(2) {
+			if f.r.chance(75) {
+				cond := match f.r.below(3) {
+					0 { c.time_in_state().ge(f.r.below(5)) }
+					1 { c.time_in_state().eq(f.r.below(4)) }
+					else { f.gen(.bool, 1) }
+				}
+
+				c.if_(cond)
+				c.to(names[f.r.below(n)])
+				f.transitions++
+				if f.r.chance(50) {
+					c.ret_void()
+				}
+				f.statements(mut c, 1, 1, own, own_type, own_records)
+				c.end()
+			}
+		}
+		if f.r.chance(15) {
+			c.to(names[f.r.below(n)])
+			f.transitions++
+		}
+	}
+	for name in names {
+		if f.r.chance(35) {
+			mut c := m.on_enter(name)
+			f.scope = []Typed{}
+			t := f.r.pick_type()
+			f.scope << Typed{c.local('e', t), t}
+			f.statements(mut c, 1 + f.r.below(2), 1, own, own_type, own_records)
+			c.set(own.at(c.me().and(3)), c.time_in_state().as_(own_type))
+			f.enters++
+		}
+	}
+	fun := f.p.func('s${k}', [], .void)
+	mut c := f.p.define(fun)
+	i := c.local_u16('i')
+	if f.r.chance(50) {
+		m.start(mut c, f.r.below(size), names[f.r.below(n)])
+		f.starts++
+	}
+	c.repeat(6 + f.r.below(8))
+	c.for_(i, 0, size)
+	m.run(mut c, i)
+	c.end() // each record
+	c.end() // each frame
+	f.stmt_cases << fun
+	return fun
+}
+
 // batch builds one program with `cases` cases.
 fn build_batch(seed u64, cases int) Fuzzer {
 	mut f := new_fuzzer(seed)
@@ -622,7 +704,13 @@ fn build_batch(seed u64, cases int) Fuzzer {
 	main := f.p.func('main', [], .void)
 	mut funcs := []Func{}
 	for k in 0 .. cases {
-		funcs << if f.r.chance(50) { f.expression_case(k) } else { f.statement_case(k) }
+		funcs << if f.r.chance(45) {
+			f.expression_case(k)
+		} else if f.r.chance(18) {
+			f.machine_case(k)
+		} else {
+			f.statement_case(k)
+		}
 	}
 	mut c := f.p.define(main)
 	f.fill_inputs(mut c)
@@ -640,11 +728,33 @@ fn build_batch(seed u64, cases int) Fuzzer {
 	return f
 }
 
+// machine_owner is the case that a name made for a machine belongs to:
+// `mach12_s0` and `mach12_state` belong to the case `s12`.
+fn machine_owner(name string) ?string {
+	if !name.starts_with('mach') || name.len < 5 || !name[4].is_digit() {
+		return none
+	}
+	mut digits := ''
+	for ch in name[4..] {
+		if !ch.is_digit() {
+			break
+		}
+		digits += ch.ascii_str()
+	}
+	return 's' + digits
+}
+
 // owner_case is the case a variable belongs to, by its name, or -1.
 fn (f &Fuzzer) owner_of(low &Lowered, var int) string {
 	v := low.vars[var]
 	if v.owner >= 0 {
-		return low.funcs[v.owner].name
+		return machine_owner(low.funcs[v.owner].name) or { low.funcs[v.owner].name }
+	}
+	if owner := machine_owner(v.name) {
+		return owner
+	}
+	if v.name.starts_with('mr') && v.name.len > 2 && v.name[2].is_digit() {
+		return 's' + v.name[2..]
 	}
 	if v.name.starts_with('r_') {
 		return v.name[2..]
@@ -706,6 +816,10 @@ fn run_batch(mut runner emulated.Runner, batch int, mut cov Coverage) !int {
 	for i in 0 .. it.low.funcs.len {
 		cov.stmts(&it.low.funcs[i].body)
 	}
+	cov.machines += f.machines
+	cov.transitions += f.transitions
+	cov.enters += f.enters
+	cov.starts += f.starts
 	cov.expr_cases += f.expr_cases.len
 	cov.stmt_cases += f.stmt_cases.len
 	cov.zero_divisions += it.zero_divisions
@@ -772,6 +886,10 @@ mut:
 	seen           map[int]int
 	expr_cases     int
 	stmt_cases     int
+	machines       int
+	transitions    int
+	enters         int
+	starts         int
 	nonzero        int // expression cases whose result is not 0
 	zero_divisions i64 // divisions and remainders by zero the interpreter ran
 }
@@ -891,6 +1009,8 @@ fn test_the_interpreter_and_the_68000_agree_on_random_programs() {
 	elapsed := time.since(start)
 	println('fuzz: ${total} cases agree (${cov.expr_cases} expressions, ${cov.stmt_cases} statement sequences) in ${fuzz_batches} batches, ${elapsed.milliseconds()} ms')
 	println('fuzz: ${cov.nonzero} expression results are not 0; ${cov.zero_divisions} divisions by zero were run')
+	println('fuzz: ${cov.machines} state machines with ${cov.transitions} transitions, ${cov.enters} on_enter bodies and ${cov.starts} starts')
+	assert cov.machines > 1500 && cov.transitions > 3000 && cov.enters > 1000 && cov.starts > 500, 'the fuzzer makes state machines of every kind'
 	assert failures.len == 0, failures.join('\n\n')
 	mut missing := []string{}
 	for key, name in expected_coverage() {
