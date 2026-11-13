@@ -36,6 +36,16 @@ fn (mut g Game) play_state() {
 	m.label('play_on')
 	m.tst(.w, lbl('failed'))
 	m.b(.ne, 'play_judged')
+	// On PAL every fifth frame is two frames of song.
+	m.bsr('extra_due')
+	m.b(.eq, 'no_extra')
+	m.bsr('sequence')
+	m.tst(.w, lbl('finish_timer'))
+	m.b(.ne, 'extra_swept')
+	m.bsr('miss_sweep')
+	m.label('extra_swept')
+	m.add(.w, imm(1), lbl('clock'))
+	m.label('no_extra')
 	m.bsr('sequence')
 	m.tst(.w, lbl('finish_timer')) // a finished song takes no more presses
 	m.b(.ne, 'play_judged')

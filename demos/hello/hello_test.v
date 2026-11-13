@@ -1,5 +1,6 @@
 module main
 
+import hwtypes
 import jerry
 import loader
 import machine
@@ -15,9 +16,13 @@ mut:
 }
 
 fn boot() Player {
+	return boot_as(.ntsc)
+}
+
+fn boot_as(region hwtypes.Region) Player {
 	built := build() or { panic(err) }
 	plan := loader.plan(built.image, loader.Options{}) or { panic(err) }
-	mut m := machine.new(machine.Config{})
+	mut m := machine.new(machine.Config{ region: region })
 	m.load_direct(plan)
 	return Player{
 		symbols: built.symbols
@@ -150,4 +155,20 @@ fn test_the_text_is_printed() {
 	// 14 and 24 characters of about 16 pixels each.
 	assert white > 300
 	assert white < 900
+}
+
+fn test_it_runs_on_a_pal_machine() {
+	mut p := boot_as(.pal)
+	p.frames(30)
+	assert p.word('frame') > 20
+	assert p.m.peek32(p.symbols['list']) == p.symbols['list_pal'], 'the PAL profile must be chosen'
+	left, top, count := p.ball_on_screen()
+	assert count > 600
+	p.hold(.right, 10)
+	p.hold(.down, 5)
+	moved_left, moved_top, _ := p.ball_on_screen()
+	assert moved_left == left + 10 * speed
+	assert moved_top == top + 5 * speed
+	p.hold(.b, 10)
+	assert p.loudest() > 2000
 }

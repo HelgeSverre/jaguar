@@ -17,7 +17,6 @@ const a0 = jagkit.a0
 const a1 = jagkit.a1
 const sp = jagkit.sp
 
-const video = jagkit.ntsc
 const load_address = u32(0x4000) // where the image is loaded; the stack grows down from here
 const list_address = u32(0x80000) // the display list the object processor reads
 const list_bytes = 96 // two branches and a stop, then two bitmaps
@@ -31,8 +30,6 @@ const text_colour = 1 // its place in the colour table
 // keeps to the middle of it.
 const screen_width = 320
 const screen_height = 232
-const screen_left = (video.width - screen_width) / 2
-const screen_top = (video.height - screen_height) / 2
 
 const ball_size = 32
 const speed = 2 // pixels a frame
@@ -101,10 +98,14 @@ fn build() !Built {
 		'frame':  0
 		'ball_x': (screen_width - ball_size) / 2
 		'ball_y': (screen_height - ball_size) / 2
+		'left':   0 // where the middle of the picture starts, from the profile
+		'top':    0
 	} {
 		m.label(name)
 		m.word(initial)
 	}
+	m.label('list') // the address of the master display list, from the profile
+	m.long(0)
 
 	// Data. Pictures start on a phrase (eight bytes), programs on a long.
 	m.align(4)
@@ -113,21 +114,35 @@ fn build() !Built {
 	m.align(8)
 	m.label('ball')
 	m.bytes(jagkit.big_endian16(ball()))
-	// The display list is kept as a master copy; a fresh copy goes to
-	// `list_address` every frame.
-	list := jagkit.object_list(list_address, video, [
-		jagkit.Bitmap{
-			width:       ball_size
-			height:      ball_size
-			data:        m.address_of('ball')
-			depth:       .bpp16
-			transparent: true
-		},
-		text.bitmap(screen_left, video.vdb + 2 * (screen_top + 8), text_colour),
-	])!
-	assert list.bytes.len == list_bytes
-	m.label('list')
-	m.bytes(list.bytes)
+	// A profile for each television standard: the display window, where the
+	// middle of the picture is, and a master copy of the display list. A
+	// fresh copy of the list goes to `list_address` every frame.
+	for video in [jagkit.ntsc, jagkit.pal] {
+		left := (video.width - screen_width) / 2
+		top := video.vdb + (video.height - screen_height) / 2 * 2
+		list := jagkit.object_list(list_address, video, [
+			jagkit.Bitmap{
+				width:       ball_size
+				height:      ball_size
+				data:        m.address_of('ball')
+				depth:       .bpp16
+				transparent: true
+			},
+			text.bitmap(left, top + 2 * 8, text_colour),
+		])!
+		assert list.bytes.len == list_bytes
+		name := video.name.to_lower()
+		m.label('list_${name}')
+		m.bytes(list.bytes)
+		m.label('profile_${name}')
+		m.word(video.hdb)
+		m.word(video.hde)
+		m.word(video.vdb)
+		m.word(video.vde | 1) // the line of the interrupt: after the last one shown
+		m.word(left)
+		m.word(top)
+		m.long_label('list_${name}')
+	}
 
 	payload := m.assemble()!
 	// Nothing the program writes to may lie on top of the image or of
@@ -149,13 +164,24 @@ fn start_up(mut m jagkit.M68k, dsp_longs int, dsp_start u32) {
 	m.move_to_sr(imm(0x2700)) // no interrupts yet
 	m.lea(abs(load_address), sp)
 
-	// The display window, as the boot ROM would have set it.
-	m.move(.w, imm(video.hdb), abs(jagkit.hdb1))
-	m.move(.w, imm(video.hdb), abs(jagkit.hdb2))
-	m.move(.w, imm(video.hde), abs(jagkit.hde))
-	m.move(.w, imm(video.vdb), abs(jagkit.vdb))
+	// Which television standard? Bit 4 of the buttons register is set on
+	// an NTSC machine. The profile holds everything that differs.
+	m.lea(lbl('profile_ntsc'), a0)
+	m.move(.w, abs(jagkit.joybuts), d0)
+	m.btst(4, d0)
+	m.b(.ne, 'standard_known')
+	m.lea(lbl('profile_pal'), a0)
+	m.label('standard_known')
+	m.move(.w, inc(a0), d0)
+	m.move(.w, d0, abs(jagkit.hdb1))
+	m.move(.w, d0, abs(jagkit.hdb2))
+	m.move(.w, inc(a0), abs(jagkit.hde))
+	m.move(.w, inc(a0), abs(jagkit.vdb))
 	m.move(.w, imm(0xffff), abs(jagkit.vde))
-	m.move(.w, imm(video.vde | 1), abs(jagkit.vi)) // interrupt after the last line
+	m.move(.w, inc(a0), abs(jagkit.vi))
+	m.move(.w, inc(a0), lbl('left'))
+	m.move(.w, inc(a0), lbl('top'))
+	m.move(.l, inc(a0), lbl('list'))
 	m.move(.l, imm(0), abs(jagkit.bord1))
 	m.move(.w, imm(jagkit.cry(0, 0, 60)), abs(jagkit.bg)) // dark blue behind everything
 
@@ -232,7 +258,7 @@ fn frame_interrupt(mut m jagkit.M68k, voices u32) {
 	// ball is the first bitmap, 32 bytes in; its line is in bits 3..13 of its first
 	// phrase and its column in bits 0..11 of its second.
 	m.label('show')
-	m.lea(lbl('list'), a0)
+	m.move(.l, lbl('list'), a0)
 	m.lea(abs(list_address), a1)
 	m.moveq(list_bytes / 4 - 1, d0)
 	m.label('copy_list')
@@ -241,12 +267,12 @@ fn frame_interrupt(mut m jagkit.M68k, voices u32) {
 	m.lea(abs(list_address + 32), a1)
 	m.move(.w, lbl('ball_y'), d0)
 	m.add(.w, d0, d0) // the object processor counts half-lines
-	m.add(.w, imm(video.vdb + 2 * screen_top), d0)
+	m.add(.w, lbl('top'), d0)
 	m.lsl(.w, imm(3), d0)
 	m.and(.w, imm(0xc007), at(6, a1))
 	m.orr(.w, d0, at(6, a1))
 	m.move(.w, lbl('ball_x'), d0)
-	m.add(.w, imm(screen_left), d0)
+	m.add(.w, lbl('left'), d0)
 	m.and(.w, imm(0xf000), at(14, a1))
 	m.orr(.w, d0, at(14, a1))
 	m.rts()

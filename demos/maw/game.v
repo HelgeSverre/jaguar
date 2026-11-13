@@ -148,6 +148,8 @@ fn (mut g Game) start_up(gpu_longs int, dsp_longs int, dsp_start u32) {
 	m.btst(4, d0)
 	m.b(.ne, 'standard_known')
 	m.lea(lbl('profile_pal'), a6)
+	// Fifty frames a second: five to a step keep the tune at its tempo.
+	m.move(.w, imm(step_frames * 50 / 60), lbl('step_length'))
 	m.label('standard_known')
 	m.move(.l, a6, lbl('profile'))
 	m.move(.w, inc(a6), d0)
@@ -390,7 +392,7 @@ fn (mut g Game) cycle_colours() {
 	m.rts()
 }
 
-// music plays one step of the tune every six frames: a kick on the beat,
+// music plays one step of the tune every six frames (five on PAL): a kick on the beat,
 // bass on the three steps behind it, a hi-hat half way, and the lead when
 // it has a note. Every frame all three voices fade.
 fn (mut g Game) music() {
@@ -398,7 +400,7 @@ fn (mut g Game) music() {
 	m.label('music')
 	m.move(.w, lbl('beat_tick'), d6) // frames into the step
 	m.add(.w, imm(1), d6)
-	m.cmp(.w, imm(step_frames), d6)
+	m.cmp(.w, lbl('step_length'), d6)
 	m.b(.cs, 'same_step')
 	m.moveq(0, d6)
 	m.add(.w, imm(1), lbl('step'))
@@ -978,6 +980,7 @@ fn (mut g Game) variables() {
 	g.variable('last_gap', ship_angle)
 	g.variable('scrolled', 0)
 	g.variable('beat_tick', step_frames - 1)
+	g.variable('step_length', step_frames) // frames to a step of the tune
 	g.variable('step', 0xffff)
 	g.variable('shown_x', window_x) // the window of the frame on screen
 	g.variable('shown_y', window_y)

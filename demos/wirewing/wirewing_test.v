@@ -1,5 +1,6 @@
 module main
 
+import hwtypes
 import jerry
 import loader
 import machine
@@ -15,9 +16,13 @@ mut:
 }
 
 fn boot() Pilot {
+	return boot_as(.ntsc)
+}
+
+fn boot_as(region hwtypes.Region) Pilot {
 	built := build() or { panic(err) }
 	plan := loader.plan(built.image, loader.Options{}) or { panic(err) }
-	mut m := machine.new(machine.Config{})
+	mut m := machine.new(machine.Config{ region: region })
 	m.load_direct(plan)
 	return Pilot{
 		symbols: built.symbols
@@ -164,4 +169,29 @@ fn test_the_tank_runs_dry() {
 	p.frames(full_tank + 60)
 	assert p.word('state') == state_dead
 	assert p.word('crashes') == 0, 'running dry is not a crash'
+}
+
+fn test_it_flies_on_a_pal_machine() {
+	mut p := boot_as(.pal)
+	p.frames(60)
+	assert p.m.peek32(p.symbols['profile']) == p.symbols['profile_pal']
+	p.tap(.b)
+	assert p.word('state') == state_play
+	started := p.word('frame')
+	for _ in 0 .. 600 {
+		p.fly_to_beacon()
+		p.frames(1)
+	}
+	assert p.word('frame') - started == 600, 'the 68000 must never miss a frame'
+	assert p.word('state') == state_play
+	pixels, info := p.m.frame()
+	mut lit := 0
+	for y in 0 .. info.height {
+		for x in 0 .. info.width {
+			if pixels[y * info.pitch + x] & 0xffffff != 0 {
+				lit++
+			}
+		}
+	}
+	assert lit > 1000, 'the landscape must be on screen'
 }

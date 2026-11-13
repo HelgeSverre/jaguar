@@ -197,6 +197,7 @@ fn (mut g Game) start_up(dsp_longs int, dsp_start u32) {
 	m.btst(4, d0)
 	m.b(.ne, 'standard_known')
 	m.lea(lbl('profile_pal'), a6)
+	m.move(.w, imm(1), lbl('pal'))
 	m.label('standard_known')
 	m.move(.w, inc(a6), d0)
 	m.move(.w, d0, abs(jagkit.hdb1))
@@ -362,7 +363,7 @@ fn (mut g Game) menus() {
 	m.rts()
 
 	m.label('title')
-	m.bsr('sequence')
+	m.bsr('sequence_timed')
 	m.bsr('attract')
 	m.move(.w, lbl('pressed'), d0)
 	m.and(.w, imm((1 << pad_confirm) | 0x1f), d0)
@@ -387,7 +388,7 @@ fn (mut g Game) menus() {
 	m.bra('select_changed')
 
 	m.label('select')
-	m.bsr('sequence')
+	m.bsr('sequence_timed')
 	m.bsr('attract')
 	m.move(.w, lbl('pressed'), d0)
 	m.btst(pad_back, d0)

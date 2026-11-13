@@ -127,6 +127,15 @@ The loader puts the payload in RAM at the load address and jumps to the entry la
 5. **Enable the interrupt and sleep.** Store the handler's address at `jagkit.interrupt_vector`, enable the video interrupt in `int1`, lower the interrupt mask, then loop on `stop`.
 
 ```v
+m.lea(lbl('profile_ntsc'), a0)
+m.move(.w, abs(jagkit.joybuts), d0)
+m.btst(4, d0)
+m.b(.ne, 'standard_known')
+m.lea(lbl('profile_pal'), a0)
+m.label('standard_known')
+```
+
+```v
 m.move(.l, imm((list_address << 16) | (list_address >> 16)), abs(jagkit.olp))
 m.move(.w, imm(jagkit.vmode_cry16), abs(jagkit.vmode))
 m.move(.l, ptr('frame_interrupt'), abs(jagkit.interrupt_vector))
@@ -137,7 +146,7 @@ m.stop(0x2000)
 m.bra('sleep')
 ```
 
-The example is built for NTSC only. To support both standards, test bit 4 of `joybuts` (set on NTSC machines) and pick between two sets of values and display lists; `start_up` in [`demos/wirewing/flight.v`](../demos/wirewing/flight.v) does this.
+**Both television standards.** Bit 4 of `joybuts` is set on an NTSC machine. The example builds a *profile* for each standard (the display window values, where the middle of the picture starts, the address of a display list built for that standard) and copies the right one into its variables at start-up. Everything after that reads the variables.
 
 **Memory.** The Jaguar has 2 MB of RAM from address 0. The demos load at `0x4000`, let the stack grow down from there, and place buffers at round addresses above the image (`0x80000` and up). Nothing on the Jaguar stops a program from drawing over its own code, so check the layout at build time with `jagkit.check_regions`. It reports regions that overlap or run past the end of memory:
 
@@ -169,7 +178,12 @@ m.rte()
 
 The 68000 runs about 221,000 cycles in an NTSC frame. If the handler takes longer, a frame is missed. The demos keep a `frame` counter and their tests assert that it advances by exactly one per emulated frame.
 
-Game logic tied to the frame runs about 17% slower on PAL. None of the demos correct for this.
+Anything counted in frames runs a sixth slower on PAL. Music is where that is heard, so the demos with a tune correct it:
+
+- **MAW** plays a step of its tune every six frames on NTSC and every five on PAL: the same ten steps a second.
+- **Jaguar Hero** counts song time in sixtieths of a second, so on PAL every fifth frame advances the song twice (`demos/hero/pal.v`).
+
+Movement is not corrected: MAW's tunnel and WIREWING's plane are a sixth slower on PAL.
 
 ## Pictures and the display list
 
@@ -204,7 +218,7 @@ Rules the builder checks and reports:
 Things the builder cannot check:
 
 - **`y` is in half-lines from the top of the frame.** Line `n` of the visible picture is `video.vdb + 2 * n`.
-- **`x` is in pixels from the left of the display window**, which is `video.width` wide (352 on NTSC). Televisions, and this emulator, show roughly the middle 320, so the demos centre their picture: `left := (video.width - 320) / 2`.
+- **`x` is in pixels from the left of the display window**, which is `video.width` wide (352 on NTSC, 345 on PAL). Televisions, and this emulator, show roughly the middle 320, so the demos centre their picture: `left := (video.width - 320) / 2`.
 - **Later objects are drawn over earlier ones.**
 - **The list is used up as it is drawn.** The object processor rewrites the objects while it works. Keep a master copy in the image and copy it to the list address every frame, in the interrupt. Skip this and the picture is gone after one frame.
 
@@ -214,7 +228,7 @@ Things the builder cannot check:
 m.lea(abs(list_address + 32), a1)
 m.move(.w, lbl('ball_y'), d0)
 m.add(.w, d0, d0)                              // half-lines
-m.add(.w, imm(video.vdb + 2 * screen_top), d0)
+m.add(.w, lbl('top'), d0)                      // first line of the picture, from the profile
 m.lsl(.w, imm(3), d0)
 m.and(.w, imm(0xc007), at(6, a1))              // clear the old y
 m.orr(.w, d0, at(6, a1))

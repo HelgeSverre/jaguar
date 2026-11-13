@@ -2,6 +2,7 @@ module main
 
 import os
 import cli
+import hwtypes
 import jerry
 import loader
 import machine
@@ -28,9 +29,13 @@ mut:
 }
 
 fn boot() Player {
+	return boot_as(.ntsc)
+}
+
+fn boot_as(region hwtypes.Region) Player {
 	built := build() or { panic(err) }
 	plan := loader.plan(built.image, loader.Options{}) or { panic(err) }
-	mut m := machine.new(machine.Config{})
+	mut m := machine.new(machine.Config{ region: region })
 	m.load_direct(plan)
 	return Player{
 		symbols: built.symbols
@@ -407,4 +412,44 @@ fn test_every_song_to_the_end() {
 		assert p.word('rank') == 0
 		eprintln('${p.songs[index].name}: ${notes} notes, score ${p.long('score')}, ${f64(p.run - run_before) / 60:.0f} s')
 	}
+}
+
+// On a PAL machine every fifth frame counts as two frames of song, so the
+// robot presses every note that comes due in the coming frame or was
+// skipped over by the last one.
+fn test_a_pal_machine_keeps_the_tempo() {
+	mut p := boot_as(.pal)
+	p.start_song(2)
+	assert p.word('pal') == 1, 'the PAL profile must be chosen'
+	clock_at_start := p.word('clock')
+	frame_at_start := p.word('frame')
+	mut seen := p.word('clock') - input_lag
+	for _ in 0 .. 1000 {
+		clock := p.word('clock') - input_lag
+		chart := p.long('chart_ptr')
+		first := p.word('judge_first')
+		mut down := []bool{len: lanes}
+		for i in first .. first + 24 {
+			entry := p.m.peek32(chart + u32(i * 4))
+			time := int(entry >> 16)
+			if time > clock {
+				break
+			}
+			if time > seen {
+				down[int(entry >> 8) & 0xff] = true
+			}
+		}
+		seen = clock
+		for lane in 0 .. lanes {
+			p.m.set_button(0, lane_keys[lane], down[lane])
+		}
+		p.frames(1)
+	}
+	assert p.word('frame') - frame_at_start == 1000, 'the 68000 must never miss a frame'
+	// Six frames of song in five of picture: twenty seconds either way.
+	assert p.word('clock') - clock_at_start == 1200
+	assert p.word('state') == state_play
+	assert p.word('misses') == 0
+	assert p.word('combo') > 20
+	assert p.loudest > 4000
 }

@@ -1,5 +1,6 @@
 module main
 
+import hwtypes
 import jerry
 import loader
 import machine
@@ -14,9 +15,13 @@ mut:
 }
 
 fn boot() Player {
+	return boot_as(.ntsc)
+}
+
+fn boot_as(region hwtypes.Region) Player {
 	built := build() or { panic(err) }
 	plan := loader.plan(built.image, loader.Options{}) or { panic(err) }
-	mut m := machine.new(machine.Config{})
+	mut m := machine.new(machine.Config{ region: region })
 	m.load_direct(plan)
 	return Player{
 		symbols: built.symbols
@@ -136,4 +141,26 @@ fn test_sound_plays() {
 		}
 	}
 	assert loudest > 2000, 'the DSP must be making sound'
+}
+
+fn test_a_pal_machine_keeps_the_tempo() {
+	mut p := boot_as(.pal)
+	p.frames(60)
+	assert p.word('step_length') == 5, 'the PAL profile must be chosen'
+	pixels, info := p.m.frame()
+	mut lit := 0
+	for y in 0 .. info.height {
+		for x in 0 .. info.width {
+			if pixels[y * info.pitch + x] & 0xffffff != 0 {
+				lit++
+			}
+		}
+	}
+	assert lit > info.width * info.height / 3, 'the tunnel must be on screen'
+	// Ten steps of the tune a second, as on NTSC: 150 beats a minute.
+	started := p.word('frame')
+	step := p.word('step')
+	p.frames(250)
+	assert p.word('frame') - started == 250, 'the 68000 must never miss a frame'
+	assert (p.word('step') - step + song_steps) % song_steps == 50
 }

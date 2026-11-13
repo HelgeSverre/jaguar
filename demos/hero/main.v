@@ -74,6 +74,7 @@ fn build() !Built {
 	g.scenes()
 	g.text_routines()
 	g.variables()
+	g.pal_timing()
 	g.strings()
 	g.tables()
 	g.song_data(all)!
