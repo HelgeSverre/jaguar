@@ -81,6 +81,15 @@ fn (mut g Gen) function(f LFunc) {
 	g.m.rts()
 }
 
+// size_mask is the bits a value of the type has, for an immediate operand.
+fn size_mask(t Type) i64 {
+	return match t.size() {
+		1 { i64(0xff) }
+		2 { i64(0xffff) }
+		else { i64(0xffff_ffff) }
+	}
+}
+
 fn size_of(t Type) jagkit.Size {
 	return match t.size() {
 		1 { jagkit.Size.b }
@@ -104,9 +113,7 @@ fn (mut g Gen) stmt(s &TStmt) {
 			end := g.m.unique('jaggame.end')
 			for i, cond in s.exprs {
 				next := g.m.unique('jaggame.next')
-				g.expr(cond)
-				g.m.tst(.l, d0)
-				g.m.b(.eq, next)
+				g.jump_unless(cond, next)
 				g.block(&s.bodies[i])
 				g.m.bra(end)
 				g.m.label(next)
@@ -121,9 +128,7 @@ fn (mut g Gen) stmt(s &TStmt) {
 				exit: g.m.unique('jaggame.break')
 			}
 			g.m.label(top)
-			g.expr(&s.exprs[0])
-			g.m.tst(.l, d0)
-			g.m.b(.eq, labels.exit)
+			g.jump_unless(&s.exprs[0], labels.exit)
 			g.loops << labels
 			g.block(&s.bodies[0])
 			g.m.label(labels.cont)
@@ -169,8 +174,37 @@ fn (mut g Gen) pop(r jagkit.Ea) {
 // evaluated first.
 fn (mut g Gen) set(place &TPlace, value &TExpr) {
 	if place.index.len == 0 {
+		label := lbl(g.low.vars[place.var].label)
+		size := size_of(place.typ)
+		if value.kind == .constant {
+			g.m.move(size, imm(value.value & size_mask(place.typ)), label)
+			return
+		}
+		// x = x + constant, x = x - constant: one instruction on the variable
+		if value.kind == .binary && value.op in [.add, .sub] && value.args[1].kind == .constant
+			&& value.args[0].kind == .load && value.args[0].place.index.len == 0
+			&& value.args[0].place.var == place.var && value.typ.size() == place.typ.size() {
+			amount := value.args[1].value & size_mask(place.typ)
+			if amount != 0 {
+				if value.op == .add {
+					g.m.add(size, imm(amount), label)
+				} else {
+					g.m.sub(size, imm(amount), label)
+				}
+			}
+			return
+		}
 		g.expr(value)
-		g.m.move(size_of(place.typ), d0, lbl(g.low.vars[place.var].label))
+		g.m.move(size, d0, label)
+		return
+	}
+	if is_simple(value) {
+		// The value has no effect and needs no register but d1.
+		g.index(place)
+		g.m.lea(lbl(g.low.vars[place.var].label), a0)
+		g.m.add(.l, d0, a0)
+		g.simple_into(value, d1)
+		g.m.move(size_of(place.typ), d1, g.field_ea(place))
 		return
 	}
 	g.index(place)
@@ -310,10 +344,90 @@ fn (mut g Gen) expr(e &TExpr) {
 // operands leaves the left operand in d0 and the right one in d1.
 fn (mut g Gen) operands(e &TExpr) {
 	g.expr(&e.args[0])
+	if is_simple(&e.args[1]) {
+		// A constant or a variable has no effect and needs no register but d1,
+		// so the left operand can stay in d0.
+		g.simple_into(&e.args[1], d1)
+		return
+	}
 	g.push()
 	g.expr(&e.args[1])
 	g.m.move(.l, d0, d1)
 	g.pop(d0)
+}
+
+// is_simple is true for a constant and a variable (not an element or a
+// field): what can be loaded into a register without touching another.
+fn is_simple(e &TExpr) bool {
+	return e.kind == .constant || (e.kind == .load && e.place.index.len == 0)
+}
+
+// simple_into loads a constant or a variable into a data register as a
+// whole long, sign- or zero-extended from its type.
+fn (mut g Gen) simple_into(e &TExpr, r jagkit.Ea) {
+	if e.kind == .constant {
+		if e.value >= -128 && e.value <= 127 {
+			g.m.moveq(int(e.value), r)
+		} else {
+			g.m.move(.l, imm(e.value), r)
+		}
+		return
+	}
+	ea := lbl(g.low.vars[e.place.var].label)
+	match e.place.typ {
+		.bool, .u8 {
+			g.m.moveq(0, r)
+			g.m.move(.b, ea, r)
+		}
+		.i8 {
+			g.m.move(.b, ea, r)
+			g.m.ext(.w, r)
+			g.m.ext(.l, r)
+		}
+		.u16 {
+			g.m.moveq(0, r)
+			g.m.move(.w, ea, r)
+		}
+		.i16 {
+			g.m.move(.w, ea, r)
+			g.m.ext(.l, r)
+		}
+		else {
+			g.m.move(.l, ea, r)
+		}
+	}
+}
+
+// jump_unless evaluates a condition and jumps to a label when it is false.
+// A comparison jumps on the flags of its `cmp` and does not make a 0 or a 1
+// first.
+fn (mut g Gen) jump_unless(cond &TExpr, label string) {
+	if cond.kind == .compare {
+		g.operands(cond)
+		g.m.cmp(.l, d1, d0)
+		g.m.b(inverse(g.condition(cond.op, cond.args[0].typ)), label)
+		return
+	}
+	g.expr(cond)
+	g.m.tst(.l, d0)
+	g.m.b(.eq, label)
+}
+
+// inverse is the condition code that holds when `cc` does not.
+fn inverse(cc jagkit.Cc) jagkit.Cc {
+	return match cc {
+		.eq { .ne }
+		.ne { .eq }
+		.lt { .ge }
+		.ge { .lt }
+		.gt { .le }
+		.le { .gt }
+		.cs { .cc }
+		.cc { .cs }
+		.hi { .ls }
+		.ls { .hi }
+		else { cc }
+	}
 }
 
 fn (mut g Gen) unary(op Op) {
@@ -412,10 +526,10 @@ fn (mut g Gen) binary(op Op, t Type) {
 	}
 }
 
-// compare sets d0 to 1 when `d0 op d1` holds, else to 0.
-fn (mut g Gen) compare(op Op, t Type) {
+// condition is the condition code of a comparison after `cmp d1,d0`.
+fn (g &Gen) condition(op Op, t Type) jagkit.Cc {
 	signed := t.is_signed()
-	cc := match op {
+	return match op {
 		.eq {
 			jagkit.Cc.eq
 		}
@@ -423,19 +537,39 @@ fn (mut g Gen) compare(op Op, t Type) {
 			jagkit.Cc.ne
 		}
 		.lt {
-			if signed { jagkit.Cc.lt } else { jagkit.Cc.cs }
+			if signed {
+				jagkit.Cc.lt
+			} else {
+				jagkit.Cc.cs
+			}
 		}
 		.le {
-			if signed { jagkit.Cc.le } else { jagkit.Cc.ls }
+			if signed {
+				jagkit.Cc.le
+			} else {
+				jagkit.Cc.ls
+			}
 		}
 		.gt {
-			if signed { jagkit.Cc.gt } else { jagkit.Cc.hi }
+			if signed {
+				jagkit.Cc.gt
+			} else {
+				jagkit.Cc.hi
+			}
 		}
 		else {
-			if signed { jagkit.Cc.ge } else { jagkit.Cc.cc }
+			if signed {
+				jagkit.Cc.ge
+			} else {
+				jagkit.Cc.cc
+			}
 		}
 	}
+}
 
+// compare sets d0 to 1 when `d0 op d1` holds, else to 0.
+fn (mut g Gen) compare(op Op, t Type) {
+	cc := g.condition(op, t)
 	yes := g.m.unique('jaggame.true')
 	end := g.m.unique('jaggame.compared')
 	g.m.cmp(.l, d1, d0)
