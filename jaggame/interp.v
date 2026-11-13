@@ -82,6 +82,16 @@ pub fn (it &Interpreter) element(name string, index int) !i64 {
 	return it.memory[var][index]
 }
 
+// set_value changes a global variable, as a test feeds the program an input
+// (the pad, say). The raw value is cut to the variable's type.
+pub fn (mut it Interpreter) set_value(name string, raw i64) ! {
+	var := it.low.var_named(name)
+	if var < 0 || it.low.vars[var].kind != .scalar {
+		return error('there is no global variable `${name}`')
+	}
+	it.memory[var][0] = it.low.vars[var].typ.wrap(raw)
+}
+
 // field is the raw value of a field of an element of an array of records.
 pub fn (it &Interpreter) field(name string, index int, field string) !i64 {
 	var := it.low.var_named(name)
