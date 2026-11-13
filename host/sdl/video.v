@@ -138,7 +138,11 @@ pub fn (mut v Video) present(scene Scene) ! {
 		k := f32(output_width) / f32(shell_width)
 		C.SDL_SetRenderDrawColor(v.renderer, 0, 0, 0, 0)
 		C.SDL_RenderClear(v.renderer)
-		v.draw_content(scene, scaled(shell_screen, k))!
+		// Black glass fills the opening; the picture sits inside it.
+		glass := scaled(shell_screen, k)
+		C.SDL_SetRenderDrawColor(v.renderer, 0, 0, 0, 255)
+		C.SDL_RenderFillRect(v.renderer, &glass)
+		v.draw_content(scene, scaled(shell_picture, k))!
 		v.draw_shell(scene, k, f32(output_width), f32(output_height))
 	} else {
 		C.SDL_SetRenderDrawColor(v.renderer, 0, 0, 0, 255)

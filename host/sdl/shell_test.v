@@ -87,3 +87,27 @@ fn test_only_the_console_body_moves_the_window() {
 	assert shell_hit_test(unsafe { nil }, &corner, &shell) == int(C.SDL_HITTEST_NORMAL)
 	assert shell_hit_test(unsafe { nil }, &button, &shell) == int(C.SDL_HITTEST_NORMAL)
 }
+
+fn test_the_bezel_covers_none_of_the_picture() {
+	art := $embed_file('shell.png')
+	decoded := C.SDL_LoadPNG_IO(C.SDL_IOFromConstMem(art.data(), usize(art.len)), true)
+	assert decoded != unsafe { nil }
+	surface := C.SDL_ConvertSurface(decoded, u32(C.SDL_PIXELFORMAT_RGBA32))
+	C.SDL_DestroySurface(decoded)
+	assert surface != unsafe { nil }
+	defer {
+		C.SDL_DestroySurface(surface)
+	}
+	p := shell_picture
+	assert p.w * 3 == p.h * 4 || (p.w * 3 - p.h * 4) * (p.w * 3 - p.h * 4) < 16, 'the picture box is 4:3'
+	mut covered := 0
+	for y in p.y .. p.y + p.h {
+		row := unsafe { &u8(surface.pixels) + y * surface.pitch }
+		for x in p.x .. p.x + p.w {
+			if unsafe { row[x * 4 + 3] } != 0 {
+				covered++
+			}
+		}
+	}
+	assert covered == 0
+}

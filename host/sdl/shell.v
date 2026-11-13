@@ -11,7 +11,12 @@ import jerry
 pub const shell_width = 1477
 pub const shell_height = 996
 
+// The opening in the artwork bulges like a picture tube: `shell_screen` is
+// the box around it, whose corners the bezel covers. `shell_picture` is the
+// largest 4:3 box that lies wholly inside the opening, so the bezel hides
+// nothing of the guest's picture.
 const shell_screen = Box{265, 241, 737, 538}
+const shell_picture = Box{311, 266, 651, 488}
 const shell_readout = Box{818, 862, 336, 54}
 const shell_eyes = [Box{467, 187, 111, 25}, Box{756, 186, 113, 26}]
 
