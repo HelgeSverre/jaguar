@@ -11,13 +11,13 @@
 
 <center>
 <div class="wordart">JAGGAME</div>
-<p class="pixel">DESCRIBE A GAME IN <a class="vlink" href="https://docs.vlang.io/introduction.html">V</a>.<br>GET 68000 MACHINE CODE.<br><span class="rainbow">NO ASSEMBLY. AT ALL.</span></p>
+<p class="pixel">DESCRIBE A GAME IN <a class="vlink" href="https://docs.vlang.io/introduction.html">V</a><br>AND GET 68000 MACHINE CODE<br><span class="rainbow">WITHOUT WRITING ONE INSTRUCTION</span></p>
 </center>
 
 <p><code>jaggame</code> goes a step further than <a href="jagkit.html">jagkit</a> and takes the assembly away too. A program <b>describes</b> itself (variables, logic, sprites, rooms, scenes, sound) to a builder. The builder checks it, compiles the logic to 68000 code, links it with a fixed runtime and writes a <code>.jag</code> image, plus a <code>.j64</code> cartridge image for a board with the save chip.</p>
 
 <div class="box red center">
-<span class="pixel">THE SAME DESCRIPTION ALSO RUNS IN AN INTERPRETER WRITTEN IN V.<br><br>THE TWO MUST AGREE.<br><br>A DIFFERENTIAL FUZZER MAKES SURE THEY DO.</span>
+<span class="pixel">THE SAME DESCRIPTION ALSO RUNS IN AN INTERPRETER WRITTEN IN V.<br><br>A FUZZER FEEDS RANDOM PROGRAMS TO BOTH<br>AND CHECKS THEY END UP IN THE SAME STATE.</span>
 </div>
 
 <h2>A BALL, IN TWENTY LINES</h2>
@@ -56,7 +56,7 @@ os.write_file_array(<span class="s">'ball.jag'</span>, g.build()!.bytes)!</pre>
 <tr><td><b class="gold">Tested twice</b></td><td>A differential fuzzer runs random programs in the interpreter and on the emulated 68000. A robot plays GHOSTGRID through the pad.</td></tr>
 </table>
 
-<h2 id="gg">THE PROOF: GHOSTGRID</h2>
+<h2 id="gg">THE BIG ONE: GHOSTGRID</h2>
 <table width="100%"><tr>
 <td valign="top"><img class="tv" src="media/ghostgrid.gif" width="325" height="240" alt="GHOSTGRID gameplay"></td>
 <td valign="top">

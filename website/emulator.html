@@ -11,11 +11,11 @@
 
 <center>
 <div class="wordart">THE EMULATOR</div>
-<p class="pixel">ONE MACHINE. FIVE BRAINS. ZERO C CORES.</p>
+<p class="pixel">FIVE PROCESSORS IN ONE BOX AND EVERY ONE OF THEM IN V</p>
 </center>
 
 <h2>THE ODD MACHINE</h2>
-<p>The Jaguar is not a computer with a graphics card. It is a pile of processors that share one bus and argue about it. vjag emulates every one of them in <a class="vlink" href="https://docs.vlang.io/introduction.html">V</a>:</p>
+<p>The Jaguar is a pile of processors sharing one bus and fighting over it. vjag emulates every one of them in <a class="vlink" href="https://docs.vlang.io/introduction.html">V</a>:</p>
 
 <pre>
   +--------------------------------------------------------------+
@@ -39,7 +39,7 @@
 <table class="data" width="100%">
 <tr><th>CHIP</th><th>WHAT IT DOES</th><th>IN VJAG</th></tr>
 <tr><td><b class="gold">68000</b></td><td>The general. Runs the game's rules and boots everything else.</td><td>Counts cycles correctly. Matches <a href="tests.html">every one of 317,500 test vectors</a> on registers, memory, cycle count and bus order.</td></tr>
-<tr><td><b class="gold">GPU</b> (in TOM)</td><td>A 32-bit RISC with its own local RAM. Draws, transforms, computes fractals.</td><td>Shares one instruction format with the DSP, two opcode maps. Delay slots and all. Rough per-instruction costs.</td></tr>
+<tr><td><b class="gold">GPU</b> (in TOM)</td><td>A 32-bit RISC with its own local RAM. Draws, transforms, computes fractals.</td><td>Shares one instruction format with the DSP, with its own opcode map and delay slots. Rough per-instruction costs.</td></tr>
 <tr><td><b class="gold">DSP</b> (in JERRY)</td><td>The same RISC again, for sound.</td><td>Synthesizers in the demos run on it; the <a href="index.html">jukebox</a> on the left plays what it made.</td></tr>
 <tr><td><b class="gold">Object processor</b></td><td>Walks a display list every line and rewrites it while it draws.</td><td>Bitmaps, scaled bitmaps, branches, stops. Exact memory results in unit tests.</td></tr>
 <tr><td><b class="gold">Blitter</b></td><td>Copies, fills and shades pixels. More mode bits than documentation.</td><td>Pixel exact in the tested modes. <span class="red">Finishes the instant it starts</span>, so software never sees it busy.</td></tr>
@@ -71,11 +71,11 @@
 <li>Processors and devices only know the <code>Bus</code> interface from <code>hwtypes</code>. <code>machine</code> owns them all <i>and is</i> the bus.</li>
 <li>Nothing below <code>cli</code> touches a file, a clock or SDL.</li>
 <li>The core does not allocate while it runs: a ten-second benchmark allocates <b class="gold">about 12 KB in total</b>.</li>
-<li>All three processors share one timeline counted in ticks of the <b class="gold">26.59 MHz</b> master clock. The scheduler runs each processor for at most <b class="gold">64 ticks</b>, or up to the next device event, before the others catch up. A mailbox written by the 68000 is seen by the DSP a few microseconds later, not a frame later.</li>
+<li>All three processors share one timeline counted in ticks of the <b class="gold">26.59 MHz</b> master clock. The scheduler runs each processor for at most <b class="gold">64 ticks</b>, or up to the next device event, before the others catch up. A mailbox written by the 68000 reaches the DSP a few microseconds later, inside the same frame.</li>
 </ul>
 </div>
 
-<h2>HOW FAST?!</h2>
+<h2>SPEED ON AN M2 MAX</h2>
 <table width="100%" cellpadding="6"><tr>
 <td align="center" class="box term" width="50%"><span class="pixel lime">SIMPLE HOMEBREW</span><br><span style="font-size:48px">~14x</span><br>real speed on an M2 Max</td>
 <td align="center" class="box term"><span class="pixel lime">COMMERCIAL GAME,<br>BOTH RISCS BUSY</span><br><span style="font-size:48px">~4x</span><br>real speed</td>
@@ -85,14 +85,14 @@
 <table width="100%"><tr>
 <td valign="top"><img src="media/shell-empty.png" width="480" height="324" alt="The console shell with nothing loaded" class="pix"></td>
 <td valign="top">
-<p>By default the window is <b>not a window</b>. It is a borderless, see-through cutout shaped like a console, in the spirit of the media-player skins of twenty years ago.</p>
+<p>By default the window is a <b>borderless, see-through cutout shaped like a console</b>, like a 1999 media-player skin.</p>
 <ul class="small">
 <li>Five red buttons: power, reset, pause, mute, fullscreen.</li>
 <li>Twelve keys: the controller keypad. Click and hold works.</li>
 <li>The strip shows what is loaded and scrolls.</li>
 <li><span class="red">The eyes flare with the sound.</span></li>
 <li>Drag it by the body. <kbd>,</kbd> and <kbd>.</kbd> resize it.</li>
-<li>Coward? <kbd>H</kbd> swaps it for a plain window and remembers.</li>
+<li><kbd>H</kbd> swaps it for a plain window and remembers.</li>
 </ul>
 </td></tr></table>
 

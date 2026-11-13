@@ -11,7 +11,7 @@
 
 <center>
 <div class="wordart">VJAG_TEST</div>
-<p class="pixel lime">THE SAME EMULATOR. NO WINDOW. ALL BUSINESS.</p>
+<p class="pixel lime">THE EMULATOR WITH THE WINDOW RIPPED OFF</p>
 </center>
 
 <div class="box term">
@@ -32,7 +32,7 @@ C:\JAGUAR&gt; <span class="blink">_</span>
 </table>
 <p class="small"><code>vjag</code> accepts the same commands, so <code>vjag run ...</code> works too.</p>
 
-<h2><img src="img/new.gif" width="44" height="18" alt=""> TRACE: THE ONE THAT EARNS ITS KEEP</h2>
+<h2><img src="img/new.gif" width="44" height="18" alt=""> TRACE: HOW MOST BUGS GOT FOUND</h2>
 <p>It single-steps the machine, keeps the last instructions of one processor in a ring, and stops when something interesting happens: the DSP wanders out of its RAM, the 68000 jumps into the vector table, a memory location changes. Then it prints the ring as a disassembly. <b class="gold">Most of the bugs fixed so far were found this way.</b></p>
 <pre><span class="k">vjag_test trace</span> game.j64 --cpu m68k --stop-range 0x0:0x400   <span class="c"># who jumped into the vectors?</span>
 <span class="k">vjag_test trace</span> game.j64 --cpu m68k --watch 0x4912           <span class="c"># who overwrote this?</span>

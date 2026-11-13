@@ -42,7 +42,7 @@ function begin(here) {
   h += '<br><img src="img/construction.gif" width="160" height="16" alt="UNDER CONSTRUCTION FOREVER"><br><br>';
   h += jukebox();
   h += '<br><div class="pixel gold">YOU ARE VISITOR</div><br>' + counter();
-  h += '<div class="tiny grey" style="margin-top:4px">counted by your own<br>browser. the 68000<br>was busy.</div><br>';
+  h += '<div class="tiny grey" style="margin-top:4px">counted in your<br>browser only.</div><br>';
   h += '<a href="frames.html" class="small">[ FRAMES VERSION ]</a><br><br>';
   h += '<img class="btn88" src="img/btn/noroms.png" width="88" height="31" alt="NO ROMS"><br>';
   h += '<img class="btn88" src="img/btn/math.gif" width="88" height="31" alt="DO THE MATH"><br><br>';
@@ -66,7 +66,7 @@ function finish() {
   h += '<p class="small"><img src="img/mail.gif" width="32" height="24" alt="" style="vertical-align:middle"> ';
   h += 'Questions? Open an issue at <a href="' + REPO + '/issues">github.com/HelgeSverre/jaguar/issues</a> ';
   h += '<img src="img/mail.gif" width="32" height="24" alt="" style="vertical-align:middle"></p>';
-  h += '<p class="tiny grey">This page was last updated: 13 November 2026 &middot; Made with a text editor &middot; Netscape Now! (well, any browser)</p>';
+  h += '<p class="tiny grey">This page was last updated: 13 November 2026 &middot; Made with Claude Code &middot; Netscape Now!</p>';
   h += '</td></tr></table></center>';
   document.write(h);
 }
@@ -213,7 +213,7 @@ function playTrack(i) {
   ["timeupdate", "play", "pause", "loadedmetadata"].forEach(function (ev) { bgm.addEventListener(ev, bar._tick); });
   bgm.play();
   bgmIndex = i;
-  document.getElementById("pb-name").textContent = "♫ " + TRACKS[i][1] + " — " + TRACKS[i][2] + " — rendered by the emulated DSP ♫";
+  document.getElementById("pb-name").textContent = "♫ " + TRACKS[i][1] + " *** " + TRACKS[i][2] + " *** rendered by the emulated DSP ♫";
   var wasHidden = bar.hidden;
   bar.hidden = false;
   document.body.classList.add("playing");

@@ -11,10 +11,10 @@
 
 <center>
 <div class="wordart">JAGKIT</div>
-<p class="pixel">NO ASSEMBLER. NO MAKEFILE. NO MERCY.<br>YOU WRITE V. V WRITES THE CARTRIDGE.</p>
+<p class="pixel">WRITE V AND GET A CARTRIDGE IMAGE.<br>THE ASSEMBLER IS A V MODULE.</p>
 </center>
 
-<p><code>jagkit</code> is a small V module for making Jaguar programs without an assembler. You write <a class="vlink" href="https://docs.vlang.io/introduction.html">V</a>; V emits the <code>.jag</code> image. <b>V is the macro language.</b> A V function that calls assembler methods is a macro. A V <code>for</code> loop unrolls code. A V constant is an assembly-time constant. And V computes the data: sine tables, palettes, sprites and whole songs are generated at build time. Nothing is loaded from asset files.</p>
+<p><code>jagkit</code> is a small V module for making Jaguar programs without an assembler. You write <a class="vlink" href="https://docs.vlang.io/introduction.html">V</a>; V emits the <code>.jag</code> image. <b>V is the macro language:</b> a function that calls assembler methods is a macro, a <code>for</code> loop unrolls code, and a constant is an assembly-time constant. V computes the data too: sine tables, palettes, sprites and whole songs are generated at build time. Nothing is loaded from asset files.</p>
 
 <table width="100%" cellpadding="6" cellspacing="6"><tr>
 <td class="box gold" valign="top" width="50%">
@@ -63,7 +63,7 @@ g.addqt(1, target)           <span class="c">// delay slot</span></pre>
 
 <h2>MISTAKES CAUGHT AT BUILD TIME</h2>
 <div class="box red">
-<p>Errors are collected, not thrown one at a time. Things the processors would not forgive come out <b>when the image is built</b>, not when it crashes:</p>
+<p>Errors are collected, not thrown one at a time. Things the processors would not forgive come out <b>when the image is built</b>:</p>
 <ul>
 <li>a form the 68000 does not have (<code>and</code> from an address register, <code>lea</code> of a data register, a byte move to an address register)</li>
 <li>a <code>movei</code> in a delay slot</li>
@@ -85,7 +85,7 @@ g.addqt(1, target)           <span class="c">// delay slot</span></pre>
 <tr><td>Data</td><td class="mono">byte word long long_label bytes text align</td></tr>
 <tr><td>Labels</td><td class="mono">label unique address_of symbols</td></tr>
 </table>
-<p class="small"><code>or</code> is spelled <code>orr</code> because <code>or</code> is a V keyword. We are sorry. It is V's fault.</p>
+<p class="small"><code>or</code> is spelled <code>orr</code> because <code>or</code> is a V keyword.</p>
 
 <h2>HELLO, JAGUAR</h2>
 <table width="100%"><tr>
@@ -99,7 +99,7 @@ g.addqt(1, target)           <span class="c">// delay slot</span></pre>
 </td></tr></table>
 
 <h2>TESTED IN THE EMULATOR</h2>
-<p>Every demo is built, booted as NTSC <i>and</i> PAL, and <b>played by its test</b>. Tests read the game's variables through the assembler's symbol table and steer. The plasma test works out in V what every pixel should be and compares the buffer, so the GPU program is checked instruction for instruction, not by eye.</p>
+<p>Every demo is built, booted as NTSC <i>and</i> PAL, and <b>played by its test</b>. Tests read the game's variables through the assembler's symbol table and steer. The plasma test works out in V what every pixel should be and compares the buffer, so the GPU program is checked instruction for instruction.</p>
 
 <h2>READ THE MANUAL (RTFM)</h2>
 <table class="data" width="100%">

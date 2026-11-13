@@ -14,17 +14,17 @@
 
 <center>
 <div class="wordart"><script>wavy("WELCOME TO THE JUNGLE!!!");</script></div>
-<p class="pixel">THE ONLY ATARI JAGUAR EMULATOR<br>WRITTEN IN <a class="vlink" href="https://docs.vlang.io/introduction.html">V</a> THAT WE KNOW OF</p>
+<p class="pixel">AN ATARI JAGUAR EMULATOR<br>WRITTEN IN <a class="vlink" href="https://docs.vlang.io/introduction.html">V</a></p>
 <img src="media/shell-hero.png" width="640" height="432" alt="vjag in its console shell, playing Jaguar Hero" class="pix"><br>
-<span class="small grey">^^^ that is the actual window. it is shaped like a console. you can drag it around by its body. ^^^</span>
+<span class="small grey">^^^ the real vjag window, shaped like a console. drag it around by its body ^^^</span>
 </center>
 
 <img src="img/bar.gif" width="100%" height="6" alt="">
 
 <table width="100%" cellpadding="6" cellspacing="6"><tr>
 <td valign="top" width="55%">
-<h2>WHAT IS THIS?!</h2>
-<p><b>vjag</b> is an emulator for the <b>Atari Jaguar</b>, the 1993 console that wanted you to <i>do the math</i>. It emulates the whole odd machine:</p>
+<h2>THE SHORT VERSION</h2>
+<p><b>vjag</b> is an emulator for the <b>Atari Jaguar</b>, the 1993 console whose adverts told you to <i>do the math</i>. It emulates the whole odd machine:</p>
 <ul>
 <li>a <b class="gold">Motorola 68000</b> that mostly gets out of the way</li>
 <li>two custom <b class="gold">RISC processors</b>, the GPU for graphics and the DSP for sound</li>
@@ -32,14 +32,14 @@
 <li>a <b class="gold">blitter</b> with more mode bits than documentation</li>
 </ul>
 <p>About <b class="red">14,000 lines of</b> <a class="vlink" href="https://docs.vlang.io/introduction.html">V</a>. No C emulation cores underneath. SDL3 only puts the picture in a window and the samples in the speakers.</p>
-<p>And then it got out of hand: there is now a <a href="jagkit.html">toolchain for writing Jaguar programs in V</a>, a <a href="jaggame.html">game engine that compiles V descriptions to 68000 code</a>, <a href="demos.html">five homebrew games</a>, robots that play them in the tests, and a <a href="video.html">music video</a>.</p>
+<p>Also in the repo: a <a href="jagkit.html">toolchain for writing Jaguar programs in V</a>, a <a href="jaggame.html">game engine that compiles V descriptions to 68000 code</a>, <a href="demos.html">five homebrew games</a>, robots that play them in the tests, and a <a href="video.html">music video</a>.</p>
 </td>
 <td valign="top" align="center">
 <div class="applet">
 <canvas id="applet" width="256" height="192" style="display:block;background:#000"></canvas>
 <div class="status" id="appletstatus">Loading Java applet...</div>
 </div>
-<p class="tiny grey">PLASMA.CLASS<br>(it is not java. it is not even the jaguar.<br><a href="demos.html">the real plasma runs on the emulated GPU.</a>)</p>
+<p class="tiny grey">PLASMA.CLASS<br>(fake. <a href="demos.html">the real plasma runs<br>on the emulated GPU</a>)</p>
 </td>
 </tr></table>
 
