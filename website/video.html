@@ -2,39 +2,172 @@
 <html>
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-<title>VJAG :: DO THE MATH :: THE MUSIC VIDEO</title>
+<title>DO THE MATH - THE VJAG MUSIC VIDEO</title>
 <link rel="stylesheet" href="style.css">
 <script src="site.js"></script>
+<style>
+body.mv { margin: 0; background: #000; overflow-x: hidden; }
+.burst {
+  position: fixed; left: 50%; top: 45%; width: 260vmax; height: 260vmax; margin: -130vmax 0 0 -130vmax; z-index: -2;
+  background: repeating-conic-gradient(from 0deg, #3a0000 0deg 7deg, #000 7deg 14deg, #2a1a00 14deg 21deg, #000 21deg 28deg);
+  animation: burst 40s linear infinite;
+}
+@keyframes burst { to { transform: rotate(360deg); } }
+.spots { position: fixed; inset: 0; z-index: -1; background: url("img/spots.png"); opacity: 0.55; animation: spots 6s linear infinite; }
+@keyframes spots { to { background-position: 160px 160px; } }
+body.flash .burst { filter: brightness(2.2) saturate(1.5); }
+
+.mvtop { display: flex; justify-content: space-between; align-items: center; padding: 6px 12px; background: #000; border: 3px ridge #c00000; position: relative; z-index: 2; }
+.mvtop a { font-family: "Press Start 2P", monospace; font-size: 10px; }
+
+.fire {
+  font-family: Impact, "Arial Black", sans-serif; font-size: clamp(48px, 11vw, 150px); line-height: 0.95; letter-spacing: 4px;
+  color: #ffd700; text-align: center; margin: 10px 0 0 0; position: relative; z-index: 1;
+  text-shadow: 0 0 10px #ff8000, 0 -6px 20px #ff3000, 0 -14px 34px #ff0000, 5px 5px 0 #600000, -3px 0 0 #00ffff, 3px 0 0 #ff00ff;
+}
+.fire span { display: inline-block; animation: hop 0.47s ease-in-out infinite alternate; }
+@keyframes hop { from { transform: translateY(0) rotate(-3deg); } to { transform: translateY(-14px) rotate(3deg); } }
+
+.cols { position: fixed; top: 0; bottom: 0; width: 100px; overflow: hidden; z-index: 0; pointer-events: none; }
+.cols.l { left: 0; } .cols.r { right: 0; }
+.cols div { display: flex; flex-direction: column; align-items: center; gap: 10px; animation: colup 30s linear infinite; }
+.cols.r div { animation-name: coldown; }
+.cols img { image-rendering: pixelated; }
+@keyframes colup { from { transform: translateY(0); } to { transform: translateY(-50%); } }
+@keyframes coldown { from { transform: translateY(-50%); } to { transform: translateY(0); } }
+
+.stage { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; padding: 0 110px; }
+.telly { position: relative; width: 100%; aspect-ratio: 1536 / 1024; }
+.telly .skin { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
+.telly video {
+  position: absolute; left: 28.3%; top: 22.2%; width: 43.1%; height: 38.7%; z-index: 3;
+  object-fit: cover; background: #000; border-radius: 1.5%;
+}
+.woofer {
+  position: absolute; width: 16.28%; aspect-ratio: 1; border-radius: 50%; z-index: 4; pointer-events: none;
+  background: url("img/tvskin.webp") no-repeat; background-size: 614.4% auto;
+  transform: translate(-50%, -50%); top: 47.85%;
+}
+.woofer.l { left: 13.87%; background-position: 6.84% 47.16%; }
+.woofer.r { left: 84.96%; background-position: 91.76% 47.16%; }
+.vuglow {
+  position: absolute; left: 29.4%; top: 66.7%; width: 42.2%; height: 4.6%; z-index: 4; pointer-events: none;
+  background: radial-gradient(ellipse at center, rgba(255,200,80,0.9), rgba(255,120,0,0.3) 60%, rgba(0,0,0,0) 80%);
+  mix-blend-mode: screen; opacity: 0;
+}
+#eq { position: absolute; left: 51%; top: 75.2%; width: 27%; height: 12.2%; z-index: 4; pointer-events: none; mix-blend-mode: screen; }
+
+.press { text-align: center; font-family: "Press Start 2P", monospace; font-size: 14px; color: #ff3030; margin: 6px 0 16px 0; position: relative; z-index: 1; }
+.mvtext { position: relative; z-index: 1; max-width: 760px; margin: 0 auto 30px auto; padding: 14px; background: #000; border: 5px ridge #c00000; line-height: 1.45; }
+.mvtext h2 { margin-top: 6px; }
+@media (max-width: 760px) { .cols { display: none; } .stage { padding: 0 8px; } .mvtext { margin: 0 8px 30px 8px; } }
+</style>
 </head>
-<body class="stars">
-<script>begin("VIDEO");</script>
+<body class="mv">
+<div class="burst"></div><div class="spots"></div>
+<div class="cols l"><div id="coll"></div></div>
+<div class="cols r"><div id="colr"></div></div>
 
-<center>
-<div class="wordart" style="font-size:44px"><script>wavy("DO THE MATH");</script></div>
-<p class="pixel">THE OFFICIAL VJAG MUSIC VIDEO<br><span class="gold">2 MIN 47 SEC</span> &middot; 854x480 &middot; 11.7 MB</p>
-<p class="small grey">(on a 28.8k modem this takes about 54 minutes. go make a sandwich.)</p>
-
-<table cellpadding="0" cellspacing="0" style="border:12px ridge #606060;background:#000"><tr><td>
-<video src="media/dothemath.mp4" poster="media/dothemath-poster.jpg" width="640" height="360" controls preload="none" style="display:block;max-width:100%;height:auto"></video>
-</td></tr></table>
-<p class="pixel red blink">*** TURN YOUR SPEAKERS UP ***</p>
-</center>
-
-<h2>WHAT AM I LOOKING AT?</h2>
-<p>A song, cut to the bar, and a lot of Jaguar footage: attract modes, gameplay, our own <a href="demos.html">homebrew</a>, and the console shell with its eyes flaring to the beat.</p>
-<div class="box gold">
-<h3>EVERY FRAME OF FOOTAGE CAME OUT OF VJAG</h3>
-<p>The capture script runs <code>vjag_test</code> with a stream of PPM frames into a fifo, ffmpeg reads the other end, and nothing raw touches the disk. Jaguar Hero and WIREWING are played on camera by <b>their own test robots</b>. The edit itself is timed off a beat grid tracked from the song's stems.</p>
+<div class="mvtop">
+<a href="index.html">&lt;&lt; BACK TO VJAG</a>
+<marquee scrollamount="9" class="lime" style="flex:1;margin:0 14px">*** DO THE MATH *** 2 MIN 47 SEC *** EVERY FRAME OF FOOTAGE CAME OUT OF VJAG_TEST *** TURN IT UP *** 64 BIT IF YOU COUNT RIGHT *** DO THE MATH ***</marquee>
+<a href="demos.html">THE GAMES &gt;&gt;</a>
 </div>
-<p class="small grey">Games from the commercial library appear as footage only. No ROMs are hosted here, as always.</p>
 
-<h2>DIRECTOR'S STILLS</h2>
-<center>
-<img class="tv" src="media/dothemath-stills.jpg" width="640" height="480" alt="Stills from the homebrew part of the video: MAW, WIREWING, Jaguar Hero and the console shell">
-</center>
+<div class="fire" id="fire">DO THE MATH</div>
+<p class="press blink" id="press">&gt;&gt; PRESS PLAY ON THE TELLY &lt;&lt;</p>
 
-<center><p><a href="demos.html" class="pixel">SEE THE GAMES FROM THE VIDEO &gt;&gt;&gt;</a></p></center>
+<div class="stage">
+<div class="telly">
+<img class="skin" src="img/tvskin.webp" alt="">
+<div class="woofer l"></div><div class="woofer r"></div>
+<div class="vuglow" id="vuglow"></div>
+<canvas id="eq" width="270" height="96"></canvas>
+<video id="mv" src="media/dothemath.mp4" poster="media/dothemath-poster.jpg" controls preload="none" playsinline></video>
+</div>
+</div>
 
-<script>finish();</script>
+<div class="mvtext">
+<h2>WHAT IS ON THE TELLY</h2>
+<p>A song cut to the bar, and two minutes forty-seven of Jaguar: attract modes, gameplay, the <a href="demos.html">homebrew from this repo</a>, and the console shell with its eyes flaring on the beat. 854&times;480, 11.7 MB.</p>
+<p>Every frame of footage came out of <code>vjag_test</code>. A script runs it with a stream of PPM frames into a fifo, ffmpeg reads the other end, and nothing raw touches the disk. Jaguar Hero and WIREWING are played on camera by their own test robots. The cuts land on a beat grid tracked from the song's stems.</p>
+<p class="small grey">Commercial games appear as footage only. No ROMs here.</p>
+<h2>STILLS</h2>
+<center><img src="media/dothemath-stills.jpg" width="640" height="480" alt="Stills from the homebrew part of the video: MAW, WIREWING, Jaguar Hero and the console shell" style="max-width:100%;height:auto;border:8px ridge #606060"></center>
+<p class="center small"><a href="index.html">home</a> &middot; <a href="demos.html">games + demos</a> &middot; <a href="badges.html">badge wall</a> &middot; <a href="https://github.com/HelgeSverre/jaguar">github.com/HelgeSverre/jaguar</a></p>
+</div>
+
+<script>
+// the title, letter by letter, hopping out of step
+(function () {
+  var el = document.getElementById("fire"), t = el.textContent, h = "";
+  for (var i = 0; i < t.length; i++) h += t[i] === " " ? "&nbsp;" : '<span style="animation-delay:' + (i * -0.07).toFixed(2) + 's">' + t[i] + "</span>";
+  el.innerHTML = h;
+})();
+
+// badge columns down the sides, doubled so the loop is seamless
+(function () {
+  var names = ["dothemath", "vjag", "hero", "maw", "wirewing", "ghostgrid", "omega", "64bit", "tom", "jerry", "blitter", "dsp", "gpu", "cry", "noroms", "ilovejag", "getvjag", "scanlines", "homebrew", "vectors"];
+  ["coll", "colr"].forEach(function (id, k) {
+    var h = "";
+    for (var r = 0; r < 2; r++) for (var i = 0; i < names.length; i++) h += '<img src="img/wall/' + names[(i + k * 7) % names.length] + '.gif" width="88" height="31" alt="">';
+    document.getElementById(id).innerHTML = h;
+  });
+})();
+
+// the boombox listens to the video: woofers pump, VU meters glow, the EQ dances, the sky flashes on the kick.
+// over http(s) it hears the real soundtrack; from a local file Web Audio would only get zeros
+// (and silence the video), so it fakes a 128 BPM pulse instead.
+(function () {
+  var v = document.getElementById("mv"), ctx = null, an = null, freq, wave, live = /^https?:$/.test(location.protocol);
+  var wl = document.querySelector(".woofer.l"), wr = document.querySelector(".woofer.r");
+  var vu = document.getElementById("vuglow"), eq = document.getElementById("eq"), ex = eq.getContext("2d");
+  var press = document.getElementById("press"), avg = 0, lastFlash = 0;
+  v.addEventListener("play", function () {
+    press.hidden = true;
+    if (live && !ctx) {
+      try {
+        ctx = new (window.AudioContext || window.webkitAudioContext)();
+        an = ctx.createAnalyser(); an.fftSize = 256;
+        ctx.createMediaElementSource(v).connect(an); an.connect(ctx.destination);
+        freq = new Uint8Array(an.frequencyBinCount); wave = new Uint8Array(an.fftSize);
+      } catch (e) { an = null; }
+    }
+    if (ctx) ctx.resume();
+    if (!freq) { freq = new Uint8Array(128); wave = new Uint8Array(256); }
+    requestAnimationFrame(tick);
+  });
+  v.addEventListener("pause", function () { press.hidden = false; press.innerHTML = "&gt;&gt; PAUSED. COWARD. &lt;&lt;"; });
+  function fake(now) {
+    var beat = (now / 468.75) % 1, kick = Math.pow(1 - beat, 4);
+    for (var i = 0; i < freq.length; i++) freq[i] = Math.min(255, (i < 6 ? 120 + 135 * kick : 60 + 120 * Math.random() * (1 - i / freq.length)));
+    for (var j = 0; j < wave.length; j++) wave[j] = 128 + Math.round(70 * kick * Math.sin(j));
+  }
+  function tick(now) {
+    if (v.paused) { wl.style.transform = wr.style.transform = "translate(-50%,-50%)"; vu.style.opacity = 0; ex.clearRect(0, 0, eq.width, eq.height); document.body.classList.remove("flash"); return; }
+    if (an) { an.getByteFrequencyData(freq); an.getByteTimeDomainData(wave); } else fake(now);
+    var bass = (freq[1] + freq[2] + freq[3] + freq[4]) / 1020;
+    var peak = 0; for (var i = 0; i < wave.length; i++) peak = Math.max(peak, Math.abs(wave[i] - 128));
+    var s = 1 + Math.pow(bass, 3) * 0.16;
+    wl.style.transform = wr.style.transform = "translate(-50%,-50%) scale(" + s.toFixed(3) + ")";
+    vu.style.opacity = String(Math.min(1, peak / 100));
+    avg = avg * 0.95 + bass * 0.05;
+    if (bass > avg * 1.25 && bass > 0.55 && now - lastFlash > 180) lastFlash = now;
+    document.body.classList.toggle("flash", now - lastFlash < 70);
+    // EQ: fourteen columns of LED segments
+    ex.clearRect(0, 0, eq.width, eq.height);
+    var cols = 14, seg = 9, cw = eq.width / cols;
+    for (var c = 0; c < cols; c++) {
+      var bin = Math.floor(Math.pow(c / cols, 1.6) * (freq.length * 0.7)) + 1;
+      var lvl = Math.round(freq[bin] / 255 * seg);
+      for (var k = 0; k < lvl; k++) {
+        ex.fillStyle = k >= seg - 2 ? "#ff2020" : k >= seg - 4 ? "#ffcc00" : "#40ff40";
+        ex.fillRect(c * cw + 3, eq.height - (k + 1) * (eq.height / seg) + 2, cw - 6, eq.height / seg - 4);
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+})();
+</script>
 </body>
 </html>
