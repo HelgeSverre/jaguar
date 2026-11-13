@@ -197,6 +197,7 @@ Every public name in `jaggame`, with the comment from its source. This file is g
 | `fn (img &Image) value(ram []u8, name string) !i64` | value is the raw value of a global variable, read from the machine's memory. |
 | `fn (img &Image) element(ram []u8, name string, index int) !i64` | element is the raw value of an element of a global array or table. |
 | `fn (img &Image) field(ram []u8, name string, index int, field string) !i64` | field is the raw value of a field of an element of an array of records. |
+| `fn (img &Image) field_address(name string, index int, field string) !u32` | field_address is the address in memory of a field of an element of an array of records, for a test that sets one by hand. |
 
 ## The runtime: games
 
