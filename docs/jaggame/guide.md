@@ -2,9 +2,9 @@
 
 `jaggame` is a V module for writing Atari Jaguar programs without writing assembly. A program *describes* its variables and logic to a builder; the builder checks the description, compiles it to 68000 code and writes a `.jag` image. The same description also runs in an interpreter written in V, and the two must agree.
 
-This guide grows with the module. Chapter 1, the language, is all that exists so far: there is no runtime yet (no video, sprites, pad or sound), so the programs here compute values that tests read back. [`design.md`](design.md) is the plan and the contract; [`reference.md`](reference.md) lists every public name with its comment.
+This guide grows with the module. Chapter 1 is the language: the programs there compute values that tests read back. Chapter 2 is the runtime (the frame loop, video, sprites, pad, text, timers), built around the demo [`hello2`](../../demos/hello2/main.v). Sprite sheets and PNG import, maps, collision, scenes and real sound come in later chapters. [`design.md`](design.md) is the plan and the contract; [`reference.md`](reference.md) lists every public name with its comment.
 
-Every V block in this guide is quoted from a test in [`jaggame/tests`](../../jaggame/tests), and every text block is output that a test produces: `jaggame/tests/guide_test.v` fails if one of them drifts.
+Every V block in this guide is quoted from tested code, and every text block is output that a test produces. A V block is named by a comment on the line above it, `<!-- guide:NAME -->`, and must be a run of lines from the region of that name: the lines between `// guide:NAME` and `// guide:end` in a test in [`jaggame/tests`](../../jaggame/tests), or in `demos/hello2/main.v` or its test. `jaggame/tests/guide_test.v` fails if a block is unnamed, names a region that does not exist, or has drifted from it.
 
 ## Contents
 
@@ -22,6 +22,21 @@ Every V block in this guide is quoted from a test in [`jaggame/tests`](../../jag
   - [How it is compiled](#how-it-is-compiled)
   - [How it is tested](#how-it-is-tested)
   - [V traps](#v-traps)
+- [Chapter 2: the runtime](#chapter-2-the-runtime)
+  - [A game and a frame](#a-game-and-a-frame)
+  - [Declaring: pictures, animations, text and timers](#declaring-pictures-animations-text-and-timers)
+  - [Starting up](#starting-up)
+  - [Every frame](#every-frame)
+  - [Sprites](#sprites)
+  - [Animations](#animations)
+  - [The pad](#the-pad)
+  - [Text](#text)
+  - [Time](#time)
+  - [A beep](#a-beep)
+  - [Mistakes in the description](#mistakes-in-the-description)
+  - [Testing a game, twice](#testing-a-game-twice)
+  - [What a frame costs](#what-a-frame-costs)
+  - [V traps in the runtime](#v-traps-in-the-runtime)
 
 ## Chapter 1: the language
 
@@ -123,7 +138,7 @@ f := sines.at(score.and(3)).as_(.i32).mul(2) // i32
 g := score + lives.as_(.u16) // operators work between two Exprs
 ```
 
-A variable, an element and an operation are all `jaggame.Expr`, so a variable can be used wherever a value can. The methods take a `jaggame.Val`: an `Expr`, an `int`, an `i64`, an `f64` or a `bool`.
+A variable, an element and an operation are all `jaggame.Expr`, so a variable can be used wherever a value can. The methods take a `jaggame.Val`: an `Expr`, an `int`, an `i64`, a `u16` (which is what `jaggame.cry` returns), an `f64` or a `bool`.
 
 | Methods | |
 |---|---|
@@ -189,7 +204,7 @@ c.inc(steps)
 c.end()
 ```
 
-`v fmt` keeps the statements flat; the blocks are in the calls, not in the indentation.
+`v fmt` keeps the statements flat; the blocks are in the calls, not in the indentation. So the examples in this guide and the demos follow a convention to keep them readable: a blank line before each `if_`, `while_` and `for_` (except one that directly opens another block), and a short comment on an `end()` that closes a block of more than a few lines or one nested more than one deep (`c.end() // for each guard`).
 
 | Statement | Meaning |
 |---|---|
@@ -462,3 +477,361 @@ Found with V 0.5.2 while writing this slice, in addition to [the ones in the jag
 | `for s in list` where `list` is a `&[]T` gives `&T` elements, and `&list[i]` is refused outside `unsafe` | loop with `for s in list` and pass `s` on as it is |
 | `-0x8000_0000` is positive: the literal is an `int` before it is negated | write `-i64(0x8000_0000)` |
 | An `int` is 32 bits, so `0xffff_ffff` does not fit an `int` parameter | `Val` accepts `i64` too; `p.u32` and `table_u32` take `i64` |
+
+## Chapter 2: the runtime
+
+Chapter 1 described a language that compiles to 68000 code. This chapter adds what a game needs around it: a loop that runs once a frame, video on both television standards, sprites, a pad, text, timers and a beep. [`demos/hello2`](../../demos/hello2/main.v) is [`hello`](../../demos/hello/main.v) written with it, with no assembly, and a little more.
+
+```sh
+v run demos/hello2           # writes demos/hello2.jag
+just run demos/hello2.jag    # play it
+v -prod test demos/hello2/   # boot it in the emulator, on both standards, and check it
+```
+
+<img src="../screenshots/hello2.png" width="320" alt="hello2: two lines of text, a spinning coin, a big orange ball with a small one on it, a green arrow, and three counting numbers at the bottom">
+
+Two lines of text, a ball you move with the arrow keys that stops at the edges of the screen, and a beep when you press Z, X or C. Then: a spinning coin (an animation), a small ball that rides on the big one at half size (a scaled sprite on a higher layer, which the top of the screen cuts off), an arrow that turns to face the way you go (a flipped sprite), and three numbers that count: frames, seconds and half seconds.
+
+- [A game and a frame](#a-game-and-a-frame)
+- [Declaring: pictures, animations, text and timers](#declaring-pictures-animations-text-and-timers)
+- [Starting up](#starting-up)
+- [Every frame](#every-frame)
+- [Sprites](#sprites)
+- [Animations](#animations)
+- [The pad](#the-pad)
+- [Text](#text)
+- [Time](#time)
+- [A beep](#a-beep)
+- [Mistakes in the description](#mistakes-in-the-description)
+- [Testing a game, twice](#testing-a-game-twice)
+- [What a frame costs](#what-a-frame-costs)
+- [V traps in the runtime](#v-traps-in-the-runtime)
+
+### A game and a frame
+
+A game is a `jaggame.Game`: a `Program` (chapter 1) with a fixed runtime around it. `jaggame.new_game(Config{...})` returns one; the program is `game.p`, so `game.p.u16('beats')` declares a variable as before. The author declares things, writes the code of two functions with `define_init` and `define_update`, and calls `build()`, which checks everything, compiles it with the runtime and returns an `Image`: `img.bytes` is the `.jag` file and `img.symbols` the table of labels.
+
+`Config` has three numbers: the size of the **sprite pool** (`sprites`), the number of **layers** the sprites are sorted into (`layers`) and the **background** colour (`background`, a CRY value from `jaggame.cry(r, g, b)`).
+
+Once started, the machine does nothing but wait for the vertical interrupt, which comes once a frame, 60 times a second on NTSC and 50 on PAL. Each time:
+
+1. the object processor is pointed at the display list that was finished last time;
+2. the pad is read into `pad` and `pad_pressed`;
+3. `rt_frame` runs: it counts the frame, moves the timers, calls the game's update, moves the animations and fades the beep;
+4. the rows of text that changed are drawn, and the layers' colours are copied into the colour table;
+5. a new display list is built from the visible sprites;
+6. if another interrupt is already waiting, `missed_frames` goes up by one.
+
+Steps 3 to 5 are the same code on both standards; the television standard is read from bit 4 of `joybuts` at start-up and everything that differs (the display window, where the centre of the picture is, the number of frames in a second) is looked up from it.
+
+**All game code runs inside the interrupt.** Start-up calls `rt_init` before interrupts are enabled; after that, compiled code runs only from the interrupt handler, and a handler cannot be interrupted by the next one: the 68000 raises its interrupt mask on entry, and an interrupt that arrives while the handler runs waits until it returns. So the fixed addresses that chapter 1 gives parameters and locals are never in use by two calls at once, and the limit that a function cannot call itself, even through others, is the only one that remains. This is how the runtime is built, not something the author has to look after.
+
+**The picture is one frame behind the work.** At the end of frame N the handler points the object processor at the list that it built at the end of frame N-1, and builds the next. The work may then take longer than the gap between two pictures without the object processor ever reading a list that is half built (it uses a list up as it draws it, so the runtime keeps two and builds one while the other is shown). The price is that a button pressed in frame N shows in the picture of frame N+2: one frame later than `hello`.
+
+A frame of work that takes longer than a frame does not nest or crash: the next interrupt waits, the picture repeats, and `missed_frames` counts it. It counts the handlers that found another interrupt waiting when they finished; one handler that takes ten frames adds one.
+
+The runtime's variables are ordinary variables of the program, so game code reads them and a test reads them by name:
+
+| Variable | Type | |
+|---|---|---|
+| `frame` | `u32` | frames since start-up, counted by `rt_frame` |
+| `missed_frames` | `u16` | see above; a normal game keeps it at 0 |
+| `fps` | `u8` | 60 on NTSC, 50 on PAL |
+| `pad`, `pad_pressed` | `u32` | the buttons held, and the ones that went down this frame |
+| `sprites` | array of records | the sprite pool |
+
+Names that start with `rt_` and labels that start with `rt.` belong to the runtime, as `jaggame.` ones belong to the compiler.
+
+### Declaring: pictures, animations, text and timers
+
+<!-- guide:declare -->
+```v
+game.art_cry('ball', ball_size, ball_size, 1, ball())
+game.art_pal('coin', 16, 16, 4, coin())
+game.palette(coin_palette())
+game.art_cry('arrow', 32, 16, 1, arrow())
+game.sequence('spin', [jaggame.Step{0, 0.1}, jaggame.Step{1, 0.1},
+	jaggame.Step{2, 0.1}, jaggame.Step{3, 0.1}])
+
+title := game.text_layer('title', jaggame.TextConfig{
+	columns: 40
+	rows:    2
+	y:       8
+})
+hud := game.text_layer('hud', jaggame.TextConfig{
+	columns: 24
+	rows:    3
+	x:       8
+	y:       200
+	colour:  jaggame.cry(255, 220, 90)
+})
+beat := game.timer('beat')
+watch := game.timer('watch')
+beats := game.p.u16('beats')
+```
+
+- **`art_cry(name, width, height, frames, pixels)`** is a picture of 16-bit CRY pixels (`jaggame.cry(r, g, b)` makes one). `frames` pictures of the same size follow one another in `pixels`, each line after line. A line must fill whole 64-bit phrases, so the width is a multiple of 4. The pixel value 0 is transparent.
+- **`art_pal(...)`** is the same with 8-bit pixels that are numbers in the game's **palette**, set once with `palette(colours)`; the width is a multiple of 8. The palette has room for 256 colours minus two for each text layer (the text keeps the top of the colour table). The pixel 0 is transparent here too.
+- **`sequence(name, steps)`** is an animation: each `Step{frame, seconds}` shows a frame for a time. See [Animations](#animations).
+- **`text_layer(name, config)`** is a grid of 8×8 character cells over the sprites; `TextConfig` has `columns` (a multiple of 8), `rows`, the position `x` and `y` in screen pixels and the `colour`. See [Text](#text).
+- **`timer(name)`** is a countdown or a stopwatch; see [Time](#time).
+
+A picture is a build-time array, as in `hello`: `ball()` in `demos/hello2/main.v` draws a shaded sphere with V's `math`. Pictures from PNG files come in a later slice.
+
+### Starting up
+
+<!-- guide:init -->
+```v
+ball_sprite := game.sprite(0)
+coin_sprite := game.sprite(1)
+moon := game.sprite(2)
+pointer := game.sprite(3)
+
+mut c := game.define_init()
+ball_sprite.put(mut c, 'ball', 144, 104, 1)
+coin_sprite.put(mut c, 'coin', 40, 90, 0)
+coin_sprite.play(mut c, 'spin', true)
+moon.put(mut c, 'ball', 168, 98, 2)
+c.set(moon.scale, 0.5)
+pointer.put(mut c, 'arrow', 140, 160, 3)
+
+title.print(mut c, 13, 0, 'HELLO, JAGUAR!')
+title.print(mut c, 8, 1, 'ARROWS MOVE. FIRE BEEPS.')
+hud.print(mut c, 0, 0, 'FRAMES')
+hud.print(mut c, 0, 1, 'SECONDS')
+hud.print(mut c, 0, 2, 'BEATS')
+beat.start(mut c, game.seconds(0.5))
+watch.stopwatch(mut c)
+```
+
+`define_init` returns the block that collects the statements of the function that runs once, before the first frame. `game.sprite(i)` is a handle on element `i` of the pool; `put` sets its picture, position and layer, frame 0, full size and makes it visible. Everything else is a plain `set` of a field: `c.set(moon.scale, 0.5)`. A sprite handle is made outside the function because it is only a description of where the fields are.
+
+The runtime has already set every sprite's scale to 1.0 and `fps` to 60 or 50 when this runs. The text printed here is printed once and stays.
+
+### Every frame
+
+<!-- guide:update -->
+```v
+c = game.define_update()
+
+c.if_(game.held(.left))
+c.set(ball_sprite.x, ball_sprite.x.sub(speed))
+c.set(pointer.flip, true)
+c.end()
+
+c.if_(game.held(.right))
+c.set(ball_sprite.x, ball_sprite.x.add(speed))
+c.set(pointer.flip, false)
+c.end()
+
+c.if_(game.held(.up))
+c.set(ball_sprite.y, ball_sprite.y.sub(speed))
+c.end()
+
+c.if_(game.held(.down))
+c.set(ball_sprite.y, ball_sprite.y.add(speed))
+c.end()
+
+// The ball stops at the edges of the screen.
+c.set(ball_sprite.x, ball_sprite.x.max(0).min(jaggame.logical_width - ball_size))
+c.set(ball_sprite.y, ball_sprite.y.max(0).min(jaggame.logical_height - ball_size))
+
+// The small ball rides on the big one, and runs off the screen with it.
+c.set(moon.x, ball_sprite.x.add(24))
+c.set(moon.y, ball_sprite.y.sub(6))
+
+c.if_(game.pressed(.fire))
+game.beep(mut c, beep_note, beep_volume)
+c.end()
+
+c.if_(beat.fired)
+c.inc(beats)
+beat.start(mut c, game.seconds(0.5))
+c.end()
+
+hud.number(mut c, 7, 0, game.frame, 5)
+hud.number(mut c, 8, 1, game.whole_seconds(watch.elapsed), 3)
+hud.number(mut c, 6, 2, beats, 3)
+```
+
+`define_update` is the function that runs once a frame. Everything is chapter 1 plus a few names: `game.held(.left)` is a `bool` expression that is true while the button is down, `game.pressed(.fire)` is true for the one frame in which it went down, `ball_sprite.x` is an `Expr` that can be read and set. The blank line before each `if_` is a convention of the guide and the demos: `v fmt` does not indent the statements between `if_` and `end`, so a blank line before the opener and a short comment on an `end()` that closes something long or deep keep the structure readable.
+
+The ball stops at the edges with `max` and `min`. The small ball is placed relative to the big one, a little above its top right corner, so when the big ball is at the top of the screen the small one is partly off the screen, which the runtime copes with (see [Sprites](#sprites)).
+
+### Sprites
+
+A sprite is one element of the array `sprites`, which has `Config.sprites` of them. Its fields:
+
+| Field | Type | |
+|---|---|---|
+| `x`, `y` | `i16` | the top left corner in **logical pixels**: the screen is 320×240, (0, 0) is its top left corner |
+| `art` | `u8` | which picture: the number of the art, in the order declared |
+| `frame` | `u8` | which frame of the picture; a frame the picture does not have shows frame 0 |
+| `layer` | `u8` | 0 is drawn first; a higher layer is drawn over a lower one; a layer above the last is drawn with the last |
+| `visible` | `bool` | only visible sprites are drawn |
+| `flip` | `bool` | mirrored left to right |
+| `scale` | `fix` | 1.0 is full size; from 1/32 to just under 8 (the object processor's 3.5 fixed point) |
+
+The runtime builds the display list again every frame, layer by layer, and within a layer in the order of the pool: of two sprites on one layer the one later in the pool is on top. Positions are logical pixels on both standards: the runtime works out the display window of each standard from the profile it chose at start-up, centres the 320×240 screen in it, and adds that offset when it builds the objects. (NTSC has 241 lines and 352 pixels in the window, PAL 287 and 345.)
+
+**Sprites that are not wholly on the screen.** The runtime decides for each sprite:
+
+- A sprite wholly outside the screen, to either side or above or below, is not drawn at all.
+- A sprite that runs off the **top** or the **bottom** is cut: the runtime shows fewer lines of it (leaving out the lines above the screen, or those below it), because the object processor cannot start an object above the first line of the display. This is exact for a sprite at full size. A scaled sprite is cut in whole lines of its picture, so its first visible line may be up to a source line lower than strictly right.
+- A sprite that runs off the **left** or the **right** is left to the object processor, which clips at the edge of its line buffer, so no pixel wraps around. The part past the edge falls in the border of the display window, outside the logical screen, which a television may show and an emulator shows a few pixels of.
+
+`jaggame/rt_sprites_test.v` tries each of these on both standards.
+
+Flip is cheap: it is the object processor's reflect flag, and the sprite is drawn from its right edge to the left. A scaled sprite is a scaled object (the picture is magnified by the same factor across and down); the object processor's rule for the vertical remainder can make it a line taller or shorter than width × scale.
+
+`game.sprite(i)` checks that `i` is in the pool (a build error otherwise); `game.sprite_at(index)` takes any expression, for a loop. `hide(c)` clears `visible`.
+
+### Animations
+
+`game.sequence('spin', [Step{0, 0.1}, Step{1, 0.1}, ...])` names a list of frames, each with the time it stays, in **seconds**. The runtime turns the time into frames for each standard (60 or 50 a second, rounded to whole frames, at least 1) and chooses the right table when it starts, so the coin spins at the same speed on NTSC and PAL. `sprite.play(c, 'spin', true)` starts it on a sprite: it shows the first step now, and every frame the runtime moves the animation on; with `true` it starts over after the last step, with `false` the sprite stays on the last frame and `sprite.playing` becomes false. `sprite.stop(c)` ends it where it is. An animation does not know which picture it is for: it sets the sprite's `frame`.
+
+An unknown animation name is a build error that lists the known ones.
+
+### The pad
+
+`pad` holds one bit for each button, in the order of `jaggame.Button`: the four directions, the keypad (`star seven four one zero eight five two hash nine six three`), `a`, `b`, `c`, `option` and `pause`. `jaggame.button_mask(.left)` is a button's bit; `.fire` is the three fire buttons together. The runtime reads the controller matrix once a frame, before `rt_frame`; the keypad, Option and Pause come from the same read as the directions and A, B, C, so they cost nothing more. In the emulator the arrow keys are the directions and Z, X and C are A, B and C.
+
+`pad_pressed` has the bits that were not set in the frame before. Both are ordinary variables: a test that runs the game in the interpreter sets them by feeding a pad (see [Testing a game, twice](#testing-a-game-twice)).
+
+### Text
+
+A text layer is an array of cells, one byte each, that the program owns (`hud_cells` for a layer called `hud`) together with an array of marks that say which rows changed (`hud_dirty`). Printing is ordinary code that fills cells and marks a row; the machine then draws the marked rows into the layer's picture once a frame and clears the marks, so printing something that does not change costs nothing after the first time.
+
+| Call | |
+|---|---|
+| `layer.print(c, col, row, 'TEXT')` | a string constant at a cell |
+| `layer.number(c, col, row, value, width)` | an unsigned number, right-aligned in `width` cells (1 to 10); a number with more digits shows its low digits |
+| `layer.clear(c)` | blanks the whole layer |
+| `layer.colour` | a `u16` variable, `hud_colour`: the colour of the letters; set it like any variable |
+
+The font has capitals, digits and punctuation only (ASCII 32 to 95). A string with anything else, one that does not fit the layer, a layer that does not fit the screen: all are build errors. A column or row that is an expression is not checked on the machine. The value of `number` is any unsigned expression: a signed one needs `as_(.u32)`. Cells are glyph numbers (0 is a blank, `!` is 1, `0` is 16), so a test can compare what the machine drew with what the interpreter made.
+
+Layers are drawn over all sprites in the order they were declared. Each has its own colour, which the runtime copies into the colour table every frame, so changing `hud_colour` recolours the whole layer; a layer uses the colour table entry `255 - 2 × its number`.
+
+### Time
+
+`game.seconds(1.5)` is a number of frames, the right one for the standard the game runs on: 90 on NTSC, 75 on PAL. It is an expression (a `u16`) computed from `fps` when it is evaluated, rounded to the nearest frame. `game.whole_seconds(frames)` goes the other way, rounded down, for showing elapsed time.
+
+A **timer** (`game.timer('beat')`) is four variables that the runtime moves before the game's update: `beat_left` (frames to go, counting down), `beat_elapsed` (frames since it started, up to 65535), `beat_running` and `beat_fired`. In code they are the handle's fields: `beat.left`, `beat.elapsed`, `beat.running`, `beat.fired`.
+
+| Call | |
+|---|---|
+| `timer.start(c, frames)` | counts down; when it reaches 0 the timer stops and `fired` is true for exactly one frame. Starting a running timer starts it over. `start(c, game.seconds(0.5))` |
+| `timer.stopwatch(c)` | counts `elapsed` up until it is stopped; it never fires |
+| `timer.stop(c)` | stops it; `left` and `elapsed` keep their values |
+
+In hello2 the beat timer restarts itself each time it fires, which gives a regular beat, and the stopwatch feeds the seconds on the screen.
+
+### A beep
+
+`game.beep(c, note, volume)` plays a short note on the sawtooth voice of the sound chip and lets it fade in about twenty frames: `note` is a MIDI note number (69 is the A at 440 Hz), `volume` a few thousand. It is **provisional**: it exists so that a game can make a sound now. Sound proper, with effects and music, is a later slice and will replace it. The synthesizer program is only started and put in the image when a game calls `beep`.
+
+### Mistakes in the description
+
+The builder collects every mistake in the description of the game and reports them together, with the type errors of chapter 1:
+
+<!-- guide:game_mistakes -->
+```v
+mut game := jaggame.new_game(jaggame.Config{ sprites: 4 })
+game.art_cry('ball', 30, 30, 1, []u16{len: 900})
+hud := game.text_layer('hud', jaggame.TextConfig{ columns: 12, rows: 2 })
+
+mut c := game.define_init()
+ball := game.sprite(6)
+ball.put(mut c, 'bal', 10, 10, 0)
+ball.play(mut c, 'spin', true)
+hud.print(mut c, 5, 0, 'Score')
+game.build() or { return err.msg() }
+```
+
+```text
+jaggame program:
+  game: art `ball`: a line of 30 pixels at 16 bits does not fill whole 64-bit phrases; the width must be a multiple of 4
+  game: text layer `hud`: the columns (12) must be a multiple of 8, from 8 to 128, so that a line fills whole phrases
+  game: sprite 6 is not in the pool of 4
+  game: there is no art `bal`; the pictures are: ball
+  game: there is no animation `spin`; no animation has been declared
+  game: text layer `hud`: the font has no `c` (in "Score")
+```
+
+A picture whose lines do not fill phrases, a text layer too wide for the screen, a sprite that is not in the pool, a picture or an animation that was never declared (with the known ones listed), a character the font lacks, a palette picture without a palette, text outside its layer, and an image so large that it would run over the display lists: all are build errors that name the thing. The layout of memory is checked with `jagkit.check_regions` as in `hello`.
+
+### Testing a game, twice
+
+A test boots the image in the emulator on either television standard, drives the pad, reads variables by name and looks at the picture. `jaggame.emulated.boot(image, pal)` returns a `Player`; `p.frames(n)` runs frames and lets the interrupt finish (a frame of the emulator ends in the middle of the interrupt in any game that does real work), `p.hold(.right, 10)` holds a key, `p.picture()` is the screen, `p.list_objects(base)` decodes a display list, `p.loudest()` the sound, and `p.busy_cycles(n)` how many 68000 cycles a frame uses.
+
+<!-- guide:boot -->
+```v
+img := build()!
+mut p := emulated.boot(img.bytes, true)! // true: a PAL machine
+p.frames(30)
+assert img.value(p.m.ram, 'fps')! == 50
+x := img.field(p.m.ram, 'sprites', 0, 'x')!
+
+p.hold(.right, 10) // hold the right key for ten frames
+p.frames(3)
+assert img.field(p.m.ram, 'sprites', 0, 'x')! == x + 10 * speed
+```
+
+The same game runs in the interpreter. `game.interpreter(.ntsc)` starts it as if on that standard (`rt_init` and the game's `init` have run); `game.step(mut it, pad)` runs one frame with a pad built from `jaggame.button_mask`. The interpreter does not draw anything; it runs what is variables and logic: counting, timers, animations, the sprites' positions, the cells of the text.
+
+<!-- guide:interpreter -->
+```v
+mut game := describe()
+mut it := game.interpreter(.ntsc)!
+for _ in 0 .. 50 {
+	game.step(mut it, jaggame.button_mask(.right))!
+}
+assert it.field('sprites', 0, 'x')! == 144 + 50 * speed
+assert it.value('frame')! == 50
+```
+
+**The test that ties the two together** drives the machine with a script of buttons and the interpreter with the same one, frame for frame, and asks `img.differences` for every variable, parameter and local of the two runs that differ (the marks that say a text row is drawn are the one thing only the machine clears):
+
+<!-- guide:compare -->
+```v
+for n, mask in script {
+	hold_pad(mut b.p, mask)
+	b.p.frames(1)
+	g.step(mut it, mask)!
+	assert b.value('frame') == n + 1
+}
+mut differences := b.img.differences(it, b.p.m.ram)
+// The machine marks a text row done when it has drawn it.
+differences = differences.filter(!it.contains('_dirty'))
+assert differences.len == 0, differences.join('\n')
+```
+
+`demos/hello2/hello2_test.v` runs this on NTSC and PAL, over 400 frames in which the ball goes in every direction and fire is pressed once. It then checks the same things in the picture: that the ball is where its variable says, that it follows the pad, that the layers come in order, that the small ball is cut at the top (the display list says twenty of its lines are left), that the numbers are right at 60 frames and that 2.5 seconds are five beats on both standards.
+
+`jaggame/rt_*_test.v` test the pieces on their own: layer order, clipping on both standards, scale, flip, 8-bit pictures, frames, the list that alternates, animation timing, timers, the pad (every button), text, the beep, a normal load that misses no frames and an update that is too slow and does.
+
+### What a frame costs
+
+Measured on the emulated 68000 (`Player.busy_cycles`), where a frame is about 221,000 cycles on NTSC and 265,000 on PAL:
+
+| | Cycles a frame |
+|---|---|
+| hello2, NTSC and PAL | 66,000 |
+| an empty game with a pool of 64 sprites and 4 layers | 11,600 |
+| one more visible sprite | 1,300 (1,400 when scaled) |
+| 16 / 32 / 64 visible sprites | 33,000 / 54,000 / 96,000 |
+
+Finding the sprites to draw costs about 45 cycles for each place in the pool for each layer, whether it is visible or not: a pool no larger than the game needs, and few layers, keep that low. Text is the expensive part, because it is compiled code that is not tuned: a number that changes every frame costs about 17,000 cycles (its digits, and drawing its row of 24 cells again), and a text layer that does not change costs nothing. hello2 has three numbers, which is 51,000 of its 66,000. A game that prints much should print what changed, not everything. On the 68000 alone, about 150 visible sprites fit in a frame; whether the object processor can draw that many on each line is a different limit that this slice has not measured (the pool is at most 255).
+
+### V traps in the runtime
+
+Found with V 0.5.2 while writing the runtime, in addition to the ones above:
+
+| Trap | Workaround |
+|---|---|
+| An `if` expression inside parentheses in an `assert` (`assert a == b / (if pal { 25 } else { 30 })`), or `assert x == []` on an array, makes the C compiler fail on an undeclared temporary | compute the value into a variable first, and compare `x.len == 0` |
+| `runs.all(it == step)` in an `assert` with a message fails the same way | loop and assert each |
+| `select` is a keyword here too: a variable of that name does not compile | `row_select` |
+| A struct with a reference field (an `Expr` holds one) cannot be left out of a struct literal, even if it is never used | give it an invalid expression |
+| `v test` prints nothing for a passing test | `v -stats test` shows `println` output |

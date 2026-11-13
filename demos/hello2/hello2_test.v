@@ -94,6 +94,33 @@ fn test_the_game_runs_and_shows_the_ball_on_both_standards() {
 	}
 }
 
+// The guide shows this one: a game booted on a PAL machine and driven through the pad.
+fn test_the_guide_boots_it_and_presses_a_button() {
+	// guide:boot
+	img := build()!
+	mut p := emulated.boot(img.bytes, true)! // true: a PAL machine
+	p.frames(30)
+	assert img.value(p.m.ram, 'fps')! == 50
+	x := img.field(p.m.ram, 'sprites', 0, 'x')!
+
+	p.hold(.right, 10) // hold the right key for ten frames
+	p.frames(3)
+	assert img.field(p.m.ram, 'sprites', 0, 'x')! == x + 10 * speed
+	// guide:end
+}
+
+fn test_the_guide_runs_the_logic_in_the_interpreter() {
+	// guide:interpreter
+	mut game := describe()
+	mut it := game.interpreter(.ntsc)!
+	for _ in 0 .. 50 {
+		game.step(mut it, jaggame.button_mask(.right))!
+	}
+	assert it.field('sprites', 0, 'x')! == 144 + 50 * speed
+	assert it.value('frame')! == 50
+	// guide:end
+}
+
 fn test_the_pad_moves_the_ball() {
 	for pal in [false, true] {
 		mut b := boot(pal)
@@ -265,17 +292,19 @@ fn test_the_interpreter_does_what_the_machine_did() {
 		mut g := describe()
 		mut it := g.interpreter(if pal { jaggame.Region.pal } else { jaggame.Region.ntsc })!
 		script := pad_script()
+		// guide:compare
 		for n, mask in script {
 			hold_pad(mut b.p, mask)
 			b.p.frames(1)
 			g.step(mut it, mask)!
 			assert b.value('frame') == n + 1
 		}
-		assert b.value('frame') == script.len
 		mut differences := b.img.differences(it, b.p.m.ram)
 		// The machine marks a text row done when it has drawn it.
 		differences = differences.filter(!it.contains('_dirty'))
 		assert differences.len == 0, differences.join('\n')
+		// guide:end
+		assert b.value('frame') == script.len
 		// And the game did what the pad said: it went somewhere and the numbers counted.
 		period := if pal { 25 } else { 30 } // frames in half a second
 		assert b.value('beats') == script.len / period

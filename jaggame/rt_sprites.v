@@ -119,8 +119,11 @@ fn (mut g Game) art_id(name string) int {
 			return i
 		}
 	}
-	known := g.arts.map(it.name).join(', ')
-	g.problem('there is no art `${name}`; the pictures are: ${known}')
+	if g.arts.len == 0 {
+		g.problem('there is no art `${name}`; no picture has been declared')
+	} else {
+		g.problem('there is no art `${name}`; the pictures are: ${g.arts.map(it.name).join(', ')}')
+	}
 	return 0
 }
 
@@ -146,6 +149,7 @@ pub:
 pub fn (mut g Game) sprite(index int) Sprite {
 	if index < 0 || index >= g.config.sprites {
 		g.problem('sprite ${index} is not in the pool of ${g.config.sprites}')
+		return g.sprite_at(0) // so that one mistake is not reported again for every use
 	}
 	return g.sprite_at(index)
 }
@@ -252,8 +256,11 @@ pub fn (s Sprite) play(mut c Code, name string, repeat bool) {
 	mut game := s.game
 	i := game.seq_index(name)
 	if i < 0 {
-		known := game.seqs.map(it.name).join(', ')
-		game.problem('there is no animation `${name}`; the animations are: ${known}')
+		if game.seqs.len == 0 {
+			game.problem('there is no animation `${name}`; no animation has been declared')
+		} else {
+			game.problem('there is no animation `${name}`; the animations are: ${game.seqs.map(it.name).join(', ')}')
+		}
 		return
 	}
 	first := game.seqs[i].steps[0]

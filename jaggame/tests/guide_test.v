@@ -137,13 +137,33 @@ fn statements() string {
 	return ''
 }
 
+fn test_the_game_mistakes_are_reported_together() {
+	assert game_mistakes().count('\n') == 6
+}
+
 fn test_the_statements_example_checks() {
 	assert statements() == ''
 }
 
+fn game_mistakes() string {
+	// guide:game_mistakes
+	mut game := jaggame.new_game(jaggame.Config{ sprites: 4 })
+	game.art_cry('ball', 30, 30, 1, []u16{len: 900})
+	hud := game.text_layer('hud', jaggame.TextConfig{ columns: 12, rows: 2 })
+
+	mut c := game.define_init()
+	ball := game.sprite(6)
+	ball.put(mut c, 'bal', 10, 10, 0)
+	ball.play(mut c, 'spin', true)
+	hud.print(mut c, 5, 0, 'Score')
+	game.build() or { return err.msg() }
+	// guide:end
+	return ''
+}
+
 // texts are the ```text blocks the guide may show.
 fn texts() []string {
-	return [mistakes(), listing(), expressions()]
+	return [mistakes(), listing(), expressions(), game_mistakes()]
 }
 
 struct Region {
@@ -174,6 +194,7 @@ fn guide_sources() []string {
 		}
 	}
 	files << os.join_path(dir, '..', '..', 'demos', 'hello2', 'main.v')
+	files << os.join_path(dir, '..', '..', 'demos', 'hello2', 'hello2_test.v')
 	return files
 }
 
@@ -272,6 +293,7 @@ fn test_every_code_block_in_the_guide_is_tested() {
 			'text' {
 				assert b.lines.join('\n') in made, 'guide.md line ${b.at}: this text is not produced by a test:\n${b.lines.join('\n')}'
 			}
+			'sh' {} // commands to type, not code
 			else {
 				assert false, 'guide.md line ${b.at}: a ```${b.kind} block cannot be checked'
 			}

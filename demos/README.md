@@ -11,6 +11,7 @@ v -prod test demos/maw/       # its test
 | Demo | What it is | Size | Controls |
 |---|---|---|---|
 | [`hello`](hello/main.v) | the smallest complete program: text, a ball, a beep | 4 KB | arrows move; Z, X, C beep |
+| [`hello2`](hello2/main.v) | `hello` again, written with [jaggame](../docs/jaggame/guide.md) and no assembly, plus a spinning coin, a scaled and a flipped sprite, and counting numbers | 13 KB | arrows move; Z, X, C beep |
 | [`plasma`](plasma/main.v) | a first GPU program: three waves, one picture a frame | 2 KB | none |
 | [`wirewing`](wirewing) | a wireframe flying game | 8 KB | left and right bank, Down climbs, Up dives; Z, X, C start |
 | [`maw`](maw) | a tunnel flyer | 438 KB | left and right turn the tunnel; Z, X, C start |

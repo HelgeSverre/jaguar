@@ -262,17 +262,19 @@ fn (mut g Game) define_number(f Func, cells Expr, dirty Expr) {
 	mut c := g.p.define(f)
 	k := c.local_u16('k')
 	rest := c.local_u32('rest')
+	tenth := c.local_u32('tenth')
 	glyph := c.local_u8('glyph')
 	c.set(rest, f.arg('value'))
 
 	c.for_(k, 0, f.arg('width'))
+	c.set(tenth, rest.div(10)) // one division a digit; the digit is what is left
 	c.if_(rest.eq(0).both(k.gt(0)))
 	c.set(glyph, 0)
 	c.else_()
-	c.set(glyph, rest.mod(10).add(glyph_code(`0`)).as_(.u8))
+	c.set(glyph, rest.sub(tenth.mul(10)).add(glyph_code(`0`)).as_(.u8))
 	c.end()
 	c.set(cells.at(f.arg('cell').add(f.arg('width')).sub(1).sub(k)), glyph)
-	c.set(rest, rest.div(10))
+	c.set(rest, tenth)
 	c.end() // for each digit
 
 	c.set(dirty.at(f.arg('row')), 1)
