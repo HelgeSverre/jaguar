@@ -31,6 +31,7 @@ struct Stmt {
 	bodies   [][]Stmt // if_: one per condition, then the else; loops: the body
 	has_else bool
 	asm      int
+	returns  bool // an asm statement that returns from the function with the result in d0
 }
 
 enum BlockKind {
@@ -281,6 +282,20 @@ pub type NativeFn = fn (mut it Interpreter) !
 pub fn (mut c Code) native(emit AsmFn, run NativeFn) {
 	c.asm(emit)
 	c.prog.natives[c.prog.asms.len - 1] = run
+}
+
+// native_ret is `native` for a function that has a result: the code leaves
+// the result in `d0` as a compiled `ret` does, and the function returns from
+// there (so the function needs nothing after it); the interpreter's `run`
+// leaves the result in `Interpreter.result`.
+pub fn (mut c Code) native_ret(emit AsmFn, run NativeFn) {
+	c.prog.asms << emit
+	c.prog.natives[c.prog.asms.len - 1] = run
+	c.add(Stmt{
+		kind:    .asm
+		asm:     c.prog.asms.len - 1
+		returns: true
+	})
 }
 
 // asm emits 68000 code in place of a statement. The interpreter cannot run

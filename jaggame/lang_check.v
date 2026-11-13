@@ -94,7 +94,7 @@ fn (mut k Checker) function(id int) LFunc {
 
 fn always_returns(body []TStmt) bool {
 	for s in body {
-		if s.kind == .ret {
+		if s.kind == .ret || (s.kind == .asm && s.returns) {
 			return true
 		}
 		if s.kind == .branch && s.bodies.all(always_returns(it)) {
@@ -187,8 +187,9 @@ fn (mut k Checker) stmt(s Stmt, mut out []TStmt) {
 		}
 		.asm {
 			out << TStmt{
-				kind: .asm
-				asm:  s.asm
+				kind:    .asm
+				asm:     s.asm
+				returns: s.returns
 			}
 		}
 	}

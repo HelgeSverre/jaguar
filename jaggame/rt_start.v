@@ -125,6 +125,9 @@ fn (g &Game) emit_handler(mut m jagkit.M68k, voices u32) {
 
 	m.bsr('rt.read_pad')
 	m.jsr(lbl('rt_frame'))
+	if g.has_tileset {
+		m.bsr('rt.render_tiles')
+	}
 	m.bsr('rt.render_text')
 	m.bsr('rt.sync_colours')
 	if g.sounds {
@@ -239,7 +242,7 @@ fn (g &Game) profile(video jagkit.Video, layout Layout) !Profile {
 	mut blobs := [2][]u8{}
 	for k in 0 .. 2 {
 		base := layout.lists[k]
-		mut maps := []jagkit.Bitmap{len: g.config.sprites + 1, init: jagkit.Bitmap{
+		mut maps := []jagkit.Bitmap{len: g.slots(), init: jagkit.Bitmap{
 			width:  4
 			height: 1
 		}}
@@ -256,7 +259,7 @@ fn (g &Game) profile(video jagkit.Video, layout Layout) !Profile {
 			}
 		}
 		list := jagkit.object_list(base, video, maps)!
-		text_at := 32 + 32 * (g.config.sprites + 1)
+		text_at := 32 + 32 * g.slots()
 		mut blob := list.bytes[..32].clone()
 		// The jump: always taken (a line of 0x7ff), to the text or to the stop.
 		target := if g.texts.len > 0 { base + u32(text_at) } else { base + 16 }

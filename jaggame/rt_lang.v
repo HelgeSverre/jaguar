@@ -11,6 +11,7 @@ fn (mut g Game) define_runtime() {
 		return
 	}
 	g.defined = true
+	g.parse_rooms()
 	if !g.has_init {
 		g.p.define(g.init_func)
 	}
@@ -18,6 +19,9 @@ fn (mut g Game) define_runtime() {
 		g.p.define(g.update_func)
 	}
 	g.define_text()
+	if g.map_ready {
+		g.define_map()
+	}
 
 	init := g.p.func('rt_init', [], .void)
 	mut c := g.p.define(init)
@@ -37,6 +41,9 @@ fn (mut g Game) define_runtime() {
 	frame := g.p.func('rt_frame', [], .void)
 	c = g.p.define(frame)
 	c.inc(g.frame)
+	if g.map_ready {
+		c.set(g.tv.queued, 0) // the tiles changed last frame were drawn
+	}
 	if g.timers.len > 0 {
 		tick := g.p.func('rt_tick', [], .void)
 		g.define_timers(tick)
@@ -47,6 +54,9 @@ fn (mut g Game) define_runtime() {
 		animate := g.p.func('rt_animate', [], .void)
 		g.define_animate(animate)
 		c.call(animate)
+	}
+	if g.map_ready {
+		c.call(g.tv.load_step)
 	}
 	if g.sounds {
 		c.set(g.beep_volume, g.beep_volume.sub(g.beep_volume.shr(3)))

@@ -24,6 +24,7 @@ struct SpriteOffsets {
 	visible int
 	flip    int
 	scale   int
+	fixed   int
 	stride  int
 }
 
@@ -38,6 +39,7 @@ fn (g &Game) sprite_offsets() SpriteOffsets {
 		visible: r.offsets[r.field_index('visible')]
 		flip:    r.offsets[r.field_index('flip')]
 		scale:   r.offsets[r.field_index('scale')]
+		fixed:   r.offsets[r.field_index('fixed')]
 		stride:  r.size
 	}
 }
@@ -70,6 +72,12 @@ fn (g &Game) emit_build_list(mut m jagkit.M68k) {
 	m.label('rt.build_list')
 	m.move(.l, lbl('rt.back'), a6)
 	m.lea(at(32, a6), a1)
+	if g.has_tileset {
+		m.bsr('rt.tile_object')
+		// While a room loads the sprites wait too.
+		m.tst(.b, lbl('loading'))
+		m.b(.ne, 'rt.jump_to_text')
+	}
 	m.moveq(0, d5)
 	m.label('rt.layer')
 	m.lea(lbl('sprites'), a0)
@@ -94,12 +102,13 @@ fn (g &Game) emit_build_list(mut m jagkit.M68k) {
 	m.b(.ne, 'rt.layer')
 
 	// The jump to the text, and the text.
+	m.label('rt.jump_to_text')
 	m.move(.l, lbl('rt.back_template'), a2)
 	m.move(.l, at(32, a2), ind(a1))
 	m.move(.l, at(36, a2), at(4, a1))
 	if g.texts.len > 0 {
 		m.lea(at(40, a2), a2)
-		m.lea(at(32 + 32 * (g.config.sprites + 1), a6), a3)
+		m.lea(at(32 + 32 * g.slots(), a6), a3)
 		m.move(.w, imm(g.texts.len * 8 - 1), d0)
 		m.label('rt.copy_text')
 		m.move(.l, jagkit.inc(a2), jagkit.inc(a3))
@@ -160,6 +169,7 @@ fn (g &Game) emit_sprite_object(mut m jagkit.M68k, off SpriteOffsets) {
 	// in the display window goes to a3 and the width to a4.
 	m.move(.w, at(off.x, a0), d0)
 	m.ext(.l, d0)
+	g.emit_camera_offset(mut m, off, 'camera_x', 'rt.x_fixed', d0)
 	m.cmp(.l, imm(logical_width), d0)
 	m.b(.ge, 'rt.skip')
 	m.move(.l, d0, d6)
@@ -172,6 +182,7 @@ fn (g &Game) emit_sprite_object(mut m jagkit.M68k, off SpriteOffsets) {
 	// Down: the source lines to show are in d5, the line to start on in d7.
 	m.move(.w, at(off.y, a0), d7)
 	m.ext(.l, d7)
+	g.emit_camera_offset(mut m, off, 'camera_y', 'rt.y_fixed', d7)
 	m.cmp(.l, imm(logical_height), d7)
 	m.b(.ge, 'rt.skip')
 	m.moveq(0, d5)
@@ -271,6 +282,21 @@ fn (g &Game) emit_sprite_object(mut m jagkit.M68k, off SpriteOffsets) {
 	m.label('rt.skip')
 	m.pop([d5, d6])
 	m.rts()
+}
+
+// emit_camera_offset subtracts the camera from a sprite's coordinate in
+// `d`, unless the sprite is fixed to the screen. Only a game with a tile
+// layer has a camera. It changes d6.
+fn (g &Game) emit_camera_offset(mut m jagkit.M68k, off SpriteOffsets, camera string, skip string, d jagkit.Ea) {
+	if !g.has_tileset {
+		return
+	}
+	m.tst(.b, at(off.fixed, a0))
+	m.b(.ne, skip)
+	m.move(.w, lbl(camera), d6)
+	m.ext(.l, d6)
+	m.sub(.l, d6, d)
+	m.label(skip)
 }
 
 // emit_art_table writes the table the builder reads, the pictures' pixels

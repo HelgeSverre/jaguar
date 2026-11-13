@@ -53,11 +53,12 @@ enum TStmtKind {
 
 // TStmt is a typed statement.
 struct TStmt {
-	kind   TStmtKind
-	place  TPlace
-	exprs  []TExpr   // set: value; branch: conditions; loop: condition; eval: call; ret: value
-	bodies [][]TStmt // branch: one per condition, then the else (possibly empty); loop: body, step
-	asm    int
+	kind    TStmtKind
+	place   TPlace
+	exprs   []TExpr   // set: value; branch: conditions; loop: condition; eval: call; ret: value
+	bodies  [][]TStmt // branch: one per condition, then the else (possibly empty); loop: body, step
+	asm     int
+	returns bool
 }
 
 // LFunc is a checked function.

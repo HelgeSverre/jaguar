@@ -194,6 +194,9 @@ fn (mut it Interpreter) stmt(s &TStmt) !Flow {
 				return error('the interpreter cannot run an asm statement')
 			}
 			run(mut it)!
+			if s.returns {
+				return .returned
+			}
 		}
 	}
 

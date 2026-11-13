@@ -150,6 +150,9 @@ fn (mut g Gen) stmt(s &TStmt) {
 		.asm {
 			emit := g.low.asms[s.asm]
 			emit(mut g.m)
+			if s.returns {
+				g.m.bra(g.exit)
+			}
 		}
 	}
 }
