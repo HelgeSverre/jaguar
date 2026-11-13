@@ -176,6 +176,9 @@ fn constant(t Type, v Val) !i64 {
 		int {
 			return int_constant(t, v)
 		}
+		u16 {
+			return int_constant(t, v)
+		}
 		i64 {
 			return int_constant(t, v)
 		}

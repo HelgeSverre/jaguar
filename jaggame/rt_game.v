@@ -19,8 +19,10 @@ const a4 = jagkit.a4
 const a5 = jagkit.a5
 const a6 = jagkit.a6
 
-// logical_width and logical_height are the size of the screen a game draws on.
+// logical_width is the width of the screen a game draws on, in pixels.
 pub const logical_width = 320
+
+// logical_height is the height of the screen a game draws on, in lines.
 pub const logical_height = 240
 
 // Where the runtime keeps things in main memory, above the image.

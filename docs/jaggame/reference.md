@@ -30,7 +30,7 @@ Every public name in `jaggame`, with the comment from its source. This file is g
 | `enum Op` | Op is an operation of an expression. |
 | `fn (o Op) name() string` | name is the operation as it is written in the builder. |
 | `struct Expr` | Expr is a value of the language: a literal, a variable, an element, a field, or an operation on other expressions. A variable handle is an Expr too, so it can be used wherever a value can, and as a destination. Expressions are only descriptions; their types are checked when the program is built. |
-| `type Val = Expr \| int \| i64 \| f64 \| bool` | Val is what builder methods take: an expression or a V literal. An `int` (or an `i64`, for large `u32` values) takes the type of the other side, an `f64` is a `fix`. |
+| `type Val = Expr \| int \| i64 \| f64 \| bool \| u16` | Val is what builder methods take: an expression or a V literal. An `int` (or a `u16`, which is what `cry` returns, or an `i64`, for large `u32` values) takes the type of the other side, an `f64` is a `fix`. |
 | `fn lit(v Val) Expr` | lit turns a literal into an expression. Its type comes from where it is used; `lit(5).as_(.u8)` is a `u8` constant. |
 | `fn (a Expr) add(b Val) Expr` | add is a + b. |
 | `fn (a Expr) sub(b Val) Expr` | sub is a - b. |
@@ -173,6 +173,7 @@ Every public name in `jaggame`, with the comment from its source. This file is g
 | `fn (mut it Interpreter) run(name string, args ...i64) !i64` | run calls a function by name with raw argument values and returns its raw result (0 for a function that returns nothing). |
 | `fn (it &Interpreter) value(name string) !i64` | value is the raw value of a global variable. |
 | `fn (it &Interpreter) element(name string, index int) !i64` | element is the raw value of an element of a global array or table. |
+| `fn (mut it Interpreter) set_value(name string, raw i64) !` | set_value changes a global variable, as a test feeds the program an input (the pad, say). The raw value is cut to the variable's type. |
 | `fn (it &Interpreter) field(name string, index int, field string) !i64` | field is the raw value of a field of an element of an array of records. |
 
 ## The code generator
@@ -197,6 +198,98 @@ Every public name in `jaggame`, with the comment from its source. This file is g
 | `fn (img &Image) element(ram []u8, name string, index int) !i64` | element is the raw value of an element of a global array or table. |
 | `fn (img &Image) field(ram []u8, name string, index int, field string) !i64` | field is the raw value of a field of an element of an array of records. |
 
+## The runtime: games
+
+`jaggame/rt_game.v`
+
+| Declaration | |
+|---|---|
+| `const logical_width = 320` | logical_width is the width of the screen a game draws on, in pixels. |
+| `const logical_height = 240` | logical_height is the height of the screen a game draws on, in lines. |
+| `struct Config` | Config is what a game decides before it declares anything. |
+| `enum Region` | Region is the television standard a game runs on. |
+| `struct Game` | Game is a Program with a runtime around it. Declare the game's own variables and functions on `p`; the runtime's are listed on the struct. |
+| `fn new_game(config Config) &Game` | new_game starts a game with the runtime's variables declared. |
+| `fn cry(r int, g int, b int) u16` | cry is the CRY colour nearest to an RGB colour, each part 0..255, for art, palettes, text and the background. |
+| `fn (mut g Game) define_init() &Code` | define_init returns the block that collects the statements of the function that runs once, before the first frame. |
+| `fn (mut g Game) define_update() &Code` | define_update returns the block that collects the statements of the function that runs once every frame, in the vertical interrupt. |
+| `fn (g &Game) seconds(s Val) Expr` | seconds is a number of frames: the right one for the television standard the game finds itself on, decided when it starts. Use it for durations: `seconds(1.5)` is 90 on NTSC and 75 on PAL. The result is a `u16`. |
+| `fn (g &Game) whole_seconds(frames Val) Expr` | whole_seconds is a whole number of frames as seconds, rounded down, for showing elapsed time. |
+
+## The runtime: sprites and animations
+
+`jaggame/rt_sprites.v`
+
+| Declaration | |
+|---|---|
+| `struct Art` | Art is a picture the sprites can show. |
+| `fn (mut g Game) art_cry(name string, width int, height int, frames int, pixels []u16) Art` | art_cry declares a picture of 16-bit CRY pixels (see `cry`). The pixels are `frames` pictures of `width` by `height`, one after the other, a line after a line. The width must be a multiple of 4, so that a line fills whole 64-bit phrases. The pixel value 0 is transparent. |
+| `fn (mut g Game) art_pal(name string, width int, height int, frames int, pixels []u8) Art` | art_pal declares a picture of 8-bit pixels that index the game's palette (see `palette`). The width must be a multiple of 8. The pixel value 0 is transparent. |
+| `fn (mut g Game) palette(colours []u16)` | palette sets the colours that 8-bit pictures use: entry n is the colour of pixel value n. At most 256 minus two for every text layer are allowed (the text keeps the top of the colour table). |
+| `struct Sprite` | Sprite is a handle on one element of the sprite pool. Its fields are expressions, usable as values and as destinations. |
+| `fn (mut g Game) sprite(index int) Sprite` | sprite is element `index` of the pool. A number that is not in the pool is a build error. |
+| `fn (g &Game) sprite_at(index Val) Sprite` | sprite_at is the element of the pool that an expression selects: use it in a loop, `game.sprite_at(i)`. The interpreter stops on an index outside the pool; the machine does not check. |
+| `fn (s Sprite) put(mut c Code, art string, x Val, y Val, layer int)` | put shows a sprite: it sets the picture, the position and the layer, frame 0, full size, and makes it visible. |
+| `fn (s Sprite) hide(mut c Code)` | hide stops drawing a sprite. |
+| `struct Step` | Step is one step of an animation: which frame to show, and for how long. |
+| `fn (mut g Game) sequence(name string, steps []Step)` | sequence declares a named animation: the frames to show one after the other, each for its time. A time is in seconds, so that the animation runs at the same speed on both television standards; it is rounded to whole frames, at least 1. |
+| `fn (s Sprite) play(mut c Code, name string, repeat bool)` | play starts a named animation on the sprite: it shows the first step now and the runtime moves on every frame. With `repeat` it starts again after the last step; without, the sprite stays on the last frame and `playing` becomes false. |
+| `fn (s Sprite) stop(mut c Code)` | stop ends the animation of a sprite; it keeps the frame it shows. |
+
+## The runtime: text
+
+`jaggame/rt_text.v`
+
+| Declaration | |
+|---|---|
+| `struct TextConfig` | TextConfig places a text layer. |
+| `struct TextLayer` | TextLayer is a handle on a text layer. |
+| `fn (mut g Game) text_layer(name string, config TextConfig) TextLayer` | text_layer declares a layer of text. Layers are drawn over all sprites, in the order they are declared. |
+| `fn (t TextLayer) print(mut c Code, col Val, row Val, text string)` | print writes a string constant at a column and a row of the layer. The font has capitals, digits and punctuation; anything else, and a string that does not fit the row, is a build error. Columns and rows may be expressions; the machine does not check those. |
+| `fn (t TextLayer) number(mut c Code, col Val, row Val, value Val, width int)` | number writes an unsigned number at a column and a row, right-aligned in `width` cells (1 to 10). A number with more digits shows its low digits. The value may be any unsigned integer expression. |
+| `fn (t TextLayer) clear(mut c Code)` | clear blanks the whole layer. |
+
+## The runtime: the pad
+
+`jaggame/rt_pad.v`
+
+| Declaration | |
+|---|---|
+| `enum Button` | Button is one button of the Jaguar's controller. The order is the order of the bits in `pad`: the matrix of four rows of four lines, then the fire buttons, then Pause. |
+| `fn button_mask(b Button) u32` | button_mask is the bit (or bits) of `pad` and `pad_pressed` that belong to a button. A test that feeds the interpreter builds the pad it wants from these. |
+| `fn (g &Game) held(b Button) Expr` | held is true while a button is down, as a `bool` expression. |
+| `fn (g &Game) pressed(b Button) Expr` | pressed is true for the one frame in which a button went down. |
+
+## The runtime: timers and the beep
+
+`jaggame/rt_time.v`
+
+| Declaration | |
+|---|---|
+| `struct Timer` | Timer is a handle on a timer. |
+| `fn (mut g Game) timer(name string) Timer` | timer declares a timer, stopped. |
+| `fn (t Timer) start(mut c Code, frames Val)` | start counts `frames` down to 0 (use `seconds` for the number). When it gets there the timer stops and `fired` is true for one frame. Starting a running timer starts it over. |
+| `fn (t Timer) stopwatch(mut c Code)` | stopwatch counts the frames since now in `elapsed`, until it is stopped. |
+| `fn (t Timer) stop(mut c Code)` | stop stops the timer; `left` and `elapsed` keep their values. |
+| `fn (mut g Game) beep(mut c Code, note Val, volume Val)` | beep plays a short note on the sound chip's sawtooth voice and lets it fade out in about 20 frames. `note` is a MIDI note number 0..127 (69 is the A at 440 Hz) and `volume` a few thousand.  This is provisional: proper sound, with several voices, effects and music, comes in a later slice, and this call will then change or go. |
+
+## The runtime: building a game
+
+`jaggame/rt_build.v`
+
+| Declaration | |
+|---|---|
+| `fn (mut g Game) build() !Image` | build checks the game, compiles it with the runtime and returns the image. The game can be built once. Every mistake in the description of the game (and every type error in its code) is reported together. |
+
+## The runtime: running a game in the interpreter
+
+`jaggame/rt_interp.v`
+
+| Declaration | |
+|---|---|
+| `fn (mut g Game) interpreter(region Region) !&Interpreter` | interpreter checks the game and starts it in the interpreter, as if on a machine of the given standard: the runtime has set up its variables and the game's `init` has run. Add all the game's code before calling it; after it, the game can no longer be built. |
+| `fn (g &Game) step(mut it Interpreter, held u32) !` | step runs one frame of the game in the interpreter with a pad: the buttons held this frame, built from `button_mask`. |
+
 ## Running images in the emulator (module jaggame.emulated)
 
 `jaggame/emulated/emulated.v`
@@ -207,3 +300,29 @@ Every public name in `jaggame`, with the comment from its source. This file is g
 | `fn new() Runner` | new makes a runner with an NTSC machine. |
 | `fn (mut r Runner) run(image []u8, done u32, max_frames int) !int` | run boots an image and runs frames until the byte at `done` is not 0. It returns the number of frames that took, or an error after `max_frames`. |
 | `fn (r &Runner) ram() []u8` | ram is the machine's main memory. |
+
+## Driving a machine in a test (module jaggame.emulated)
+
+`jaggame/emulated/player.v`
+
+| Declaration | |
+|---|---|
+| `struct Player` | Player is an emulated machine that a test drives: it boots an image on either television standard, runs frames, holds buttons and looks at the memory, the picture and the sound. |
+| `fn boot(image []u8, pal bool) !Player` | boot loads an image into a fresh machine of a television standard. |
+| `fn (mut p Player) frames(count int)` | frames runs a number of frames. A frame of the emulator ends in the middle of the frame interrupt of a game that does real work, so after each one the machine runs on until the processor is idle again (`settle`): a test then sees the state the interrupt left behind. |
+| `fn (mut p Player) settle()` | settle runs the machine on, for at most a frame, until the 68000 has stopped to wait for the next interrupt. |
+| `fn (mut p Player) press(button jerry.Button)` | press holds a button of the first pad until `release`. |
+| `fn (mut p Player) release(button jerry.Button)` | release lets go of a button of the first pad. |
+| `fn (mut p Player) hold(button jerry.Button, count int)` | hold holds a button for a number of frames, lets go and runs one more. |
+| `fn (mut p Player) busy_cycles(count int) int` | busy_cycles runs a number of frames and returns how many cycles of the 68000 a frame used on average: the time it was not stopped, counted in steps of 100 cycles. |
+| `fn (p &Player) peek8(address u32) int` | peek8 reads a byte of main memory. |
+| `fn (p &Player) peek16(address u32) int` | peek16 reads a big-endian word. |
+| `fn (p &Player) peek32(address u32) u32` | peek32 reads a big-endian long. |
+| `struct Picture` | Picture is a frame of the emulator: 0x00RRGGBB pixels. |
+| `fn (p &Player) picture() Picture` | picture is the last completed frame. |
+| `fn (pic &Picture) at(x int, y int) u32` | at is the pixel at a column and a row, or 0 outside the picture. |
+| `struct Box` | Box is the smallest rectangle around some pixels, and how many there are. |
+| `fn (pic &Picture) bounds(x0 int, y0 int, x1 int, y1 int, wanted fn (pixel u32) bool) Box` | bounds finds the pixels of a picture that `wanted` accepts, inside a rectangle (right and bottom are not included). |
+| `fn (mut p Player) loudest() int` | loudest drains the sound made so far and returns the peak sample. |
+| `struct Object` | Object is one object of a display list as the object processor reads it. |
+| `fn (p &Player) list_objects(base u32) []Object` | list_objects follows a display list from its first slot, after the 32-byte header at `base`, through its links and branches, and returns the bitmap objects it finds, as they stand in memory now. |

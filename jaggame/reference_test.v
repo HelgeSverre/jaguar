@@ -19,7 +19,15 @@ const reference_files = {
 	'interp.v':            'The interpreter'
 	'codegen.v':           'The code generator'
 	'image.v':             'Plain images'
+	'rt_game.v':           'The runtime: games'
+	'rt_sprites.v':        'The runtime: sprites and animations'
+	'rt_text.v':           'The runtime: text'
+	'rt_pad.v':            'The runtime: the pad'
+	'rt_time.v':           'The runtime: timers and the beep'
+	'rt_build.v':          'The runtime: building a game'
+	'rt_interp.v':         'The runtime: running a game in the interpreter'
 	'emulated/emulated.v': 'Running images in the emulator (module jaggame.emulated)'
+	'emulated/player.v':   'Driving a machine in a test (module jaggame.emulated)'
 }
 
 struct Entry {
