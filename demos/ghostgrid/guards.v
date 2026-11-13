@@ -20,7 +20,7 @@ module main
 import jaggame
 
 const guard_count = 4
-const sight_range = 80 // pixels a cone reaches
+const sight_range = 64 // pixels a cone reaches: four tiles
 const sight_half = 24 // angle units either side of the facing: 34 degrees
 const alert_after = 24 // frames in a cone before a suspicious guard is sure
 const lose_after = 50 // frames without sight before a chasing guard searches
