@@ -31,6 +31,7 @@ common options:
   --peek <addr[:len]>        run: print memory at the end (repeatable)
   --list <addr[:count]>      run: disassemble 68000 code at the end (repeatable)
   --press <btn@frame[+n]>    run: hold a pad button for n frames (repeatable)
+  --press-file <file>        run: presses from a file, one or more a line, # comments
   --eeprom-in <file>         run: load a 128-byte EEPROM image before the first frame
   --eeprom-out <file>        run: write the 128-byte EEPROM image after the last frame
   --watch-io <lo:hi>         run: log writes to TOM/JERRY addresses in lo..hi
@@ -98,7 +99,8 @@ fn run_command(command string, args []string) ! {
 		'print processor, video and display-list state at the end')
 	peeks := parser.string_multi('peek', 0, 'memory range to print')
 	listings := parser.string_multi('list', 0, '68000 code range to disassemble')
-	presses := parser.string_multi('press', 0, 'hold a pad button: button@frame[+frames]')
+	press_texts := parser.string_multi('press', 0, 'hold a pad button: button@frame[+frames]')
+	press_file := parser.string('press-file', 0, '', 'presses from a file')
 	eeprom_in := parser.string('eeprom-in', 0, '', 'load a 128-byte EEPROM image before running')
 	eeprom_out := parser.string('eeprom-out', 0, '', 'write the EEPROM image after running')
 	io_range := parser.string('watch-io', 0, '', 'log register writes in lo:hi')
@@ -115,6 +117,10 @@ fn run_command(command string, args []string) ! {
 	if free.len != 1 {
 		return error('${command}: expected exactly one path\n\n${usage}')
 	}
+	mut presses := press_texts.map(parse_press(it)!)
+	if press_file != '' {
+		presses << read_presses(press_file)!
+	}
 	match command {
 		'inspect' {
 			inspect(free[0], options, as_json)!
@@ -130,7 +136,7 @@ fn run_command(command string, args []string) ! {
 				wav:        wav
 				video:      video
 				video_from: video_from
-				presses:    presses.map(parse_press(it)!)
+				presses:    presses
 				eeprom_in:  eeprom_in
 				eeprom_out: eeprom_out
 			})!
@@ -157,7 +163,7 @@ fn run_command(command string, args []string) ! {
 				}
 			}
 			trace(free[0], options, TraceOptions{
-				presses:    presses.map(parse_press(it)!)
+				presses:    presses
 				processor:  parse_processor(processor)!
 				frames:     frames
 				tail:       tail
