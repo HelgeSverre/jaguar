@@ -72,7 +72,7 @@ function finish() {
 }
 
 function buttonWall() {
-  var b = ["v.png", "sdl.png", "m68k.png", "tom.png", "jerry.png", "term.gif", "just.png", "viewed.gif", "mac.png", "notepad.png", "mit.png", "math.gif"];
+  var b = ["v.png", "sdl.png", "m68k.png", "tom.png", "jerry.png", "term.gif", "just.png", "viewed.gif", "mac.png", "clawd.gif", "mit.png", "math.gif"];
   var h = "";
   for (var i = 0; i < b.length; i++) {
     h += '<img class="btn88" src="img/btn/' + b[i] + '" width="88" height="31" alt="">';
@@ -112,19 +112,68 @@ function jukebox() {
   return h + "</table>";
 }
 
+// the player bar: one row fixed to the bottom of the screen while music is loaded
+function playerBar() {
+  var bar = document.getElementById("playerbar");
+  if (bar) return bar;
+  bar = document.createElement("div");
+  bar.id = "playerbar";
+  bar.hidden = true;
+  bar.innerHTML =
+    '<button id="pb-prev" title="previous track">|&#9664;</button>' +
+    '<button id="pb-play" title="play / pause">&#10074;&#10074;</button>' +
+    '<button id="pb-next" title="next track">&#9654;|</button>' +
+    '<div class="pb-lcd pb-title"><span id="pb-name"></span></div>' +
+    '<input id="pb-seek" type="range" min="0" max="1000" value="0" title="seek">' +
+    '<div class="pb-lcd pb-time" id="pb-time">0:00/0:00</div>' +
+    '<input id="pb-vol" type="range" min="0" max="100" value="60" title="volume">' +
+    '<button id="pb-stop" title="stop and close">X</button>';
+  document.body.appendChild(bar);
+  var seeking = false, seek = document.getElementById("pb-seek");
+  document.getElementById("pb-play").onclick = function () { if (!bgm) return; if (bgm.paused) bgm.play(); else bgm.pause(); };
+  document.getElementById("pb-prev").onclick = function () { playTrack((bgmIndex + TRACKS.length - 1) % TRACKS.length); };
+  document.getElementById("pb-next").onclick = function () { playTrack((bgmIndex + 1) % TRACKS.length); };
+  document.getElementById("pb-stop").onclick = stopTrack;
+  seek.oninput = function () { seeking = true; if (bgm && bgm.duration) setTime(seek.value / 1000 * bgm.duration, bgm.duration); };
+  seek.onchange = function () { if (bgm && bgm.duration) bgm.currentTime = seek.value / 1000 * bgm.duration; seeking = false; };
+  document.getElementById("pb-vol").oninput = function () { if (bgm) bgm.volume = this.value / 100; };
+  bar._tick = function () {
+    if (!bgm) return;
+    var d = bgm.duration || 0;
+    if (!seeking && d) seek.value = Math.round(bgm.currentTime / d * 1000);
+    if (!seeking) setTime(bgm.currentTime, d);
+    document.getElementById("pb-play").innerHTML = bgm.paused ? "&#9654;" : "&#10074;&#10074;";
+  };
+  return bar;
+}
+
+function clock(sec) {
+  sec = Math.floor(sec || 0);
+  return Math.floor(sec / 60) + ":" + (sec % 60 < 10 ? "0" : "") + (sec % 60);
+}
+function setTime(cur, dur) { document.getElementById("pb-time").textContent = clock(cur) + "/" + clock(dur); }
+
 function playTrack(i) {
-  stopTrack();
+  var bar = playerBar();
+  if (bgm) { bgm.pause(); bgm = null; }
   bgm = new Audio(TRACKS[i][0]);
   bgm.loop = true;
-  bgm.volume = 0.6;
+  bgm.volume = document.getElementById("pb-vol").value / 100;
+  ["timeupdate", "play", "pause", "loadedmetadata"].forEach(function (ev) { bgm.addEventListener(ev, bar._tick); });
   bgm.play();
   bgmIndex = i;
+  document.getElementById("pb-name").textContent = "♫ " + TRACKS[i][1] + " — " + TRACKS[i][2] + " — rendered by the emulated DSP ♫";
+  bar.hidden = false;
+  document.body.classList.add("playing");
   var np = document.getElementById("nowplaying");
   if (np) np.innerHTML = '<span class="rainbow">NOW PLAYING</span><br>' + TRACKS[i][1];
 }
 
 function stopTrack() {
   if (bgm) { bgm.pause(); bgm = null; }
+  var bar = document.getElementById("playerbar");
+  if (bar) bar.hidden = true;
+  document.body.classList.remove("playing");
   var np = document.getElementById("nowplaying");
   if (np) np.innerHTML = "rendered by the<br>emulated DSP";
 }
