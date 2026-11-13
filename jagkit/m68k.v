@@ -429,6 +429,14 @@ fn (mut m M68k) writable(name string, e Ea) {
 	}
 }
 
+// control makes sure an operand names a place in memory: what `lea`, `jmp`
+// and `jsr` take.
+fn (mut m M68k) control(name string, e Ea) {
+	if e.kind !in [.indirect, .disp, .index, .absolute, .label, .pc_label] {
+		m.problems << '${name}: the operand must be an address in memory'
+	}
+}
+
 fn size_bits(size Size) u16 {
 	return u16(size) << 6
 }
@@ -438,8 +446,8 @@ fn size_bits(size Size) u16 {
 // move copies src to dst; an address-register destination is `movea`.
 pub fn (mut m M68k) move(size Size, src Ea, dst Ea) {
 	m.writable('move', dst)
-	if dst.kind == .address && size == .b {
-		m.problems << 'move.b to an address register'
+	if size == .b && (dst.kind == .address || src.kind == .address) {
+		m.problems << 'move.b: an address register has no byte'
 	}
 	bits := match size {
 		.b { u16(0x1000) }
@@ -463,6 +471,7 @@ pub fn (mut m M68k) moveq(value int, dst Ea) {
 
 // lea loads the address of src into an address register.
 pub fn (mut m M68k) lea(src Ea, dst Ea) {
+	m.control('lea', src)
 	m.word(0x41c0 | (m.address_register('lea', dst) << 9) | src.field())
 	m.extension(src, .l)
 }
@@ -505,6 +514,9 @@ fn movem_bit(r Ea) u32 {
 
 fn (mut m M68k) unary(name string, opcode u16, size Size, dst Ea) {
 	m.writable(name, dst)
+	if dst.kind == .address {
+		m.problems << '${name}: not on an address register'
+	}
 	m.word(opcode | size_bits(size) | dst.field())
 	m.extension(dst, size)
 }
@@ -578,8 +590,8 @@ fn (mut m M68k) binary(f Family, size Size, src Ea, dst Ea) {
 		return
 	}
 	if dst.kind == .data && f.from_ea {
-		if src.kind == .address && size == .b {
-			m.problems << '${f.name}.b from an address register'
+		if src.kind == .address && (size == .b || !f.address) {
+			m.problems << '${f.name}: not from an address register'
 		}
 		m.word(f.plain | (u16(dst.reg) << 9) | size_bits(size) | src.field())
 		m.extension(src, size)
@@ -624,6 +636,9 @@ pub fn (mut m M68k) eor(size Size, src Ea, dst Ea) {
 }
 
 fn (mut m M68k) multiply(name string, opcode u16, src Ea, dst Ea) {
+	if src.kind == .address {
+		m.problems << '${name}: not from an address register'
+	}
 	m.word(opcode | (m.data_register(name, dst) << 9) | src.field())
 	m.extension(src, .w)
 }
@@ -711,6 +726,9 @@ fn (mut m M68k) bit(name string, opcode u16, n int, dst Ea) {
 	if n < 0 || n > limit {
 		m.problems << '${name} #${n}: the bit must be 0..${limit}'
 	}
+	if dst.kind in [.address, .immediate, .label_ptr] || (dst.kind == .pc_label && name != 'btst') {
+		m.problems << '${name}: the operand must be a data register or memory'
+	}
 	m.word(opcode | dst.field())
 	m.word(n)
 	m.extension(dst, .b)
@@ -760,12 +778,14 @@ pub fn (mut m M68k) dbra(counter Ea, name string) {
 
 // jmp continues at target.
 pub fn (mut m M68k) jmp(target Ea) {
+	m.control('jmp', target)
 	m.word(0x4ec0 | target.field())
 	m.extension(target, .l)
 }
 
 // jsr calls the subroutine at target.
 pub fn (mut m M68k) jsr(target Ea) {
+	m.control('jsr', target)
 	m.word(0x4e80 | target.field())
 	m.extension(target, .l)
 }
