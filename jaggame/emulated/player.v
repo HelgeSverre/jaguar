@@ -81,6 +81,19 @@ pub fn (mut p Player) busy_cycles(count int) int {
 	return int(busy / 2 / u64(count))
 }
 
+// settle_cycles runs the machine on until the 68000 has stopped, as `settle`
+// does, and returns the cycles it used doing so: the tail of a frame's
+// interrupt that the emulator's frame ended in the middle of.
+pub fn (mut p Player) settle_cycles() int {
+	mut busy := u64(0)
+	limit := p.m.tick + p.m.config.region.master_clock_hz() / 60
+	for !p.m.cpu.stopped && p.m.tick < limit {
+		busy += 200
+		p.m.advance(p.m.tick + 200, false)
+	}
+	return int(busy / 2)
+}
+
 // peek8 reads a byte of main memory.
 pub fn (p &Player) peek8(address u32) int {
 	return int(p.m.ram[address])

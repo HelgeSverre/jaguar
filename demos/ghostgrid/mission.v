@@ -21,33 +21,34 @@ mut:
 	pcell    jaggame.Expr // the tile the figure is on: row * columns + column
 	flash    jaggame.Expr // frames the word KNOCK stays on the HUD
 	// the mission
-	phase     jaggame.Expr // 0 playing, 1 done, 2 caught
-	clock     jaggame.Expr // frames of play
-	secs      jaggame.Expr // whole seconds of play
-	sub       jaggame.Expr // the frames since the last whole second
-	secs_on   jaggame.Expr // the seconds the HUD shows
-	seen_on   jaggame.Expr // the times seen the HUD shows
-	seen      jaggame.Expr // times a guard noticed the figure
-	level     jaggame.Expr // 0 calm, 1 someone is suspicious or searching, 2 someone is chasing
-	shown     jaggame.Expr // the level on the status line, 3 when the mission is over
-	setup_due jaggame.Expr // 0, or the steps of the start that are left: the figure, then each guard in a frame of its own
+	phase    jaggame.Expr // 0 playing, 1 done, 2 caught
+	clock    jaggame.Expr // frames of play
+	secs     jaggame.Expr // whole seconds of play
+	sub      jaggame.Expr // the frames since the last whole second
+	secs_on  jaggame.Expr // the seconds the HUD shows
+	seen_on  jaggame.Expr // the times seen the HUD shows
+	seen     jaggame.Expr // times a guard noticed the figure
+	level    jaggame.Expr // 0 calm, 1 someone is suspicious or searching, 2 someone is chasing
+	shown    jaggame.Expr // the level on the status line, 3 when the mission is over
+	paused   jaggame.Expr // the pause menu is up: the mission stands still
+	stride   jaggame.Expr // frames since the last footstep
+	best_up  jaggame.Expr // the mission select shows the saved best
+	new_best jaggame.Expr // this mission was the best so far
 	// what the cones light
-	lit   jaggame.Expr // a byte for each tile: bit g is set if guard g's cone is on it
-	old_x jaggame.Expr // the tiles of each guard's cone: cone_slots for each
-	old_y jaggame.Expr
+	lit      jaggame.Expr // a byte for each tile: bit g is set if guard g's cone is on it
+	old_cell jaggame.Expr // the cells of each guard's cone: cone_slots for each
 	// tables
-	wp_x     jaggame.Expr // the tile of each waypoint
-	wp_y     jaggame.Expr
-	flow     jaggame.Expr // fields of directions, a room of them for each waypoint
-	view_at  jaggame.Expr // where the cone of a tile and a facing starts in the pool of cells
-	view_len jaggame.Expr // how many cells it has
-	pool_x   jaggame.Expr // the cells of all the cones: columns and rows
-	pool_y   jaggame.Expr
-	dir_x    jaggame.Expr
-	dir_y    jaggame.Expr
-	dim_of   jaggame.Expr // the tile that a lit tile goes back to
-	glow_of  jaggame.Expr // the tile that shows a tile under a cone
-	art_row  jaggame.Expr
+	wp_x      jaggame.Expr // the tile of each waypoint
+	wp_y      jaggame.Expr
+	flow      jaggame.Expr // fields of directions, a room of them for each waypoint
+	view_at   jaggame.Expr // where the cone of a tile and a facing starts in the pool of cells
+	view_len  jaggame.Expr // how many cells it has
+	pool_cell jaggame.Expr // the cells of all the cones, as row * columns + column
+	dir_x     jaggame.Expr
+	dir_y     jaggame.Expr
+	dim_of    jaggame.Expr // the tile that a lit tile goes back to
+	glow_of   jaggame.Expr // the tile that shows a tile under a cone
+	art_row   jaggame.Expr
 	// the guards
 	guards &jaggame.Actors
 	ai     &jaggame.Machine
@@ -55,12 +56,17 @@ mut:
 	status jaggame.TextLayer
 	msg    jaggame.TextLayer
 	player jaggame.Sprite
+	scenes &jaggame.Scenes
+	save   jaggame.Save
+	picker jaggame.Menu // the mission select
+	pause  jaggame.Menu // the pause menu
+	after  jaggame.Menu // the menu on the result screen
 	watch  jaggame.Func // the guard sees the figure, a bool
 	chase  jaggame.Func // move towards a point; true when there
 	follow jaggame.Func // one step along the route; true when at the waypoint
 	around jaggame.Func // walk to the spot and look around; true when done
 	moved  jaggame.Func // a guard has moved or turned: its cone may be out of date
-	cone   jaggame.Func // work out a guard's cone and light it
+	cone   jaggame.Func // work out a guard's cone and light its new cells
 	setup  jaggame.Func // put everything at the start
 }
 
@@ -95,12 +101,17 @@ fn describe() &jaggame.Game {
 	}
 	depot_room := game.room('depot', depot)
 	// guide:end
+	game.backdrop(jaggame.Backdrop{
+		colours: [jaggame.Rgb{30, 110, 255}, jaggame.Rgb{150, 50, 255},
+			jaggame.Rgb{20, 210, 190}]
+	})
 	mut m := new_mission(mut game, depot_room)
 	m.define_player_animations()
+	m.define_sounds()
 	m.define_guard_functions()
 	m.define_states()
-	m.define_init()
-	m.define_update()
+	m.define_setup()
+	m.define_scenes()
 	return game
 }
 
@@ -115,31 +126,42 @@ fn new_mission(mut game jaggame.Game, room jaggame.Room) &Mission {
 	// guide:gg_views
 	mut view_at := []int{}
 	mut view_len := []int{}
-	mut pool_x := []int{}
-	mut pool_y := []int{}
+	mut pool_cell := []int{}
 	for y in 0 .. room_rows {
 		for x in 0 .. room_cols {
 			for f in 0 .. 4 {
-				view_at << pool_x.len
+				view_at << pool_cell.len
 				if passable(rows[y][x]) {
 					for cell in game.view_cells(room, x, y, f * 64, sight_range, sight_half, false) {
-						pool_x << cell.x
-						pool_y << cell.y
+						pool_cell << cell.y * room_cols + cell.x
 					}
 				}
-				view_len << pool_x.len - view_at.last()
+				view_len << pool_cell.len - view_at.last()
 				assert view_len.last() <= cone_slots
 			}
 		}
 	}
 	// guide:end
-	assert pool_x.len < 65536
+	assert pool_cell.len < 65536
 	mut fields := []int{}
 	for f in r.fields {
 		fields << f
 	}
 	// guide:gg_actors
 	guards := game.actors('guards', guard_fields(), guard_count, 1)
+	// guide:end
+	// guide:gg_screens
+	// The text that is not the status line shares one layer: the title, the
+	// mission select, the pause menu and the result.
+	msg := game.text_layer('msg', jaggame.TextConfig{
+		columns: 24
+		rows:    12
+		x:       64
+		y:       48
+	})
+	mut scenes := game.scenes()
+	mut items := mission_titles.clone()
+	items << 'BACK'
 	// guide:end
 	mut m := &Mission{
 		game:      game
@@ -162,17 +184,18 @@ fn new_mission(mut game jaggame.Game, room jaggame.Room) &Mission {
 		seen:      p.u16('seen')
 		level:     p.u8('level')
 		shown:     p.u8('shown', 9)
-		setup_due: p.u8('setup_due')
+		paused:    p.bool('paused')
+		stride:    p.u8('stride')
+		best_up:   p.bool('best_up')
+		new_best:  p.bool('new_best')
 		lit:       p.array_u8('lit', room_cols * room_rows)
-		old_x:     p.array_u8('cone_old_x', guard_count * cone_slots)
-		old_y:     p.array_u8('cone_old_y', guard_count * cone_slots)
+		old_cell:  p.array_u16('cone_old_cell', guard_count * cone_slots)
 		wp_x:      p.table_u8('wp_x', r.tx)
 		wp_y:      p.table_u8('wp_y', r.ty)
 		flow:      p.table_u8('flow', fields)
 		view_at:   p.table_u16('view_at', view_at)
 		view_len:  p.table_u8('view_len', view_len)
-		pool_x:    p.table_u8('pool_x', pool_x)
-		pool_y:    p.table_u8('pool_y', pool_y)
+		pool_cell: p.table_u16('pool_cell', pool_cell)
 		dir_x:     p.table_i8('dir_x', [1, 0, -1, 0])
 		dir_y:     p.table_i8('dir_y', [0, 1, 0, -1])
 		dim_of:    p.table_u8('dim_of', [tile_floor, tile_wall, tile_cover, tile_exit, tile_floor,
@@ -196,13 +219,15 @@ fn new_mission(mut game jaggame.Game, room jaggame.Room) &Mission {
 			y:       8
 			colour:  jaggame.cry(90, 240, 140)
 		})
-		msg:       game.text_layer('msg', jaggame.TextConfig{
-			columns: 24
-			rows:    7
-			x:       64
-			y:       70
-		})
+		msg:       msg
 		player:    game.sprite(0)
+		scenes:    scenes
+		// guide:gg_menus
+		save:   game.save(1, ['best_time', 'least_seen'])
+		picker: game.menu('picker', msg, 3, 5, items)
+		pause:  game.menu('pause', msg, 5, 4, ['RESUME', 'RESTART', 'QUIT'])
+		after:  game.menu('after', msg, 3, 9, ['PLAY AGAIN', 'MISSION SELECT'])
+		// guide:end
 	}
 	m.watch = p.func('watch', [jaggame.Param{'i', .u16}], .bool)
 	m.chase = p.func('chase', [jaggame.Param{'i', .u16}, jaggame.Param{'tx', .i32},
@@ -277,7 +302,15 @@ fn (mut m Mission) define_setup() {
 	c.set(m.secs_on, 65535)
 	c.set(m.seen_on, 65535)
 	c.set(m.seen, 0)
+	c.set(m.paused, false)
+	c.set(m.stride, 0)
 	m.msg.clear(mut c)
+	m.hud.clear(mut c)
+	m.status.clear(mut c)
+	m.hud.print(mut c, 0, 0, 'TIME')
+	m.hud.print(mut c, 6, 0, ':')
+	m.hud.print(mut c, 0, 1, 'SEEN')
+	m.player.put(mut c, 'player', 0, 0, 1)
 	c.end() // the figure
 
 	rows := depot.trim('\n').split('\n')
@@ -320,50 +353,67 @@ fn (mut m Mission) define_setup() {
 	}
 }
 
-// define_init writes what runs once: the room is asked for and the text
-// that never changes is written.
-fn (mut m Mission) define_init() {
+// define_play_setup writes the setup of the play scene, a step a frame: while
+// the room loads the picture is blank and only the camera is kept on the
+// figure, so that it is right when the picture comes back; the lit tiles of
+// the last mission are forgotten, a slice a frame; then `setup` runs for
+// each step, the figure first and then a guard to a frame.
+fn (mut m Mission) define_play_setup(mut c jaggame.Code) {
 	mut game := m.game
-	m.define_setup()
-	// guide:gg_init
-	mut c := game.define_init()
-	game.load_room(mut c, m.room)
-	c.set(m.setup_due, guard_count + 1)
-	c.set(m.clear_at, 0)
-	m.player.put(mut c, 'player', 0, 0, 1)
-	m.hud.print(mut c, 0, 0, 'TIME')
-	m.hud.print(mut c, 6, 0, ':')
-	m.hud.print(mut c, 0, 1, 'SEEN')
-	// guide:end
-}
-
-// define_update writes what runs every frame.
-fn (mut m Mission) define_update() {
-	mut game := m.game
-	mut c := game.define_update()
-	i := c.local_u16('i')
 	k := c.local_u16('k')
-	g := c.local_u16('g')
-
-	// While a room is loading the picture is blank; only keep the camera on
-	// the figure, so that it is right when the picture comes back.
-	// guide:gg_update
+	// guide:gg_setup
 	c.if_(game.loading)
 	game.camera_follow(mut c, m.pcx(), m.pcy())
-
-	// The lit tiles of the last mission are forgotten, a slice a frame.
 	c.for_(k, m.clear_at, m.clear_at.add(128).min(room_cols * room_rows))
 	c.set(m.lit.at(k), 0)
 	c.end() // each tile of a slice
 	c.set(m.clear_at, m.clear_at.add(128))
+	m.scenes.wait(mut c) // the same step again next frame
 	c.ret_void()
 	c.end() // loading
+	c.call(m.setup, m.scenes.step)
+	// guide:end
+}
 
-	c.if_(m.setup_due.ne(0))
-	c.call(m.setup, jaggame.lit(guard_count + 1).as_(.u8).sub(m.setup_due)) // 0, then 1 for the first guard
-	c.dec(m.setup_due)
-	c.end() // the first frames of a room
+// define_play_update writes what runs every frame of the mission.
+fn (mut m Mission) define_play_update(mut c jaggame.Code) {
+	mut game := m.game
+	i := c.local_u16('i')
+	k := c.local_u16('k')
+	g := c.local_u16('g')
 
+	// The pause menu takes the frame; nothing else moves.
+	// guide:gg_pause
+	c.if_(m.paused)
+	m.pause.update(mut c)
+
+	c.if_(m.pause.moved)
+	game.play(mut c, 'menu_move')
+	c.end() // the cursor moved
+
+	c.if_(m.pause.chosen.eq(0).either(m.pause.backed))
+	game.play(mut c, 'menu_select')
+	c.set(m.paused, false)
+	m.msg.clear(mut c)
+	c.else_if(m.pause.chosen.eq(1))
+	game.play(mut c, 'menu_select')
+	m.scenes.go(mut c, 'play')
+	c.else_if(m.pause.chosen.eq(2))
+	game.play(mut c, 'menu_select')
+	m.scenes.go(mut c, 'picker')
+	c.end() // what was chosen
+	c.ret_void()
+	c.end() // paused
+
+	c.if_(game.pressed(.option).either(game.pressed(.pause)).both(m.phase.eq(0)))
+	c.set(m.paused, true)
+	m.msg.print(mut c, 9, 2, 'PAUSED')
+	m.pause.open(mut c)
+	c.ret_void()
+	c.end() // pause pressed
+	// guide:end
+
+	// guide:gg_update
 	c.if_(m.phase.eq(0))
 	m.define_figure(mut c)
 	// guide:end
@@ -398,6 +448,21 @@ fn (mut m Mission) define_update() {
 	m.define_sprites(mut c, i)
 	m.define_hud(mut c)
 	game.camera_follow(mut c, m.pcx(), m.pcy())
+
+	// The music follows the alarm: the alert track while a guard is chasing, the calm
+	// one when none is suspicious; while one is only suspicious, whichever plays.
+	// guide:gg_music
+	c.if_(m.level.eq(2))
+	game.music_play(mut c, 'alert')
+	c.else_if(m.level.eq(0))
+	game.music_play(mut c, 'calm')
+	c.end() // the level
+	// guide:end
+
+	// The mission is over: the result.
+	c.if_(m.phase.ne(0))
+	m.scenes.go(mut c, 'result')
+	c.end() // the end
 }
 
 // define_figure writes the figure's part of the update: walking, running,
@@ -447,6 +512,28 @@ fn (mut m Mission) define_figure(mut c jaggame.Code) {
 
 	// guide:end
 
+	// Footsteps: a thud every so often while the figure walks or runs, none
+	// while it creeps. A running step comes on the frame half way between
+	// two of the noises a run makes (below), so that the two are not in one
+	// frame.
+	// guide:gg_steps
+	c.if_(moving.both(m.crouched.invert()))
+	c.inc(m.stride)
+
+	c.if_(m.stride.ge(14).either(m.stride.ge(8).both(speed.eq(run_speed)).both(game.frame.and(7).eq(4))))
+	c.set(m.stride, 0)
+
+	c.if_(speed.eq(run_speed))
+	game.play(mut c, 'run')
+	c.else_()
+	game.play(mut c, 'step')
+	c.end() // run or walk
+	c.end() // time for a step
+	c.else_()
+	c.set(m.stride, 0)
+	c.end() // moving
+	// guide:end
+
 	// Running is heard: a noise at the figure every eighth frame.
 	// guide:gg_noise
 	c.if_(moving.both(speed.eq(run_speed)).both(game.frame.and(7).eq(0)))
@@ -470,6 +557,7 @@ fn (mut m Mission) define_figure(mut c jaggame.Code) {
 
 	c.if_(game.solid_at(probe_x, probe_y))
 	game.noise(mut c, m.pcx(), m.pcy(), knock_hearing)
+	game.play(mut c, 'knock')
 	c.set(m.flash, 40)
 	c.end() // a wall to knock on
 	c.end() // C pressed
@@ -555,10 +643,9 @@ fn (mut m Mission) define_sprites(mut c jaggame.Code, i jaggame.Expr) {
 	c.end() // each guard
 }
 
-// define_hud writes the clock, the alert indicator and the end screen.
+// define_hud writes the clock, the times seen, the knock and the alert
+// indicator on the status lines.
 fn (mut m Mission) define_hud(mut c jaggame.Code) {
-	mut game := m.game
-
 	// The numbers are written when they change.
 	c.if_(m.secs.ne(m.secs_on))
 	c.set(m.secs_on, m.secs)
@@ -600,30 +687,4 @@ fn (mut m Mission) define_hud(mut c jaggame.Code) {
 	m.status.print(mut c, 0, 0, 'ALERT!  ')
 	c.end() // which level
 	c.end() // the level changed
-
-	// The end of the mission.
-	c.if_(m.phase.ne(0).both(m.shown.ne(3)))
-	c.set(m.shown, 3)
-
-	c.if_(m.phase.eq(1))
-	m.msg.print(mut c, 4, 1, 'MISSION COMPLETE')
-	m.msg.print(mut c, 4, 3, 'TIME')
-	m.msg.number(mut c, 10, 3, m.secs.div(60), 1)
-	m.msg.print(mut c, 11, 3, ':')
-	m.msg.number(mut c, 12, 3, m.secs.mod(60).div(10), 1)
-	m.msg.number(mut c, 13, 3, m.secs.mod(10), 1)
-	m.msg.print(mut c, 4, 4, 'SEEN')
-	m.msg.number(mut c, 10, 4, m.seen, 3)
-	c.else_()
-	m.msg.print(mut c, 4, 1, 'YOU WERE CAUGHT')
-	c.end() // done or caught
-	m.msg.print(mut c, 2, 6, 'PRESS A TO PLAY AGAIN')
-	m.status.print(mut c, 0, 0, '        ')
-	c.end() // the mission just ended
-
-	c.if_(m.phase.ne(0).both(game.pressed(.a).either(game.pressed(.pause))))
-	game.load_room(mut c, m.room)
-	c.set(m.setup_due, guard_count + 1)
-	c.set(m.clear_at, 0)
-	c.end() // again
 }

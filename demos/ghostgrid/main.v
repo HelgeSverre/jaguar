@@ -6,18 +6,24 @@
 // assembly in this file: the game is described to jaggame, which checks it,
 // compiles it and writes the image.
 //
-//     v run demos/ghostgrid          # writes demos/ghostgrid.jag
+//     v run demos/ghostgrid          # writes demos/ghostgrid.jag and demos/ghostgrid.j64
 //
 // docs/jaggame/guide.md walks through it: chapter 3 the figure and the
 // room, chapter 4 the guards. The pictures are made by
 // demos/ghostgrid/art/make_art.v and imported from there. The guards'
-// states are in guards.v.
+// states are in guards.v, the scenes in scenes.v, the sound in sound.v.
+//
+// The game starts on a title; A goes to the mission select, where the pad
+// (up, down, A) picks a mission and B goes back. In a mission:
 //
 //   D-pad   walk
 //   A       run: faster, and a guard within five tiles hears it
 //   B       crouch: slow and quiet; hidden from a guard behind a cover block
 //   C       knock on the wall you face: a guard within seven tiles comes
-//   Pause   (or A) after the mission: play again
+//   Pause   (or Option) pause: resume, restart or quit
+//
+// The result screen shows the time and the times seen; the best of each is
+// kept on the cartridge's EEPROM (the emulator keeps it between runs).
 module main
 
 import os
@@ -91,6 +97,18 @@ fn main() {
 		exit(1)
 	}
 	println('${output}: ${img.bytes.len} bytes')
+	// The same game as a cartridge image, for a board with the EEPROM that
+	// keeps the best times (see jaggame/rt_save.v).
+	rom := img.cartridge() or {
+		eprintln(err)
+		exit(1)
+	}
+	rom_path := output.trim_string_right('.jag') + '.j64'
+	os.write_file_array(rom_path, rom) or {
+		eprintln(err)
+		exit(1)
+	}
+	println('${rom_path}: ${rom.len} bytes')
 }
 
 // build compiles the game into an image. The test builds it too.

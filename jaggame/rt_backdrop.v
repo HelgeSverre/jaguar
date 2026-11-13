@@ -189,9 +189,9 @@ fn (g &Game) hue_table() []u16 {
 		t := place - math.floor(place)
 		a := colours[first]
 		z := colours[next]
-		cry := jagkit.cry(int(f64(a.r) + t * f64(z.r - a.r)), int(f64(a.g) + t * f64(z.g - a.g)), int(
-			f64(a.b) + t * f64(z.b - a.b)))
-		table << (cry & 0xff00)
+		blended := jagkit.cry(int(f64(a.r) + t * f64(z.r - a.r)),
+			int(f64(a.g) + t * f64(z.g - a.g)), int(f64(a.b) + t * f64(z.b - a.b)))
+		table << (blended & 0xff00)
 	}
 	return table
 }

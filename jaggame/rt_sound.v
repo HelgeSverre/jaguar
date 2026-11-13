@@ -512,22 +512,21 @@ fn (mut g Game) define_music() {
 	c = p.define(s.row)
 	track := c.local_u16('track')
 	at := c.local_u16('at')
-	ch := c.local_u8('ch')
 	note := c.local_u8('note')
 	c.set(track, s.mus.sub(1).as_(.u16))
 	c.set(at,
 		t_pattern.at(t_first.at(track).add(s.mus_pos)).as_(.u16).mul(pattern_rows * music_channels).add(s.mus_row.as_(.u16).mul(music_channels)))
-	c.for_(ch, 0, voice_drums)
-	c.set(note, t_notes.at(at.add(ch.as_(.u16))))
+	for lane in 0 .. int(voice_drums) {
+		c.set(note, t_notes.at(at.add(lane)))
 
-	c.if_(note.eq(1))
-	c.set(s.voice.at(ch.mul(2).add(1)), 0)
-	c.else_if(note.gt(1))
-	c.set(s.voice.at(ch.mul(2)), t_pitch.at(note))
-	c.set(s.voice.at(ch.mul(2).add(1)), t_level.at(ch))
-	c.set(s.decay.at(ch), t_decay.at(ch))
-	c.end() // stop, or start a note
-	c.end() // each melody channel
+		c.if_(note.eq(1))
+		c.set(s.voice.at(lane * 2 + 1), 0)
+		c.else_if(note.gt(1))
+		c.set(s.voice.at(lane * 2), t_pitch.at(note))
+		c.set(s.voice.at(lane * 2 + 1), t_level.at(lane))
+		c.set(s.decay.at(lane), t_decay.at(lane))
+		c.end() // stop, or start a note
+	}
 	c.set(note, t_notes.at(at.add(voice_drums)))
 
 	c.if_(note.ne(0))
@@ -556,6 +555,8 @@ fn (mut g Game) define_tick() {
 	s := g.snd
 	mut c := p.define(s.tick)
 	slot := c.local_u8('slot')
+
+	c.if_(s.sfx_id.at(0).or_(s.sfx_id.at(1)).ne(0))
 	c.for_(slot, 0, 2)
 
 	c.if_(s.sfx_id.at(slot).ne(0))
@@ -574,6 +575,7 @@ fn (mut g Game) define_tick() {
 	c.end() // the step is over
 	c.end() // an effect plays
 	c.end() // each effect voice
+	c.end() // some effect plays
 
 	c.if_(s.mus.ne(0))
 	c.set(s.mus_acc, s.mus_acc.add(s.mus_rate))
@@ -584,25 +586,76 @@ fn (mut g Game) define_tick() {
 	c.end() // a row is due
 	c.end() // music plays
 
-	v := c.local_u8('v')
-	level := c.local_u32('level')
-	cut := c.local_u32('cut')
-	c.for_(v, 0, voice_count)
-	c.set(level, s.voice.at(v.mul(2).add(1)))
+	c.native(fn (mut m jagkit.M68k) {
+		emit_envelopes(mut m)
+	}, fn (mut it Interpreter) ! {
+		run_envelopes(mut it)!
+	})
+}
 
-	c.if_(level.ne(0))
+// emit_envelopes writes the machine code of the last step of the tick: every
+// sounding voice loses 1/2^decay of its volume (at least 1) and 1/2^slide of
+// its pitch. It was a loop of the language and cost about 4,000 cycles a
+// frame; this costs a fifth of that.
+fn emit_envelopes(mut m jagkit.M68k) {
+	next := m.unique('rt.env_next')
+	slide := m.unique('rt.env_slide')
+	again := m.unique('rt.env_again')
+	loop := m.unique('rt.env')
+	m.lea(jagkit.lbl('rt_voice'), a0)
+	m.lea(jagkit.lbl('rt_voice_decay'), a1)
+	m.lea(jagkit.lbl('rt_voice_slide'), a2)
+	m.moveq(voice_count - 1, d5)
+	m.label(loop)
+	m.move(.l, jagkit.at(4, a0), d0)
+	m.b(.eq, next)
+	m.moveq(0, d1)
+	m.move(.b, jagkit.ind(a1), d1)
+	m.b(.eq, slide)
+	m.move(.l, d0, d2)
+	m.lsr(.l, d1, d2)
+	m.b(.ne, again)
+	m.moveq(1, d2)
+	m.label(again)
+	m.sub(.l, d2, d0)
+	m.move(.l, d0, jagkit.at(4, a0))
+	m.label(slide)
+	m.moveq(0, d1)
+	m.move(.b, jagkit.ind(a2), d1)
+	m.b(.eq, next)
+	m.move(.l, jagkit.ind(a0), d2)
+	m.move(.l, d2, d3)
+	m.lsr(.l, d1, d3)
+	m.sub(.l, d3, d2)
+	m.move(.l, d2, jagkit.ind(a0))
+	m.label(next)
+	m.lea(jagkit.at(8, a0), a0)
+	m.lea(jagkit.at(1, a1), a1)
+	m.lea(jagkit.at(1, a2), a2)
+	m.dbra(d5, loop)
+}
 
-	c.if_(s.decay.at(v).ne(0))
-	c.set(cut, level.shr(s.decay.at(v)).max(1))
-	c.set(s.voice.at(v.mul(2).add(1)), level.sub(cut))
-	c.end() // decays
-
-	c.if_(s.slide.at(v).ne(0))
-	c.set(cut, s.voice.at(v.mul(2)))
-	c.set(s.voice.at(v.mul(2)), cut.sub(cut.shr(s.slide.at(v))))
-	c.end() // slides
-	c.end() // sounding
-	c.end() // each voice
+// run_envelopes is what the interpreter does for `emit_envelopes`.
+fn run_envelopes(mut it Interpreter) ! {
+	for v in 0 .. voice_count {
+		level := it.get_label('rt_voice', v * 2 + 1)!
+		if level == 0 {
+			continue
+		}
+		decay := it.get_label('rt_voice_decay', v)!
+		if decay != 0 {
+			mut cut := level >> u64(decay)
+			if cut == 0 {
+				cut = 1
+			}
+			it.put_label('rt_voice', v * 2 + 1, level - cut)!
+		}
+		slide := it.get_label('rt_voice_slide', v)!
+		if slide != 0 {
+			pitch := it.get_label('rt_voice', v * 2)!
+			it.put_label('rt_voice', v * 2, pitch - (pitch >> u64(slide)))!
+		}
+	}
 }
 
 // emit_sound_copy writes `rt.send_voices`: the mailbox is copied into the

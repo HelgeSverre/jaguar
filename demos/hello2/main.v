@@ -118,12 +118,6 @@ fn describe() &jaggame.Game {
 	game.art_cry('arrow', 32, 16, 1, arrow())
 	game.sequence('spin', [jaggame.Step{0, 0.1}, jaggame.Step{1, 0.1},
 		jaggame.Step{2, 0.1}, jaggame.Step{3, 0.1}])
-	// A short A that fades out: the A above concert pitch, 880 Hz.
-	game.sfx('beep', jaggame.Sfx{
-		volume: 3000
-		decay:  3
-		steps:  [jaggame.SfxStep{880, 0.4}]
-	})
 
 	title := game.text_layer('title', jaggame.TextConfig{
 		columns: 40
@@ -140,6 +134,15 @@ fn describe() &jaggame.Game {
 	beat := game.timer('beat')
 	watch := game.timer('watch')
 	beats := game.p.u16('beats')
+	// guide:end
+
+	// guide:beep
+	// A short A that fades out: the A above concert pitch, 880 Hz.
+	game.sfx('beep', jaggame.Sfx{
+		volume: 3000
+		decay:  3
+		steps:  [jaggame.SfxStep{880, 0.4}]
+	})
 	// guide:end
 
 	// guide:init

@@ -32,7 +32,12 @@ const tile_queue_size = 128
 // and drawing them all in one frame took a third of it. What does not fit
 // waits for the next frames, so the picture can trail the map by a few frames
 // after a big change.
-const tile_draws_per_frame = 20
+const tile_draws_per_frame = 12
+
+// tile_draws_light is how many are drawn when fewer than that wait: a small
+// change is spread thinner, so that a frame that has a cone to move does not
+// also have all of its tiles to draw.
+const tile_draws_light = 5
 
 // TileVars is what the tile layer declares in the program: variables and
 // functions, made by `use_map`.
@@ -52,6 +57,7 @@ mut:
 	queue        Expr // u16 array: a ring of the cells changed and not yet drawn
 	queued       Expr // u8: how many are waiting
 	head         Expr // u8: where in the ring the next to draw is
+	budget       Expr // u8: how many of the waiting are drawn this frame
 	lost         Expr // u16: changes that did not fit
 	slide_x      Expr // fix: the position `move_and_slide` works on
 	slide_y      Expr
@@ -92,6 +98,7 @@ fn (mut g Game) use_map() {
 		queue:   invalid('')
 		queued:  invalid('')
 		head:    invalid('')
+		budget:  invalid('')
 		lost:    invalid('')
 		slide_x: invalid('')
 		slide_y: invalid('')
@@ -111,6 +118,7 @@ fn (mut g Game) use_map() {
 	g.tv.queue = g.p.array_u16('rt_tile_queue', tile_queue_size)
 	g.tv.queued = g.p.u8('rt_tile_count')
 	g.tv.head = g.p.u8('rt_tile_head')
+	g.tv.budget = g.p.u8('rt_tile_budget', tile_draws_light)
 	g.tv.lost = g.p.u16('rt_tile_lost')
 	g.tv.slide_x = g.p.fix('rt_slide_x')
 	g.tv.slide_y = g.p.fix('rt_slide_y')
@@ -159,9 +167,19 @@ pub fn (mut g Game) load_room_number(mut c Code, number Val) {
 	c.call(g.tv.load_room, number)
 }
 
+// hide_room stops showing the room's tile layer, until the next
+// `load_room`: for a title or a menu that has the screen to itself, or a
+// backdrop. The room stays as it is; sprites are the game's to hide.
+pub fn (mut g Game) hide_room(mut c Code) {
+	g.use_map()
+	c.set(g.tv.map_on, false)
+}
+
 // set_tile puts a tile at a column and a row of the room (in tiles) and
-// redraws it. Up to 64 changes can be drawn in one frame; more are counted
-// in `rt_tile_lost` and not drawn. A place outside the room is ignored.
+// redraws it, at most 12 changes a frame (`tile_draws_per_frame`): up to
+// 128 wait their turn, so a big change shows over a few frames; more than that
+// are counted in `rt_tile_lost` and not drawn. A place outside the room is
+// ignored.
 pub fn (mut g Game) set_tile(mut c Code, column Val, row Val, tile Val) {
 	g.use_map()
 	c.call(g.tv.set_tile, column, row, tile)
@@ -310,6 +328,7 @@ fn (mut g Game) define_map() {
 	c.set(tv.from, 0)
 	c.set(tv.to, 0)
 	c.set(tv.map_on, false)
+	c.set(tv.queued, 0) // changes of the last room are not drawn into this one
 	c.set(tv.wait, 1)
 	c.set(g.loading, true)
 
@@ -412,9 +431,11 @@ fn (g &Game) emit_render_tiles(mut m jagkit.M68k) {
 	m.label('rt.slice_done')
 	m.moveq(0, d6)
 	m.move(.b, lbl('rt_tile_count'), d6)
-	m.cmp(.l, imm(tile_draws_per_frame), d6)
+	m.moveq(0, d0)
+	m.move(.b, lbl('rt_tile_budget'), d0)
+	m.cmp(.l, d0, d6)
 	m.b(.ls, 'rt.queue_few')
-	m.moveq(tile_draws_per_frame, d6)
+	m.move(.l, d0, d6)
 	m.label('rt.queue_few')
 	m.moveq(0, d7)
 	m.label('rt.queue')

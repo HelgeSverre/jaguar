@@ -1012,23 +1012,25 @@ The game asks for places by name, as expressions that are right for the room tha
 
 `game.load_room(mut c, room)` (or `load_room_number` with an expression) starts loading a room. It sets the room's size (`game.room_width`, `game.room_height`, in pixels) and `game.room_number` at once, so markers can be read in the same statement list, but the tiles take a few frames: the room is drawn into a picture buffer in memory, 48 tiles a frame, copied from the room's data and drawn by machine code. While it loads, `game.loading` is true and the picture is blank (the tile layer and the sprites are not drawn; the text stays), and it starts one frame late: the picture that is already on its way to the screen is blank before the buffer is touched. The game's update goes on running; read `loading` and leave the room alone, as GHOSTGRID does (it also uses the frames to clear what the last mission left):
 
-<!-- guide:gg_update -->
+<!-- guide:gg_setup -->
 ```v
 c.if_(game.loading)
 game.camera_follow(mut c, m.pcx(), m.pcy())
-
-// The lit tiles of the last mission are forgotten, a slice a frame.
 c.for_(k, m.clear_at, m.clear_at.add(128).min(room_cols * room_rows))
 c.set(m.lit.at(k), 0)
 c.end() // each tile of a slice
 c.set(m.clear_at, m.clear_at.add(128))
+m.scenes.wait(mut c) // the same step again next frame
 c.ret_void()
 c.end() // loading
+c.call(m.setup, m.scenes.step)
 ```
+
+That is the setup of the play scene (chapter 5): it runs a step a frame, and `wait` makes it stay on the same step while the room loads.
 
 Loading is spread over frames so that a handler never lasts longer than the picture: a room of 600 tiles takes 15 frames, GHOSTGRID's 816-tile hall 18, and one of the largest (40 by 30 tiles, 1,200) would take about 27, half a second. The most any frame of loading costs is about 125,000 of the 221,000 cycles of an NTSC frame, so `missed_frames` stays 0.
 
-`game.set_tile(mut c, column, row, tile)` changes a tile at run time and redraws it in the same frame (up to 64 changes a frame). `tile_at` and `flags_at` describe the room as it is, after the change.
+`game.set_tile(mut c, column, row, tile)` changes a tile at run time and redraws it in the same frame (at most 12 a frame; up to 128 wait in a ring, so a big change shows over a few frames). `tile_at` and `flags_at` describe the room as it is, after the change.
 
 ### The tile layer and the camera
 
@@ -1052,22 +1054,6 @@ The demo's update, in the order it happens. A room has loaded (a start of the mi
 
 <!-- guide:gg_update -->
 ```v
-c.if_(game.loading)
-game.camera_follow(mut c, m.pcx(), m.pcy())
-
-// The lit tiles of the last mission are forgotten, a slice a frame.
-c.for_(k, m.clear_at, m.clear_at.add(128).min(room_cols * room_rows))
-c.set(m.lit.at(k), 0)
-c.end() // each tile of a slice
-c.set(m.clear_at, m.clear_at.add(128))
-c.ret_void()
-c.end() // loading
-
-c.if_(m.setup_due.ne(0))
-c.call(m.setup, jaggame.lit(guard_count + 1).as_(.u8).sub(m.setup_due)) // 0, then 1 for the first guard
-c.dec(m.setup_due)
-c.end() // the first frames of a room
-
 c.if_(m.phase.eq(0))
 m.define_figure(mut c)
 ```
@@ -1389,19 +1375,17 @@ A cone looks at every tile in range, and a wall walk for every tile on every fra
 ```v
 mut view_at := []int{}
 mut view_len := []int{}
-mut pool_x := []int{}
-mut pool_y := []int{}
+mut pool_cell := []int{}
 for y in 0 .. room_rows {
 	for x in 0 .. room_cols {
 		for f in 0 .. 4 {
-			view_at << pool_x.len
+			view_at << pool_cell.len
 			if passable(rows[y][x]) {
 				for cell in game.view_cells(room, x, y, f * 64, sight_range, sight_half, false) {
-					pool_x << cell.x
-					pool_y << cell.y
+					pool_cell << cell.y * room_cols + cell.x
 				}
 			}
-			view_len << pool_x.len - view_at.last()
+			view_len << pool_cell.len - view_at.last()
 			assert view_len.last() <= cone_slots
 		}
 	}
@@ -1425,6 +1409,9 @@ cell := c.local_u16('cell')
 slot := c.local_u16('slot')
 bit := c.local_u8('bit')
 marked := c.local_u8('marked')
+bits := c.local_u8('bits')
+old_n := c.local_u8('old_n')
+first := c.local_u16('first')
 c.set(f, m.guards.face(i).shr(6))
 c.set(gx, m.gcx(i).shr(4))
 c.set(gy, m.gcy(i).shr(4))
@@ -1433,24 +1420,27 @@ c.set(marked, bit.shl(4))
 c.set(key, gy.mul(room_cols).add(gx).as_(.u16).shl(2).add(f.as_(.u16)))
 c.set(start, m.view_at.at(key))
 c.set(n, m.view_len.at(key))
+c.set(old_n, m.gf(i, 'cone_n'))
+c.set(first, i.mul(cone_slots).as_(.u16))
 
 // Mark the cells of the new cone, so that the cells that stay are not
 // drawn twice.
 c.for_(k, 0, n)
-c.set(cell,
-	m.pool_y.at(start.add(k)).as_(.u16).mul(room_cols).add(m.pool_x.at(start.add(k)).as_(.u16)))
-c.set(m.lit.at(cell), m.lit.at(cell).or_(marked))
+c.set(cell, m.pool_cell.at(start.add(k)))
+c.set(bits, m.lit.at(cell))
+c.set(m.lit.at(cell), bits.or_(marked))
 c.end() // each new cell
 
 // The cells that were lit and are not any more.
-c.for_(k, 0, m.gf(i, 'cone_n'))
-c.set(slot, i.mul(cone_slots).add(k))
-c.set(cell, m.old_y.at(slot).as_(.u16).mul(room_cols).add(m.old_x.at(slot).as_(.u16)))
+c.for_(k, 0, old_n)
+c.set(cell, m.old_cell.at(first.add(k)))
+c.set(bits, m.lit.at(cell))
 
-c.if_(m.lit.at(cell).and(marked).eq(0))
-c.set(m.lit.at(cell), m.lit.at(cell).and(bit.not()))
+c.if_(bits.and(marked).eq(0))
+c.set(bits, bits.and(bit.not()))
+c.set(m.lit.at(cell), bits)
 
-c.if_(m.lit.at(cell).and(0x0f).eq(0))
+c.if_(bits.and(0x0f).eq(0))
 game.set_cell(mut c, cell, m.dim_of.at(game.tile_cell(cell))) // no cone is on it any more
 c.end() // dark
 c.end() // gone
@@ -1459,19 +1449,18 @@ c.end() // each old cell
 // The cells that are lit now and were not; the list is kept for next time.
 c.for_(k, 0, n)
 c.set(slot, start.add(k))
-c.set(cell, m.pool_y.at(slot).as_(.u16).mul(room_cols).add(m.pool_x.at(slot).as_(.u16)))
+c.set(cell, m.pool_cell.at(slot))
+c.set(bits, m.lit.at(cell))
 
-c.if_(m.lit.at(cell).and(bit).eq(0))
+c.if_(bits.and(bit).eq(0))
 
-c.if_(m.lit.at(cell).and(0x0f).eq(0))
+c.if_(bits.and(0x0f).eq(0))
 game.set_cell(mut c, cell, m.glow_of.at(game.tile_cell(cell))) // the first cone on it
 c.end() // lit
-c.set(m.lit.at(cell), m.lit.at(cell).or_(bit))
+c.set(bits, bits.or_(bit))
 c.end() // new
-c.set(m.lit.at(cell), m.lit.at(cell).and(marked.not()))
-c.set(slot, i.mul(cone_slots).add(k))
-c.set(m.old_x.at(slot), m.pool_x.at(start.add(k)))
-c.set(m.old_y.at(slot), m.pool_y.at(start.add(k)))
+c.set(m.lit.at(cell), bits.and(marked.not()))
+c.set(m.old_cell.at(first.add(k)), m.pool_cell.at(slot))
 c.end() // each new cell
 c.set(m.gf(i, 'cone_n'), n)
 c.set(m.gf(i, 'cone_x'), gx.as_(.i16))
@@ -1509,6 +1498,7 @@ c.end() // which way
 
 c.if_(game.solid_at(probe_x, probe_y))
 game.noise(mut c, m.pcx(), m.pcy(), knock_hearing)
+game.play(mut c, 'knock')
 c.set(m.flash, 40)
 c.end() // a wall to knock on
 c.end() // C pressed
@@ -1727,6 +1717,9 @@ for name in ['suspicious', 'alert', 'search', 'return'] {
 	e.set(m.gf(j, 'lost'), 0)
 	if name == 'return' {
 		e.set(m.gf(j, 'mleft'), 0)
+	}
+	if name == 'alert' {
+		game.play(mut e, 'spotted')
 	}
 }
 ```

@@ -71,7 +71,7 @@ fn (mut g Game) define_runtime() {
 	if g.map_ready {
 		// The tiles that were drawn last frame leave the ring.
 		drawn := c.local_u8('drawn')
-		c.set(drawn, g.tv.queued.min(tile_draws_per_frame))
+		c.set(drawn, g.tv.queued.min(g.tv.budget))
 		c.set(g.tv.head, g.tv.head.add(drawn).and(tile_queue_size - 1))
 		c.set(g.tv.queued, g.tv.queued.sub(drawn))
 	}
@@ -97,6 +97,12 @@ fn (mut g Game) define_runtime() {
 	}
 	if g.map_ready {
 		c.call(g.tv.load_step)
+		// What waits to be drawn: a few a frame, more when many wait.
+		c.set(g.tv.budget, tile_draws_light)
+
+		c.if_(g.tv.queued.ge(tile_draws_per_frame))
+		c.set(g.tv.budget, tile_draws_per_frame)
+		c.end() // a lot to draw
 	}
 	if g.sounds {
 		c.call(g.snd.tick)

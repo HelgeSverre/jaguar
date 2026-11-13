@@ -303,6 +303,9 @@ fn (mut m Mission) define_cone() {
 	slot := c.local_u16('slot')
 	bit := c.local_u8('bit')
 	marked := c.local_u8('marked')
+	bits := c.local_u8('bits')
+	old_n := c.local_u8('old_n')
+	first := c.local_u16('first')
 	c.set(f, m.guards.face(i).shr(6))
 	c.set(gx, m.gcx(i).shr(4))
 	c.set(gy, m.gcy(i).shr(4))
@@ -311,24 +314,27 @@ fn (mut m Mission) define_cone() {
 	c.set(key, gy.mul(room_cols).add(gx).as_(.u16).shl(2).add(f.as_(.u16)))
 	c.set(start, m.view_at.at(key))
 	c.set(n, m.view_len.at(key))
+	c.set(old_n, m.gf(i, 'cone_n'))
+	c.set(first, i.mul(cone_slots).as_(.u16))
 
 	// Mark the cells of the new cone, so that the cells that stay are not
 	// drawn twice.
 	c.for_(k, 0, n)
-	c.set(cell,
-		m.pool_y.at(start.add(k)).as_(.u16).mul(room_cols).add(m.pool_x.at(start.add(k)).as_(.u16)))
-	c.set(m.lit.at(cell), m.lit.at(cell).or_(marked))
+	c.set(cell, m.pool_cell.at(start.add(k)))
+	c.set(bits, m.lit.at(cell))
+	c.set(m.lit.at(cell), bits.or_(marked))
 	c.end() // each new cell
 
 	// The cells that were lit and are not any more.
-	c.for_(k, 0, m.gf(i, 'cone_n'))
-	c.set(slot, i.mul(cone_slots).add(k))
-	c.set(cell, m.old_y.at(slot).as_(.u16).mul(room_cols).add(m.old_x.at(slot).as_(.u16)))
+	c.for_(k, 0, old_n)
+	c.set(cell, m.old_cell.at(first.add(k)))
+	c.set(bits, m.lit.at(cell))
 
-	c.if_(m.lit.at(cell).and(marked).eq(0))
-	c.set(m.lit.at(cell), m.lit.at(cell).and(bit.not()))
+	c.if_(bits.and(marked).eq(0))
+	c.set(bits, bits.and(bit.not()))
+	c.set(m.lit.at(cell), bits)
 
-	c.if_(m.lit.at(cell).and(0x0f).eq(0))
+	c.if_(bits.and(0x0f).eq(0))
 	game.set_cell(mut c, cell, m.dim_of.at(game.tile_cell(cell))) // no cone is on it any more
 	c.end() // dark
 	c.end() // gone
@@ -337,19 +343,18 @@ fn (mut m Mission) define_cone() {
 	// The cells that are lit now and were not; the list is kept for next time.
 	c.for_(k, 0, n)
 	c.set(slot, start.add(k))
-	c.set(cell, m.pool_y.at(slot).as_(.u16).mul(room_cols).add(m.pool_x.at(slot).as_(.u16)))
+	c.set(cell, m.pool_cell.at(slot))
+	c.set(bits, m.lit.at(cell))
 
-	c.if_(m.lit.at(cell).and(bit).eq(0))
+	c.if_(bits.and(bit).eq(0))
 
-	c.if_(m.lit.at(cell).and(0x0f).eq(0))
+	c.if_(bits.and(0x0f).eq(0))
 	game.set_cell(mut c, cell, m.glow_of.at(game.tile_cell(cell))) // the first cone on it
 	c.end() // lit
-	c.set(m.lit.at(cell), m.lit.at(cell).or_(bit))
+	c.set(bits, bits.or_(bit))
 	c.end() // new
-	c.set(m.lit.at(cell), m.lit.at(cell).and(marked.not()))
-	c.set(slot, i.mul(cone_slots).add(k))
-	c.set(m.old_x.at(slot), m.pool_x.at(start.add(k)))
-	c.set(m.old_y.at(slot), m.pool_y.at(start.add(k)))
+	c.set(m.lit.at(cell), bits.and(marked.not()))
+	c.set(m.old_cell.at(first.add(k)), m.pool_cell.at(slot))
 	c.end() // each new cell
 	c.set(m.gf(i, 'cone_n'), n)
 	c.set(m.gf(i, 'cone_x'), gx.as_(.i16))
@@ -529,6 +534,9 @@ fn (mut m Mission) define_states() {
 		e.set(m.gf(j, 'lost'), 0)
 		if name == 'return' {
 			e.set(m.gf(j, 'mleft'), 0)
+		}
+		if name == 'alert' {
+			game.play(mut e, 'spotted')
 		}
 	}
 	// guide:end
