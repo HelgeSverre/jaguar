@@ -57,28 +57,50 @@ pub:
 	pad           Expr // u32: the buttons held; see `Button`
 	pad_pressed   Expr // u32: the buttons that went down this frame
 	sprites       Expr // the sprite pool: an array of records
+	camera_x      Expr // i16: the world position shown at the left edge of the screen; negative when the room is narrower than the screen
+	camera_y      Expr // i16: the world position shown at the top
+	loading       Expr // bool: a room is being drawn; the picture is blank until it is done
+	room_number   Expr // u8: the room that is loaded or loading
+	room_width    Expr // i16: the width of that room in pixels
+	room_height   Expr // i16: its height in pixels
 pub mut:
 	p &Program
 mut:
-	record      Record
-	pal         Expr // u8: 0 on NTSC, 1 on PAL
-	arts        []ArtInfo
-	palette     []u16
-	seqs        []SeqInfo
-	texts       []TextInfo
-	timers      []TimerInfo
-	sounds      bool // a beep is used
-	beep_step   Expr
-	beep_volume Expr
-	notes       Expr
-	init_func   Func
-	update_func Func
-	has_init    bool
-	has_update  bool
-	built       bool
-	defined     bool           // the runtime's own functions are written
-	strings     map[string]int // the offset of each string constant in `pool`
-	pool        []u8
+	record  Record
+	pal     Expr // u8: 0 on NTSC, 1 on PAL
+	arts    []ArtInfo
+	palette []u16
+	// palette_fixed is true once the author declared the palette; until
+	// then the PNGs that are imported build it.
+	palette_fixed   bool
+	palette_index   map[u16]int // the entry of each colour
+	palette_sources []string    // the files that added colours, with how many
+	seqs            []SeqInfo
+	texts           []TextInfo
+	timers          []TimerInfo
+	sounds          bool // a beep is used
+	beep_step       Expr
+	beep_volume     Expr
+	notes           Expr
+	init_func       Func
+	update_func     Func
+	// The tile layer: see assets_map.v and rt_tiles.v.
+	has_tileset    bool
+	tileset_path   string
+	tileset_art    int
+	tile_count     int
+	legend_tiles   []LegendTile
+	legend_markers []LegendMarker
+	rooms          []RoomInfo
+	rooms_parsed   bool
+	tv             &TileVars = unsafe { nil } // the tile layer's variables and functions, once `map_ready`
+	map_ready      bool // the tile layer's variables and functions are declared
+	has_init       bool
+	has_update     bool
+	built          bool
+	defined        bool           // the runtime's own functions are written
+	strings        map[string]int // the offset of each string constant in `pool`
+	pool           []u8
 }
 
 // new_game starts a game with the runtime's variables declared.
@@ -100,6 +122,12 @@ pub fn new_game(config Config) &Game {
 		pad:           p.u32('pad')
 		pad_pressed:   p.u32('pad_pressed')
 		sprites:       sprites
+		camera_x:      p.i16('camera_x')
+		camera_y:      p.i16('camera_y')
+		loading:       p.bool('loading')
+		room_number:   p.u8('room_number')
+		room_width:    p.i16('room_width')
+		room_height:   p.i16('room_height')
 		p:             p
 		record:        record
 		pal:           p.u8('rt_pal')
@@ -161,7 +189,17 @@ struct Layout {
 // objects is how many objects a display list can hold: the sprites, the
 // jump to the text, and the text layers.
 fn (g &Game) objects() int {
-	return g.config.sprites + 1 + g.texts.len
+	return g.slots() + g.texts.len
+}
+
+// slots is the places in a display list before the text: the tile layer's
+// object if there is one, the sprites and the jump to the text.
+fn (g &Game) slots() int {
+	return g.config.sprites + 1 + if g.has_tileset {
+		1
+	} else {
+		0
+	}
 }
 
 fn (g &Game) layout() Layout {

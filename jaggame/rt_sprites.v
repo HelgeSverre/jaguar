@@ -13,6 +13,8 @@ import jagkit
 //   visible  bool  only visible sprites are drawn
 //   flip     bool  mirrored left to right
 //   scale    fix   1.0 is full size; 1/32 up to 7.9
+//   fixed    bool  stays where it is on the screen when the camera moves (a game with a tile layer
+//                  takes x and y as world positions, and subtracts the camera)
 //
 // The remaining fields (`seq`, `step`, `wait`, `loops`) belong to the
 // animation and are changed with `play` and `stop`.
@@ -21,7 +23,8 @@ fn sprite_fields() []Field {
 	return [Field{'scale', .fix}, Field{'x', .i16}, Field{'y', .i16},
 		Field{'wait', .u16}, Field{'art', .u8}, Field{'frame', .u8},
 		Field{'layer', .u8}, Field{'visible', .bool}, Field{'flip', .bool},
-		Field{'seq', .u8}, Field{'step', .u8}, Field{'loops', .bool}]
+		Field{'seq', .u8}, Field{'step', .u8}, Field{'loops', .bool},
+		Field{'fixed', .bool}]
 }
 
 // Art is a picture the sprites can show.
@@ -70,7 +73,17 @@ pub fn (mut g Game) art_pal(name string, width int, height int, frames int, pixe
 // pixel value n. At most 256 minus two for every text layer are allowed
 // (the text keeps the top of the colour table).
 pub fn (mut g Game) palette(colours []u16) {
+	if g.palette_sources.len > 0 {
+		g.problem('palette() is called after the pictures ${g.palette_sources.join(', ')} built the palette; declare the palette first, or leave it to the pictures')
+	}
 	g.palette = colours.clone()
+	g.palette_fixed = true
+	g.palette_index = map[u16]int{}
+	for i, c in colours {
+		if c !in g.palette_index {
+			g.palette_index[c] = i
+		}
+	}
 }
 
 fn (mut g Game) add_art(name string, width int, height int, frames int, bits int, bytes []u8, count int) Art {
@@ -139,6 +152,7 @@ pub:
 	visible Expr
 	flip    Expr
 	scale   Expr
+	fixed   Expr
 	playing Expr // true while an animation is running
 	element Expr
 	game    &Game
@@ -168,6 +182,7 @@ pub fn (g &Game) sprite_at(index Val) Sprite {
 		visible: e.field('visible')
 		flip:    e.field('flip')
 		scale:   e.field('scale')
+		fixed:   e.field('fixed')
 		playing: e.field('seq').ne(0)
 		element: e
 		game:    unsafe { g }
@@ -186,6 +201,7 @@ pub fn (s Sprite) put(mut c Code, art string, x Val, y Val, layer int) {
 	c.set(s.layer, layer)
 	c.set(s.scale, 1.0)
 	c.set(s.flip, false)
+	c.set(s.fixed, false)
 	c.set(s.visible, true)
 }
 

@@ -30,6 +30,7 @@ pub fn (mut g Game) build() !Image {
 	g.emit_handler(mut m, voices)
 	g.emit_read_pad(mut m)
 	g.emit_text_routines(mut m, layout)
+	g.emit_tile_routines(mut m)
 	g.emit_build_list(mut m)
 	low := g.p.emit_lowered(mut m)!
 
@@ -44,6 +45,9 @@ pub fn (mut g Game) build() !Image {
 		jagkit.Region{'display list 0', layout.lists[0], layout.list_bytes},
 		jagkit.Region{'display list 1', layout.lists[1], layout.list_bytes},
 	]
+	if g.has_tileset {
+		regions << jagkit.Region{'tile buffer', tile_buffer, g.tile_buffer_bytes()}
+	}
 	for i, t in g.texts {
 		regions << jagkit.Region{'text layer `${t.name}`', layout.text[i], t.columns * t.rows * 8}
 	}
@@ -73,7 +77,12 @@ fn (mut g Game) check_art() {
 		g.problem('there is a palette picture but no palette; call palette() with the colours')
 	}
 	if g.palette.len > room {
-		g.problem('the palette has ${g.palette.len} colours; with ${g.texts.len} text layers there is room for ${room}')
+		from := if g.palette_sources.len > 0 {
+			'; the pictures added them: ' + g.palette_sources.join(', ')
+		} else {
+			''
+		}
+		g.problem('the palette has ${g.palette.len} colours; with ${g.texts.len} text layers there is room for ${room}${from}')
 	}
 	if deepest >= g.palette.len && g.palette.len > 0 {
 		g.problem('a palette picture uses colour ${deepest}, but the palette has ${g.palette.len}')
@@ -103,4 +112,15 @@ fn (g &Game) emit_runtime_data(mut m jagkit.M68k, dsp_code []u8) ! {
 	m.label('rt.font')
 	m.bytes(jagkit.font_8x8())
 	m.align(4)
+}
+
+// tile_buffer_bytes is the size of the picture buffer: the largest room.
+fn (g &Game) tile_buffer_bytes() int {
+	mut most := 1
+	for r in g.rooms {
+		if r.width * r.height > most {
+			most = r.width * r.height
+		}
+	}
+	return most * tile_size * tile_size
 }
