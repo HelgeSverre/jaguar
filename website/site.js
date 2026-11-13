@@ -42,7 +42,7 @@ function begin(here) {
   h += '<br><img src="img/construction.gif" width="160" height="16" alt="UNDER CONSTRUCTION FOREVER"><br><br>';
   h += jukebox();
   h += '<br><div class="pixel gold">YOU ARE VISITOR</div><br>' + counter();
-  h += '<div class="tiny grey" style="margin-top:4px">counted in your<br>browser only.</div><br>';
+  h += '<div class="tiny grey" style="margin-top:4px">counted by your own<br>browser. the 68000<br>was busy.</div><br>';
   h += '<a href="frames.html" class="small">[ FRAMES VERSION ]</a><br><br>';
   h += '<img class="btn88" src="img/btn/noroms.png" width="88" height="31" alt="NO ROMS"><br>';
   h += '<img class="btn88" src="img/btn/math.gif" width="88" height="31" alt="DO THE MATH"><br><br>';
