@@ -10,10 +10,13 @@ import host.sdl
 
 const usage = 'usage: vjag [image] [--region ntsc|pal] [--format kind] [--load-address addr] [--entry addr]
                     [--shell | --no-shell] [--exit-after frames] [--capture-window file.bmp]
-                    [--press button@frame[+frames]]...
+                    [--press button@frame[+frames]]... [--press-file file]
        vjag <command> ...    headless commands, see `vjag help`
 
 Without an image the window opens empty; drop an image on it to play.
+--press-file replays presses from a file (one or more a line, # comments),
+counted from the first frame: the pad keys are ignored, the save is neither
+read nor written, and reset starts the replay over.
 
 keys: arrows = d-pad   Z X C = C B A   Enter = Pause   Tab = Option
       0-9 = keypad   Q or - = *   W or = is #
@@ -56,6 +59,7 @@ mut:
 	notice      string // why the last image could not be opened
 	settings    Settings
 	presses     []cli.Press // scripted pad input, by guest frame
+	replay      bool        // the pad belongs to a press file
 	guest_frame int
 	glow        f32    // how brightly the shell's eyes burn, 0..1
 	fresh       [2]u32 // buttons pressed in the current batch of host events
@@ -63,15 +67,16 @@ mut:
 }
 
 fn play(args []string) ! {
-	// Options only the windowed app takes: the shell for this run, and three
-	// that let a script check the presentation path: scripted pad input,
-	// stopping after a number of frames, and saving the window's rendering
-	// of the last one.
+	// Options only the windowed app takes: the shell for this run, and four
+	// that let a script check the presentation path: scripted pad input, a
+	// replay of a press file, stopping after a number of frames, and saving
+	// the window's rendering of the last one.
 	mut settings := load_settings(settings_path())
 	mut rest := []string{}
 	mut exit_after := 0
 	mut capture := ''
 	mut presses := []cli.Press{}
+	mut replay := false
 	mut i := 0
 	for i < args.len {
 		match args[i] {
@@ -91,6 +96,11 @@ fn play(args []string) ! {
 				presses << cli.parse_press(args[i + 1] or { '' })!
 				i += 2
 			}
+			'--press-file' {
+				presses << cli.read_presses(args[i + 1] or { '' })!
+				replay = true
+				i += 2
+			}
 			'--capture-window' {
 				capture = args[i + 1] or { '' }
 				i += 2
@@ -108,7 +118,9 @@ fn play(args []string) ! {
 		path, parsed := cli.parse_image_args(rest)!
 		options = parsed
 		session = cli.open_session(path, options)!
-		cli.load_save(mut session) or { eprintln('vjag: save not loaded: ${err.msg()}') }
+		if !replay {
+			cli.load_save(mut session) or { eprintln('vjag: save not loaded: ${err.msg()}') }
+		}
 	}
 	sdl.init()!
 	defer {
@@ -122,6 +134,7 @@ fn play(args []string) ! {
 		capture:    capture
 		settings:   settings
 		presses:    presses
+		replay:     replay
 	}
 	app.open_window()!
 	app.run()
@@ -310,9 +323,10 @@ fn printable(text string) string {
 	return out.bytestr()
 }
 
-// flush_save persists the cartridge EEPROM of the running image, if any.
+// flush_save persists the cartridge EEPROM of the running image, if any. A
+// replay keeps the player's save as it was.
 fn (mut app App) flush_save() {
-	if app.session.loaded() {
+	if app.session.loaded() && !app.replay {
 		cli.flush_save(mut app.session) or { eprintln('vjag: save not written: ${err.msg()}') }
 	}
 }
@@ -340,7 +354,8 @@ fn (mut app App) handle_events() {
 				app.running = false
 			}
 			.button {
-				if !app.session.loaded() {
+				// A replay is in step only with the pad it was recorded with.
+				if !app.session.loaded() || app.replay {
 					continue
 				}
 				bit := u32(1) << u32(event.button)
@@ -354,8 +369,12 @@ fn (mut app App) handle_events() {
 				app.session.machine.set_button(event.port, event.button, event.pressed)
 			}
 			.focus_lost {
+				// Keys let go of while the window was away are released; the
+				// script's buttons stay held.
 				if app.session.loaded() {
 					app.session.machine.jerry.pads.release_all()
+					mut m := app.session.machine
+					cli.hold_presses(mut m, app.presses, app.guest_frame - 1)
 				}
 			}
 			.drop_file {
@@ -427,8 +446,11 @@ fn (mut app App) load(path string) {
 		return
 	}
 	app.flush_save()
-	cli.load_save(mut session) or { eprintln('vjag: save not loaded: ${err.msg()}') }
+	if !app.replay {
+		cli.load_save(mut session) or { eprintln('vjag: save not loaded: ${err.msg()}') }
+	}
 	app.session = session
+	app.guest_frame = 0
 	app.notice = ''
 	app.paused = false
 	app.fresh = [2]u32{}
