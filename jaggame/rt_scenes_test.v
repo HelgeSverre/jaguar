@@ -245,6 +245,7 @@ fn test_a_fade_goes_through_black_and_the_colour_table_follows_on_both_sides() {
 	first_dark := levels.index(0)
 	assert scenes_seen[first_dark - 1] == 0 && scenes_seen[first_dark + 1] == 1, 'the scene changes while it is black: ${scenes_seen[first_dark - 1..
 		first_dark + 2]}'
+
 	assert levels.last() == 16
 	for k in 0 .. levels.len {
 		// the colour table has the brightness the variable says (the machine is a frame
@@ -268,4 +269,30 @@ fn test_a_fade_goes_through_black_and_the_colour_table_follows_on_both_sides() {
 	assert used > 10
 	left := img.differences(it, p.m.ram).filter(!it.contains('_dirty') && !it.contains('_stale'))
 	assert left.len == 0, left.join('\n')
+}
+
+// The number of the current scene and the test for a scene, as expressions.
+fn test_the_current_scene_is_a_number_and_a_scene_can_be_asked_for_by_name() {
+	mut g := new_game(Config{ sprites: 1, layers: 1 })
+	g.art_cry('box', 8, 8, 1, []u16{len: 64, init: 1})
+	now := g.p.u8('now')
+	in_b := g.p.bool('in_b')
+	mut scenes := g.scenes()
+	mut c := scenes.scene('a')
+	c.set(now, scenes.current())
+
+	c.if_(g.pressed(.a))
+	scenes.go(mut c, 'b')
+	c.end()
+	c = scenes.scene('b')
+	c.set(now, scenes.current())
+	c.set(in_b, scenes.in_scene('b'))
+	scenes.start('a')
+	mut it := g.interpreter(.ntsc)!
+	g.step(mut it, 0)!
+	g.step(mut it, 0)!
+	assert it.value('now')! == 0 && it.value('in_b')! == 0
+	g.step(mut it, button_mask(.a))!
+	g.step(mut it, 0)!
+	assert it.value('now')! == 1 && it.value('in_b')! == 1
 }

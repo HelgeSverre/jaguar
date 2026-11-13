@@ -188,6 +188,29 @@ fn test_the_cartridge_image_runs_and_saves_in_the_emulator() {
 	}
 }
 
+// A program of more than 256 KB, which the copy loop of the first slice could
+// not hold: a table of 300,000 bytes, the last of which the game reads.
+fn test_a_cartridge_of_more_than_256_kb_is_copied_whole() {
+	mut g := new_game(Config{ sprites: 1, layers: 1 })
+	g.art_cry('box', 8, 8, 1, []u16{len: 64, init: 1})
+	mut data := []int{len: 300000}
+	data[299999] = 77
+	data[131072] = 55
+	table := g.p.table_u8('big', data)
+	last := g.p.u8('last')
+	middle := g.p.u8('middle')
+	mut c := g.define_update()
+	c.set(last, table.at(299999))
+	c.set(middle, table.at(131072))
+	img := g.build()!
+	assert img.bytes.len > 300000
+	rom := img.cartridge()!
+	assert rom.len == 0x80000
+	mut p := emulated.boot(rom, false)!
+	p.frames(10)
+	assert img.value(p.m.ram, 'last')! == 77 && img.value(p.m.ram, 'middle')! == 55, 'the whole program was copied'
+}
+
 fn test_save_mistakes_are_reported() {
 	mut g := new_game(Config{ sprites: 1, layers: 1 })
 	g.art_cry('box', 8, 8, 1, []u16{len: 64, init: 1})

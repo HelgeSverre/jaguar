@@ -525,6 +525,58 @@ fn test_the_cells_a_cone_lights_are_the_cells_can_see_says_yes_to() {
 	assert lit > 100
 }
 
+// A camera's cone is a cone like a guard's, at any of 32 angles (not only
+// the four ways a guard faces), 6 tiles long and 22 degrees either side:
+// what its list lights is what `can_see` says, for every tile of random rooms.
+fn test_a_cone_at_any_angle_lights_what_can_see_says_yes_to() {
+	mut rng := rand.new_default(seed_: [u32(31), 32])
+	mut lit := 0
+	mut asked := 0
+	mut odd := 0
+	for room_number in 0 .. 5 {
+		w := 20 + rng.intn(8) or { 0 }
+		h := 14 + rng.intn(6) or { 0 }
+		text := random_room(mut rng, w, h, 8 + room_number * 3)
+		rows := text.trim('\n').split('\n')
+		dir := sight_dir('angles${room_number}')
+		mut g := sight_game(dir, text)
+		mut it := g.interpreter(.ntsc)!
+		for _ in 0 .. 40 {
+			g.step(mut it, 0)!
+		}
+		for _ in 0 .. 8 {
+			tx := 1 + rng.intn(w - 2) or { 1 }
+			ty := 1 + rng.intn(h - 2) or { 1 }
+			if rows[ty][tx] != `.` {
+				continue
+			}
+			facing := (rng.intn(32) or { 0 }) * 8
+			cells := g.view_cells(Room{0, 'arena'}, tx, ty, facing, 96, 16, false)
+			for y in 0 .. h {
+				for x in 0 .. w {
+					if rows[y][x] != `.` {
+						continue
+					}
+					set_query(mut it, Query{tx * 16 + 8, ty * 16 + 8, x * 16 + 8, y * 16 + 8, facing, 96, 16})!
+					g.step(mut it, 0)!
+					says := it.value('see')! == 1
+					in_list := Point{x, y} in cells
+					if says != in_list {
+						odd++
+					}
+					assert says == in_list, 'tile ${x},${y} seen from ${tx},${ty} facing ${facing}: can_see says ${says}, the list says ${in_list}'
+					asked++
+					if in_list {
+						lit++
+					}
+				}
+			}
+		}
+	}
+	println('camera cones: ${asked} tiles asked at 32 angles, ${lit} lit, ${odd} disagreements')
+	assert lit > 100
+}
+
 // set_game changes a tile by cell number or by place when the test says so.
 fn set_game(dir string) &Game {
 	mut g := new_game(Config{ sprites: 1, layers: 1 })

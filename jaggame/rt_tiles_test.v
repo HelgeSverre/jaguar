@@ -442,3 +442,55 @@ fn test_what_the_tile_layer_costs() {
 	assert worst < 180000
 	assert l.value('missed_frames') == 0
 }
+
+// The four flags the game may use, a position outside the room and the size
+// of a room, read by the interpreter from a room that has a tile for each.
+fn test_the_four_user_flags_and_the_edges_of_a_room() {
+	dir := workdir('userflags')
+	mut pic := new_canvas(96, 16)
+	for k in 0 .. 6 {
+		pic.fill(k * 16, 0, 16, 16, 30 + 30 * k, 60, 90)
+	}
+	path := os.join_path(dir, 'six.png')
+	pic.save(path)!
+	mut g := new_game(Config{ sprites: 1, layers: 1, background: background })
+	g.tileset(path)
+	g.legend_tile(`.`, 0, 0)
+	g.legend_tile(`#`, 1, flag_solid)
+	g.legend_tile(`1`, 2, flag_user1)
+	g.legend_tile(`2`, 3, flag_user1 | flag_user2)
+	g.legend_tile(`3`, 4, flag_solid | flag_user3)
+	g.legend_tile(`4`, 5, flag_user4 | flag_item)
+	room := g.room('flags', '
+######
+#.1234
+#....#
+######
+')
+	w, h := g.room_size(room)
+	assert w == 6 && h == 4
+	assert tile_size == 16 && tile_none == 255 && max_step == 16
+	flags := g.p.array_u8('seen_flags', 8)
+	outside := g.p.u8('outside')
+	mut c := g.define_init()
+	g.load_room(mut c, room)
+	c = g.define_update()
+	c.if_(g.loading.invert())
+	for k in 0 .. 5 {
+		c.set(flags.at(k), g.flags_at(24 + 16 * k, 24))
+	}
+	c.set(outside, g.tile_at(-5, 24))
+	c.end()
+	mut it := g.interpreter(.ntsc)!
+	for _ in 0 .. 60 {
+		g.step(mut it, 0)!
+	}
+	assert it.element('seen_flags', 0)! == 0
+	assert it.element('seen_flags', 1)! == flag_user1
+	assert it.element('seen_flags', 2)! == flag_user1 | flag_user2
+	assert it.element('seen_flags', 3)! == flag_solid | flag_user3
+	assert it.element('seen_flags', 4)! == flag_user4 | flag_item
+	assert it.value('outside')! == tile_none
+	// the four are different bits that are not the four the runtime uses
+	assert (flag_user1 | flag_user2 | flag_user3 | flag_user4) & (flag_solid | flag_cover | flag_exit | flag_item) == 0
+}

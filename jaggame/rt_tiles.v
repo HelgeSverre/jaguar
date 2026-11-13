@@ -32,12 +32,12 @@ const tile_queue_size = 128
 // and drawing them all in one frame took a third of it. What does not fit
 // waits for the next frames, so the picture can trail the map by a few frames
 // after a big change.
-const tile_draws_per_frame = 12
+const tile_draws_per_frame = 7
 
 // tile_draws_light is how many are drawn when fewer than that wait: a small
 // change is spread thinner, so that a frame that has a cone to move does not
 // also have all of its tiles to draw.
-const tile_draws_light = 5
+const tile_draws_light = 4
 
 // TileVars is what the tile layer declares in the program: variables and
 // functions, made by `use_map`.
@@ -176,7 +176,7 @@ pub fn (mut g Game) hide_room(mut c Code) {
 }
 
 // set_tile puts a tile at a column and a row of the room (in tiles) and
-// redraws it, at most 12 changes a frame (`tile_draws_per_frame`): up to
+// redraws it, at most 7 changes a frame (`tile_draws_per_frame`): up to
 // 128 wait their turn, so a big change shows over a few frames; more than that
 // are counted in `rt_tile_lost` and not drawn. A place outside the room is
 // ignored.

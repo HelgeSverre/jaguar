@@ -20,23 +20,31 @@ import jagkit { abs, imm, inc, lbl }
 const cartridge_entry = u32(0x802000)
 
 // cartridge builds the cartridge image of a game image: the length is the next
-// power of two of at least 128 KB.
+// power of two of at least 128 KB. (Until slice 6 the copy loop could hold 256
+// KB; GHOSTGRID's tables for its twelve rooms are more than that.)
 pub fn (img &Image) cartridge() ![]u8 {
 	entry := img.symbols['rt.start'] or {
 		return error('cartridge: the image has no `rt.start`; it is not a game image')
 	}
 	longs := (img.payload.len + 3) / 4
-	if longs > 65536 {
-		return error('cartridge: the program is ${img.payload.len} bytes; the copy loop holds 256 KB')
+	if longs > 0x4000000 {
+		return error('cartridge: the program is ${img.payload.len} bytes; the copy loop holds 256 MB')
 	}
+	// The count is 32 bits, but dbra counts 16: an inner loop of up to 65536
+	// longs inside an outer loop on the count's high half.
 	mut m := jagkit.new_m68k(cartridge_entry)
 	m.move_to_sr(imm(0x2700))
 	m.lea(lbl('cart.payload'), a0)
 	m.lea(abs(load_address), a1)
-	m.move(.w, imm(longs - 1), d0)
+	m.move(.l, imm(longs - 1), d0)
+	m.swap(d0)
+	m.label('cart.outer')
+	m.swap(d0)
 	m.label('cart.copy')
 	m.move(.l, inc(a0), inc(a1))
 	m.dbra(d0, 'cart.copy')
+	m.swap(d0)
+	m.dbra(d0, 'cart.outer')
 	m.jmp(abs(entry))
 	m.align(4)
 	m.label('cart.payload')
