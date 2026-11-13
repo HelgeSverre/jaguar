@@ -1,5 +1,6 @@
 module cli
 
+import os
 import stbi
 import machine
 
@@ -35,6 +36,30 @@ fn frame_rgb(m &machine.Machine) ([]u8, int, int) {
 pub fn write_png(m &machine.Machine, path string) ! {
 	rgb, width, height := frame_rgb(m)
 	stbi.stbi_write_png(path, width, height, 3, rgb.data, width * 3)!
+}
+
+// Film is a video written as a stream of binary PPM images, one per frame:
+// `ffmpeg -f image2pipe -c:v ppm -i frames.ppm`.
+pub struct Film {
+mut:
+	file   os.File
+	width  int = 320
+	height int = 240
+}
+
+// add appends the current frame. While video is off the machine has no
+// picture; the film then gets a black frame of the last size, so it keeps one
+// image per emulated frame.
+pub fn (mut f Film) add(m &machine.Machine) ! {
+	mut rgb, width, height := frame_rgb(m)
+	if width == 0 || height == 0 {
+		rgb = []u8{len: f.width * f.height * 3}
+	} else {
+		f.width = width
+		f.height = height
+	}
+	f.file.write_string('P6\n${f.width} ${f.height}\n255\n')!
+	f.file.write(rgb)!
 }
 
 // frame_stats measures the current frame.

@@ -25,6 +25,8 @@ common options:
   --jobs <n>                 compat: parallel workers (default: all cores)
   --screenshot <png>         run: save the final frame
   --wav <file>               run: save the generated audio
+  --video <ppm>              run: save every frame as a stream of PPM images
+  --video-from <n>           run: first frame saved by --video (default 0)
   --dump                     run: print machine state at the end
   --peek <addr[:len]>        run: print memory at the end (repeatable)
   --list <addr[:count]>      run: disassemble 68000 code at the end (repeatable)
@@ -97,6 +99,8 @@ fn run_command(command string, args []string) ! {
 	presses := parser.string_multi('press', 0, 'hold a pad button: button@frame[+frames]')
 	io_range := parser.string('watch-io', 0, '', 'log register writes in lo:hi')
 	wav := parser.string('wav', 0, '', 'write the generated audio as WAV')
+	video := parser.string('video', 0, '', 'write every frame as a stream of PPM images')
+	video_from := parser.int('video-from', 0, 0, 'first frame written by --video')
 	processor := parser.string('cpu', 0, 'dsp', 'processor to trace')
 	tail := parser.int('tail', 0, 64, 'instructions to print')
 	stop_text := parser.string('stop-pc', 0, '', 'stop address')
@@ -120,6 +124,8 @@ fn run_command(command string, args []string) ! {
 				listings:   listings
 				io_range:   io_range
 				wav:        wav
+				video:      video
+				video_from: video_from
 				presses:    presses.map(parse_press(it)!)
 			})!
 		}
@@ -177,6 +183,8 @@ struct RunOptions {
 	frames     int
 	screenshot string   // PNG of the final frame
 	wav        string   // generated audio
+	video      string   // every frame, as concatenated binary PPM images
+	video_from int      // first frame written to `video`
 	dump_state bool     // processor, video and display-list state at the end
 	peeks      []string // memory ranges `addr[:len]` to print
 	listings   []string // 68000 code ranges `addr[:count]` to disassemble
@@ -195,14 +203,27 @@ fn run_headless(path string, options ImageOptions, run RunOptions) ! {
 	}
 	mut pcm := []i16{len: 8192}
 	mut recording := WavWriter{}
+	mut film := Film{}
+	if run.video != '' {
+		os.mkdir_all(os.dir(run.video))!
+		film.file = os.create(run.video)!
+	}
+	defer {
+		film.file.close()
+	}
 	for frame in 0 .. run.frames {
 		apply_presses(mut m, run.presses, frame)
 		if m.run_frame() == .cpu_halted {
 			println('68000 halted: ${m.cpu.str_state()}')
 			break
 		}
-		if run.wav != '' {
+		if run.wav != '' && frame >= run.video_from {
 			recording.append(pcm, m.drain_audio(mut pcm), m.audio_rate())
+		} else if run.wav != '' {
+			m.drain_audio(mut pcm)
+		}
+		if run.video != '' && frame >= run.video_from {
+			film.add(m)!
 		}
 	}
 	if run.wav != '' {
