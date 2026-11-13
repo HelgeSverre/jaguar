@@ -26,7 +26,7 @@ The Jaguar is an odd machine: a Motorola 68000 that mostly gets out of the way, 
 
 The home page lives in [`website/`](website/README.md): static HTML, gameplay GIFs, the music video.
 
-The four above are public-domain homebrew. No commercial ROMs or boot ROM images come with this project; bring your own, or start with the [game that is built from source here](#write-your-own).
+The four above are public-domain homebrew from the Jaguar scene: JagMarble (1999), a Mandelbrot demo, Matthias Domin's Chroma-Luma Color Pick (1996) and Robert Jurziga's Hubble Nebula. No commercial ROMs or boot ROM images come with this project; bring your own, or start with the [game that is built from source here](#write-your-own).
 
 ## Where it stands
 
@@ -243,3 +243,5 @@ The shell artwork was generated with an OpenAI image model, using Evan Amos's ph
 ## Licence
 
 MIT. See [LICENSE](LICENSE).
+
+Atari and Jaguar are trademarks of their respective owners. vjag is a fan project, not affiliated with or endorsed by them.
