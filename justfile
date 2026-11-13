@@ -45,6 +45,13 @@ demo name="maw": release
     v run demos/{{ name }}
     ./bin/vjag demos/{{ name }}.jag
 
+# Watch a demo's test robot play it, from the press file its test keeps, e.g. `just roboplay hero`.
+[group('run')]
+roboplay name="ghostgrid" *args: release
+    @[ -f demos/{{ name }}/roboplay.press ] || { echo "no robot for {{ name }}; robots: $(ls demos/*/roboplay.press | cut -d/ -f2 | tr '\n' ' ')" >&2; exit 1; }
+    v run demos/{{ name }}
+    shift; ./bin/vjag demos/{{ name }}.jag --press-file demos/{{ name }}/roboplay.press "$@"
+
 # Rewrite docs/jagkit-reference.md and docs/jaggame/reference.md from the comments in the source.
 [group('check')]
 reference:

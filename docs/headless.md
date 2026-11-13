@@ -38,6 +38,7 @@ Addresses are written with `0x` for hexadecimal; a bare number is decimal.
 | `--video <ppm>` | save every frame as one stream of binary PPM images |
 | `--video-from <n>` | first frame saved by `--video`; the `--wav` starts there too, so the two stay in step |
 | `--press <button@frame[+n]>` | hold a pad button from a frame, for `n` frames (6 if left out); repeatable |
+| `--press-file <file>` | presses from a file, in the form of `--press`, one or more a line, separated by spaces; `#` starts a comment, blank lines are fine; a bad line is named by its number |
 | `--eeprom-in <file>` | load a 128-byte EEPROM image before the first frame |
 | `--eeprom-out <file>` | write the 128-byte EEPROM image after the last frame |
 | `--dump` | print the processors, the video registers and the display list at the end |
@@ -47,6 +48,8 @@ Addresses are written with `0x` for hexadecimal; a bare number is decimal.
 
 Buttons for `--press`: `up`, `down`, `left`, `right`, `a`, `b`, `c`, `option`, `pause`, `0` to `9`, `star`, `hash`.
 
+`vjag <image> --press-file <file>` replays such a file in the window, frame for frame as `run` would: frame 0 is the first one run, pause and fast-forward stop and speed the count with the machine, and reset (R) starts the replay over. While it plays, the pad keys are ignored (a stray key would put the game out of step), the buttons it holds stay held when the window loses focus, and the save is neither loaded nor written, so the game starts from the erased chip the recording did. A file without comments is also a `--holds-file` for the second emulator below.
+
 ```sh
 # Start a game at frame 30, hold right for a second, look at the result.
 vjag_test run demos/wirewing.jag --frames 200 --press b@30 --press right@60+60 --screenshot shot.png
@@ -54,6 +57,11 @@ vjag_test run demos/wirewing.jag --frames 200 --press b@30 --press right@60+60 -
 # A film with sound: frames and audio from frame 120 on, joined with ffmpeg.
 vjag_test run demos/maw.jag --frames 720 --video out/maw.ppm --video-from 120 --wav out/maw.wav
 ffmpeg -framerate 60 -f image2pipe -c:v ppm -i out/maw.ppm -i out/maw.wav -pix_fmt yuv420p out/maw.mp4
+
+# The same presses from a file. The desktop app takes it too, and replays it
+# in step with this runner: frame 0 is the first one run.
+vjag_test run demos/hero.jag --frames 600 --press-file demos/hero/roboplay.press --screenshot shot.png
+vjag demos/hero.jag --press-file demos/hero/roboplay.press
 
 # What is in the program's variables?
 vjag_test run demos/hello.jag --frames 60 --peek 0x4000:64 --list 0x4000:20

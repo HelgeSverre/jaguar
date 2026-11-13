@@ -6,7 +6,13 @@ Programs written with [`jagkit`](../jagkit/README.md). Each directory is a V pro
 just run demos/maw.jag        # run an image that is already built
 just demo maw                 # rebuild it from its V source first
 v -prod test demos/maw/       # its test
+just roboplay ghostgrid       # watch its test's robot play it, where it has one
 ```
+
+`just roboplay` opens the app on the image with `--press-file demos/<name>/roboplay.press`, the robot's pad written down frame by frame; the demo's test plays that file on a fresh machine and checks the robot's result, so it stays in step with the game.
+
+- `ghostgrid`: DEPOT, ARCHIVE, SPRINT and ANNEX one after the other from the title, each unseen with an S. `GHOSTGRID_ROBOPLAY=1 v -prod test demos/ghostgrid/roboplay_test.v` plans them again and rewrites the file.
+- `hero`: the finale from the title, every note a perfect. `HERO_ROBOPLAY=1 v -prod test demos/hero/` rewrites the file; the test fails when it differs from what the robot presses now.
 
 | Demo | What it is | Size | Controls |
 |---|---|---|---|

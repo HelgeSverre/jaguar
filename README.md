@@ -174,6 +174,7 @@ gpu.addqt(2, target)           // delay slot
 ```sh
 just demo hello               # build an image from its V source, then run it
 just run demos/hero.jag       # or run one that is already built
+just roboplay ghostgrid       # watch the test's robot play it (ghostgrid, hero)
 ```
 
 <p>
