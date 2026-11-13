@@ -73,6 +73,18 @@ pub fn pad(buttons ...jaggame.Button) u32 {
 	return mask
 }
 
+// button_bits is a pad value as the machine holds it, a bit per
+// `jerry.Button`, the form `cli.presses_of` reads.
+pub fn button_bits(mask u32) u32 {
+	mut bits := u32(0)
+	for i, button in robot_masks {
+		if mask & jaggame.button_mask(button) != 0 {
+			bits |= u32(1) << u32(robot_buttons[i])
+		}
+	}
+	return bits
+}
+
 // hold_pad presses exactly the buttons of a pad value on the first pad.
 fn hold_pad(mut p emulated.Player, mask u32) {
 	for i, button in robot_masks {
