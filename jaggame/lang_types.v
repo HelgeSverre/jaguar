@@ -106,8 +106,9 @@ fn (t Type) shift() int {
 	}
 }
 
-// fix_from_float rounds a float to the nearest 16.16 value.
-fn fix_from_float(f f64) i64 {
+// fix_raw is the raw 16.16 value nearest to a float: `fix_raw(1.5)` is
+// 98304.
+pub fn fix_raw(f f64) i64 {
 	scaled := f * fix_one
 	if scaled < 0 {
 		return -i64(-scaled + 0.5)

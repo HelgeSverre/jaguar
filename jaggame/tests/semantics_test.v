@@ -1,5 +1,6 @@
-module jaggame
+module main
 
+import jaggame
 import jaggame.emulated
 
 // The behaviour the language defines on purpose, each case worked out by
@@ -11,13 +12,13 @@ import jaggame.emulated
 
 struct Case {
 	name string
-	t    Type
-	e    Expr
+	t    jaggame.Type
+	e    jaggame.Expr
 	want i64
 }
 
 fn test_the_defined_behaviour() {
-	mut p := new_program()
+	mut p := jaggame.new_program()
 	i8_min := p.i8('i8_min', -128)
 	i8_m7 := p.i8('i8_m7', -7)
 	i8_m1 := p.i8('i8_m1', -1)
@@ -73,20 +74,20 @@ fn test_the_defined_behaviour() {
 		Case{'shl out of the type', .u8, u8_one.shl(8), 0},
 		Case{'a shift count is masked to 5 bits', .u32, u32_five.shl(u32_33), 10},
 		Case{'shr of -1', .i32, i32_m1.shr(31), -1},
-		Case{'fix product', .fix, speed.mul(2.25), fix_from_float(3.375)},
+		Case{'fix product', .fix, speed.mul(2.25), jaggame.fix_raw(3.375)},
 		Case{'fix product rounds down', .fix, tiny.mul(half), 0},
 		Case{'a negative one too', .fix, tiny.neg().mul(half), -1},
 		Case{'fix quotient rounds toward zero', .fix, one.div(three), 21845},
 		Case{'a negative one too', .fix, one.neg().div(three), -21845},
-		Case{'fix remainder', .fix, f_m75.mod(2), fix_from_float(-1.5)},
-		Case{'fix with an integer', .fix, speed.add(u8_two), fix_from_float(3.5)},
+		Case{'fix remainder', .fix, f_m75.mod(2), jaggame.fix_raw(-1.5)},
+		Case{'fix with an integer', .fix, speed.add(u8_two), jaggame.fix_raw(3.5)},
 		Case{'fix to integer rounds down', .i16, half.neg().as_(.i16), -1},
 		Case{'fix to u8', .u8, speed.add(1.25).as_(.u8), 2},
 		Case{'narrowing cuts', .u8, i16_300.as_(.u8), 44},
 		Case{'i8 to u16', .u16, i8_m1.as_(.u16), 65535},
 		Case{'u8 to i8', .i8, u8_255.as_(.i8), -1},
 		Case{'integer to fix wraps', .fix, u16_40000.as_(.fix), -1673527296},
-		Case{'bool to fix', .fix, t.as_(.fix), fix_one},
+		Case{'bool to fix', .fix, t.as_(.fix), jaggame.fix_one},
 		Case{'to bool compares with 0', .bool, half.as_(.bool), 1},
 		Case{'abs of the smallest', .i16, i16_min.abs(), -32768},
 		Case{'neg of the smallest', .i8, i8_min.neg(), -128},

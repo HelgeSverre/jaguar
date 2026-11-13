@@ -18,6 +18,7 @@ Every public name in `jaggame`, with the comment from its source. This file is g
 | `fn (t Type) smallest() i64` | smallest is the smallest raw value of the type. |
 | `fn (t Type) largest() i64` | largest is the largest raw value of the type. |
 | `fn (t Type) wrap(v i64) i64` | wrap reduces a raw value to the type's width, the way the 68000 does: the bits above the width are dropped and a signed type is sign-extended. |
+| `fn fix_raw(f f64) i64` | fix_raw is the raw 16.16 value nearest to a float: `fix_raw(1.5)` is 98304. |
 | `fn fix_value(raw i64) f64` | fix_value turns a raw `fix` into a float, for tests and messages. |
 
 ## Expressions

@@ -186,7 +186,7 @@ fn constant(t Type, v Val) !i64 {
 			if !fix_fits(v) {
 				return error('${v} does not fit fix (${t.range()})')
 			}
-			return fix_from_float(v)
+			return fix_raw(v)
 		}
 		bool {
 			if t != .bool {

@@ -1,5 +1,6 @@
-module jaggame
+module main
 
+import jaggame
 import jaggame.emulated
 import math
 
@@ -11,14 +12,14 @@ import math
 // guide_test.v checks that the quotes match.
 
 struct BothWays {
-	it  &Interpreter
-	img Image
+	it  &jaggame.Interpreter
+	img jaggame.Image
 	ram []u8
 }
 
 // run_both_ways runs `main` in the interpreter and in the emulator and
 // fails on any variable that differs.
-fn run_both_ways(p &Program, main Func) !BothWays {
+fn run_both_ways(p &jaggame.Program, main jaggame.Func) !BothWays {
 	mut it := p.interpreter()!
 	it.run(main.name)!
 	img := p.plain_image(main)!
@@ -57,7 +58,7 @@ fn sort_input() []int {
 fn test_insertion_sort() {
 	values := sort_input()
 	// guide:sort
-	mut p := new_program()
+	mut p := jaggame.new_program()
 	input := p.table_i16('input', values)
 	data := p.array_i16('data', 32)
 	sort := p.func('sort', [], .void)
@@ -88,7 +89,7 @@ fn test_insertion_sort() {
 fn test_primes() {
 	limit := 2000
 	// guide:primes
-	mut p := new_program()
+	mut p := jaggame.new_program()
 	composite := p.array('composite', .bool, limit)
 	primes := p.array_u16('primes', 400)
 	count := p.u16('count')
@@ -138,7 +139,7 @@ fn sine_table() []f64 {
 
 fn test_a_sine_walk() {
 	// guide:sine
-	mut p := new_program()
+	mut p := jaggame.new_program()
 	sines := p.table_fix('sines', sine_table())
 	path := p.array_fix('path', 64)
 	angle := p.u16('angle') // 256 steps to a turn in the high byte
@@ -155,13 +156,13 @@ fn test_a_sine_walk() {
 	// guide:end
 	run := run_both_ways(p, walk)!
 	// The same in V: 16.16 values as integers, products rounded down.
-	raw := sine_table().map(fix_from_float(it))
+	raw := sine_table().map(jaggame.fix_raw(it))
 	mut a := 0
 	mut position := i64(0)
 	mut expected := []i64{}
 	for _ in 0 .. 64 {
 		a = (a + 1000) & 0xffff
-		position += (raw[a >> 8] * fix_from_float(2.5)) >> 16
+		position += (raw[a >> 8] * jaggame.fix_raw(2.5)) >> 16
 		expected << position
 	}
 	assert run.values('path', 64) == expected
@@ -169,23 +170,24 @@ fn test_a_sine_walk() {
 
 fn test_records_and_functions_calling_functions() {
 	// guide:records
-	mut p := new_program()
-	guard := p.record('Guard', [Field{'x', .fix}, Field{'y', .fix},
-		Field{'state', .u8}, Field{'timer', .u16}])
+	mut p := jaggame.new_program()
+	guard := p.record('Guard', [jaggame.Field{'x', .fix}, jaggame.Field{'y', .fix},
+		jaggame.Field{'state', .u8}, jaggame.Field{'timer', .u16}])
 	guards := p.array_of('guards', guard, 8)
 	nearest := p.u8('nearest')
 
-	clamp := p.func('clamp', [Param{'v', .fix}, Param{'lo', .fix},
-		Param{'hi', .fix}], .fix)
+	clamp := p.func('clamp', [jaggame.Param{'v', .fix}, jaggame.Param{'lo', .fix},
+		jaggame.Param{'hi', .fix}], .fix)
 	mut c := p.define(clamp)
 	c.ret(clamp.arg('v').max(clamp.arg('lo')).min(clamp.arg('hi')))
 
-	distance := p.func('distance', [Param{'dx', .fix}, Param{'dy', .fix}], .fix)
+	distance := p.func('distance', [jaggame.Param{'dx', .fix},
+		jaggame.Param{'dy', .fix}], .fix)
 	c = p.define(distance)
 	c.ret(distance.arg('dx').abs().add(distance.arg('dy').abs()))
 
 	// step moves guard i right until x is 100, then left until it is 0.
-	step := p.func('step', [Param{'i', .u8}], .void)
+	step := p.func('step', [jaggame.Param{'i', .u8}], .void)
 	c = p.define(step)
 	g := guards.at(step.arg('i'))
 	c.if_(g.field('state').eq(0))
@@ -202,7 +204,7 @@ fn test_records_and_functions_calling_functions() {
 	c.inc(g.field('timer'))
 
 	// find is the guard nearest to (px, py).
-	find := p.func('find', [Param{'px', .fix}, Param{'py', .fix}], .u8)
+	find := p.func('find', [jaggame.Param{'px', .fix}, jaggame.Param{'py', .fix}], .u8)
 	c = p.define(find)
 	i := c.local_u8('i')
 	best := c.local_fix('best')
@@ -236,7 +238,7 @@ fn test_records_and_functions_calling_functions() {
 	run := run_both_ways(p, main)!
 
 	// The same in V.
-	one := i64(fix_one)
+	one := i64(jaggame.fix_one)
 	mut xs := []i64{len: 8, init: index * 12 * one}
 	ys := []i64{len: 8, init: index * 5 * one}
 	mut states := []int{len: 8}

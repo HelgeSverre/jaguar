@@ -54,8 +54,8 @@ fn test_compiled_code_leaves_a5_a6_and_d7_alone() {
 	assert img.value(ram, 'kept_a6')! == 0x66_6666
 	// 1000 * 123456789 wraps to 1234567890 * 100 mod 2^32; the rest by hand.
 	product := (u64(1000) * 123456789) & 0xffff_ffff
-	squared := (i64(fix_from_float(3.25)) * fix_from_float(3.25)) >> 16
-	quotient := (squared * fix_one) / fix_from_float(4.25)
+	squared := (i64(fix_raw(3.25)) * fix_raw(3.25)) >> 16
+	quotient := (squared * fix_one) / fix_raw(4.25)
 	expected := (product / 1000 + u64(-77777 / -3 % 7) + u64(quotient >> 16)) & 0xffff_ffff
 	assert img.value(ram, 'result')! == i64(expected)
 }
