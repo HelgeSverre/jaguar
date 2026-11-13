@@ -302,3 +302,29 @@ fn test_normi_normalises_to_bit_23() {
 	assert normalisation_integer(1) == u32(-23)
 	assert normalisation_integer(0x8000_0000) == 8
 }
+
+// The GPU moves a long outside its own memory at once and ignores the two
+// low address bits; the DSP's bus is 16 bits wide, so its long is two word
+// transfers and needs only an even address. Programs exist that depend on
+// each.
+fn test_external_longs_align_to_the_width_of_each_bus() {
+	for gpu in [true, false] {
+		mut c := if gpu { new_gpu() } else { new_dsp() }
+		mut bus := &TestBus{}
+		bus.write32(0x4000, 0x1122_3344)
+		bus.write32(0x4004, 0x5566_7788)
+		mut program := movei(0x4002, 1)
+		program << ins(.load, 1, 2)
+		program << movei(0x4013, 5)
+		program << ins(.store, 5, 2)
+		program << stop(c)
+		load_and_run(mut c, mut bus, program)
+		if gpu {
+			assert c.regs[2] == 0x1122_3344
+			assert bus.read32(0x4010) == 0x1122_3344
+		} else {
+			assert c.regs[2] == 0x3344_5566
+			assert bus.read32(0x4012) == 0x3344_5566
+		}
+	}
+}

@@ -322,6 +322,15 @@ fn (mut c Risc) set_ram32(addr u32, value u32) {
 	c.ram[i + 3] = u8(value)
 }
 
+// external_long_mask aligns the address of a long outside the processor's
+// own memory. The DSP sits on a bus 16 bits wide: a long is two word
+// transfers and needs only word alignment. The GPU moves a long at once
+// and ignores the two low address bits.
+@[inline]
+fn (c &Risc) external_long_mask() u32 {
+	return if c.variant == .gpu { u32(0xffff_fffc) } else { u32(0xffff_fffe) }
+}
+
 // load32 is a processor-initiated long read.
 @[inline]
 fn (mut c Risc) load32(mut bus hwtypes.Bus, addr u32) u32 {
@@ -331,9 +340,7 @@ fn (mut c Risc) load32(mut bus hwtypes.Bus, addr u32) u32 {
 	if c.owns_ctrl(addr) {
 		return c.read_ctrl32(addr - c.ctrl_base)
 	}
-	// The external bus is 16 bits wide: a long is two word transfers and
-	// needs only word alignment.
-	return bus.read32(addr & 0xffff_fffe)
+	return bus.read32(addr & c.external_long_mask())
 }
 
 // store32 is a processor-initiated long write.
@@ -344,7 +351,7 @@ fn (mut c Risc) store32(mut bus hwtypes.Bus, addr u32, value u32) {
 	} else if c.owns_ctrl(addr) {
 		c.write_ctrl32(addr - c.ctrl_base, value)
 	} else {
-		bus.write32(addr & 0xffff_fffe, value)
+		bus.write32(addr & c.external_long_mask(), value)
 	}
 }
 
