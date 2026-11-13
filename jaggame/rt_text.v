@@ -247,6 +247,7 @@ fn (mut g Game) define_text() {
 			k := c.local_u16('k')
 			at := c.local_u16('at')
 			glyph := c.local_u8('glyph')
+
 			c.for_(k, 0, f.arg('count'))
 			c.set(glyph, pool.at(f.arg('from').add(k)))
 			c.set(at, f.arg('cell').add(k))
@@ -265,10 +266,12 @@ fn (mut g Game) define_text() {
 			f := t.clear_func
 			mut c := g.p.define(f)
 			k := c.local_u16('k')
+
 			c.for_(k, 0, t.columns * t.rows)
 			c.set(cells.at(k), 0)
 			c.set(stale.at(k), 1)
 			c.end()
+
 			c.for_(k, 0, t.rows)
 			c.set(dirty.at(k), 1)
 			c.end()

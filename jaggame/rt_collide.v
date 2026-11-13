@@ -133,12 +133,14 @@ fn (mut g Game) define_slide() {
 
 	c.if_(mx.gt(0))
 	c.set(edge, left.add(w).sub(1).shr(4)) // the column of the right edge
+
 	c.if_(tv.col_solid.call(edge, top.shr(4), top.add(h).sub(1).shr(4)))
 	c.set(nx, edge.shl(4).sub(w).sub(ox).as_(.fix))
 	c.set(hit, hit.or_(1))
 	c.end() // a wall on the right
 	c.else_()
 	c.set(edge, left.shr(4)) // the column of the left edge
+
 	c.if_(tv.col_solid.call(edge, top.shr(4), top.add(h).sub(1).shr(4)))
 	c.set(nx, edge.add(1).shl(4).sub(ox).as_(.fix))
 	c.set(hit, hit.or_(1))
@@ -155,12 +157,14 @@ fn (mut g Game) define_slide() {
 
 	c.if_(my.gt(0))
 	c.set(edge, top.add(h).sub(1).shr(4)) // the row of the bottom edge
+
 	c.if_(tv.row_solid.call(edge, left.shr(4), left.add(w).sub(1).shr(4)))
 	c.set(ny, edge.shl(4).sub(h).sub(oy).as_(.fix))
 	c.set(hit, hit.or_(2))
 	c.end() // a wall below
 	c.else_()
 	c.set(edge, top.shr(4)) // the row of the top edge
+
 	c.if_(tv.row_solid.call(edge, left.shr(4), left.add(w).sub(1).shr(4)))
 	c.set(ny, edge.add(1).shl(4).sub(oy).as_(.fix))
 	c.set(hit, hit.or_(2))

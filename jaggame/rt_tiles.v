@@ -302,6 +302,7 @@ fn (mut g Game) define_map() {
 	c.else_()
 	c.set(tv.from, tv.next)
 	c.set(tv.to, tv.next.add(tiles_per_frame).min(tv.cells))
+
 	c.for_(i, tv.from, tv.to)
 	c.set(grid.at(i), room_tiles.at(tv.first.add(i)))
 	c.end() // for each tile
@@ -343,6 +344,7 @@ fn (mut g Game) define_follow(follow Func) {
 	mut c := g.p.define(follow)
 	x := follow.arg('x')
 	y := follow.arg('y')
+
 	c.if_(g.room_width.le(logical_width))
 	c.set(g.camera_x, g.room_width.sub(logical_width).div(2))
 	c.else_()
