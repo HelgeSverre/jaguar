@@ -85,7 +85,7 @@
 <td valign="top">
 <p>Bank with left and right, pull back to climb, fly through the spinning beacons before the tank is dry. The GPU projects the corners of a rolling landscape around the eye, with perspective, bank and distance shading, and joins them with lines it draws itself, <b>sixty pictures a second</b>.</p>
 <p>Fly into a hill and the onboard computer has a remark ready:</p>
-<img class="tv" src="img/wirewing-crash.png" width="217" height="160" alt="WHERE DID YOU LEARN TO FLY?">
+<img class="tv" id="crashpic" src="img/wirewing-crash.png" width="217" height="160" alt="WHERE DID YOU LEARN TO FLY?" title="click it. go on." style="cursor:pointer" onclick="crashMode()"><br><span class="tiny blink red">&lt;-- CLICK IT</span>
 </td></tr></table>
 
 <h2 id="plasma">PLASMA</h2>
@@ -98,6 +98,169 @@
 
 <h2>PAL, BY THE WAY</h2>
 <p>Anything counted in frames runs a sixth slower at 50 Hz. The tunes are corrected: MAW plays a step every five frames instead of six, and Jaguar Hero advances the song twice on every fifth frame. Movement is not: MAW's tunnel and WIREWING's plane are a sixth slower on a PAL machine. Europe, we apologize.</p>
+
+<div id="crash" hidden><canvas id="crashcv"></canvas><div class="crashscan"></div><div class="crashhint pixel blink">CLICK OR ESC TO EJECT</div></div>
+<style>
+#crash { position: fixed; inset: 0; z-index: 2000; background: #000; cursor: crosshair; }
+#crash canvas { display: block; width: 100%; height: 100%; }
+#crash.shake { animation: crashshake 0.12s steps(2) infinite; }
+@keyframes crashshake { 0% { transform: translate(0,0); } 25% { transform: translate(-6px,3px); } 50% { transform: translate(5px,-4px); } 75% { transform: translate(-3px,-5px); } 100% { transform: translate(4px,2px); } }
+.crashscan { position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(to bottom, rgba(0,0,0,0) 0, rgba(0,0,0,0) 2px, rgba(0,0,0,0.45) 3px, rgba(0,0,0,0) 4px); }
+.crashhint { position: absolute; left: 0; right: 0; bottom: 16px; text-align: center; color: #ffd700; font-size: 10px; text-shadow: 2px 2px 0 #000; }
+</style>
+<script>
+var crashRun = null;
+function crashMode() {
+  var box = document.getElementById("crash"), cv = document.getElementById("crashcv"), x = cv.getContext("2d");
+  box.hidden = false;
+  if (box.requestFullscreen) box.requestFullscreen().catch(function () {});
+  var W, H, dpr = 1;
+  function size() { W = cv.width = Math.floor(innerWidth / 2); H = cv.height = Math.floor(innerHeight / 2); }
+  size(); addEventListener("resize", size);
+  x.imageSmoothingEnabled = false;
+  cv.style.imageRendering = "pixelated";
+
+  var PHRASES = [
+    "WHERE DID YOU LEARN TO FLY?",
+    "WHERE DID YOU LEARN TO FLY, WHERE DID YOU LEARN TO FLY?",
+    "WEHRE DID YOU LERARN TO FLY",
+    "WHERE DID YOU LEARN TO FLY??????",
+    "WHER DID YUO LEARN TO FYL",
+    "WHERE DID YOU LEARN TO FLY? WHERE DID YOU LEARN TO",
+    "PRESS FIRE",
+    "W H E R E   D I D   Y O U   L E A R N   T O   F L Y",
+    "WHEREDIDYOULEARNTOFLYWHEREDIDYOULEARNTOFLY",
+    "FUEL 000",
+    "WHERE DID YOU LEARN TO FLY?!?!"
+  ];
+  var lines = [], writers = [], t0 = performance.now(), last = t0, boom = 1;
+
+  // the noise of a plane meeting a hill
+  try {
+    var ac = new (window.AudioContext || window.webkitAudioContext)();
+    var len = ac.sampleRate * 0.6, buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0);
+    for (var i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2);
+    var src = ac.createBufferSource(), g = ac.createGain(); g.gain.value = 0.35;
+    src.buffer = buf; src.connect(g); g.connect(ac.destination); src.start();
+  } catch (e) {}
+
+  function newWriter(t) {
+    var prev = lines.length ? lines[lines.length - 1] : null;
+    var size = Math.random() < 0.12 ? 16 : 8;
+    var y = prev ? prev.y + prev.size + 4 + Math.random() * 6 : 14;
+    var xx = prev ? prev.x + (Math.random() * 90 - 25) : 6;
+    if (y > H - 10) { y = 10 + Math.random() * 30; xx = Math.random() * W * 0.6; }
+    if (xx > W - 60) xx = Math.random() * 40;
+    var ln = { text: PHRASES[Math.floor(Math.random() * PHRASES.length)], x: xx, y: y, size: size, n: 0, born: t, red: Math.random() < 0.3 };
+    lines.push(ln);
+    if (lines.length > 140) lines.shift();
+    return { line: ln, speed: 25 + Math.random() * 40 + (t - t0) / 120 };
+  }
+
+  function terrain(t) {
+    var cols = 15, rows = 14, horizon = H * 0.38;
+    var fly = t / 250, bank = Math.sin(t / 900) * 0.35 + (Math.random() < 0.05 ? (Math.random() - 0.5) : 0);
+    var red = Math.floor(t / 180) % 9 !== 0;
+    x.strokeStyle = red ? "#d02818" : "#20c040";
+    x.lineWidth = 1;
+    var pts = [];
+    for (var r = 0; r < rows; r++) {
+      var z = rows - r - (fly % 1);
+      var row = [];
+      for (var c = 0; c < cols; c++) {
+        var wx = (c - (cols - 1) / 2) * 1.6;
+        var wz = z + Math.floor(fly);
+        var h = Math.sin(wx * 0.7 + wz * 0.5) * 0.9 + Math.sin(wz * 0.31 - wx * 0.4) * 1.1 - 2.2;
+        var sx = wx / z, sy = -h / z;
+        var rx = sx * Math.cos(bank) - sy * Math.sin(bank), ry = sx * Math.sin(bank) + sy * Math.cos(bank);
+        row.push([W / 2 + rx * W * 0.45, horizon + ry * H * 0.55]);
+      }
+      pts.push(row);
+    }
+    x.beginPath();
+    for (var r = 0; r < rows; r++) for (var c = 0; c < cols; c++) {
+      var p = pts[r][c];
+      if (c) { x.moveTo(pts[r][c - 1][0], pts[r][c - 1][1]); x.lineTo(p[0], p[1]); }
+      if (r) { x.moveTo(pts[r - 1][c][0], pts[r - 1][c][1]); x.lineTo(p[0], p[1]); }
+    }
+    x.stroke();
+  }
+
+  function frame(now) {
+    if (box.hidden) return;
+    var t = now - t0, dt = Math.min(0.1, (now - last) / 1000); last = now;
+    // more and more typewriters as time goes on. spam is a feature.
+    var want = Math.min(14, 1 + Math.floor(t / 900));
+    while (writers.length < want) writers.push(newWriter(t));
+    for (var i = 0; i < writers.length; i++) {
+      var w = writers[i];
+      w.line.n += w.speed * dt;
+      if (w.line.n >= w.line.text.length + 2) writers[i] = newWriter(t);
+    }
+
+    x.fillStyle = "rgba(0,0,0," + (Math.random() < 0.1 ? 0.2 : 1) + ")";
+    x.fillRect(0, 0, W, H);
+    terrain(t);
+
+    x.textBaseline = "top";
+    for (var j = 0; j < lines.length; j++) {
+      var L = lines[j], s = L.text.substring(0, Math.floor(L.n));
+      var cursor = L.n < L.text.length && Math.floor(t / 120) % 2 ? "_" : "";
+      x.font = L.size + 'px "Press Start 2P", monospace';
+      var jx = Math.random() < 0.03 ? Math.random() * 10 - 5 : 0;
+      x.globalCompositeOperation = "lighter";
+      x.fillStyle = "#ff0000"; x.fillText(s + cursor, L.x - 2 + jx, L.y);
+      x.fillStyle = "#00ffff"; x.fillText(s + cursor, L.x + 2 + jx, L.y + (Math.random() < 0.05 ? 2 : 0));
+      x.globalCompositeOperation = "source-over";
+      x.fillStyle = L.red ? "#ff6040" : "#ffe9a0"; x.fillText(s + cursor, L.x + jx, L.y);
+    }
+
+    // every few seconds, the big one
+    if (Math.floor(t / 2400) !== Math.floor((t - dt * 1000) / 2400)) boom = 1;
+    if (boom > 0.02) {
+      x.font = '16px "Press Start 2P", monospace';
+      x.textAlign = "center";
+      x.fillStyle = "rgba(255,255,255," + boom + ")";
+      x.save(); x.translate(W / 2, H / 2); x.scale(1 + (1 - boom) * 2, 1 + (1 - boom) * 2);
+      x.fillText("WHERE DID YOU LEARN TO FLY?", 0, -8); x.restore();
+      x.textAlign = "left";
+      boom *= 0.93;
+    }
+
+    // tear: slide random bands of the picture sideways
+    var bands = Math.random() < 0.35 ? 1 + Math.floor(Math.random() * 6) : 0;
+    for (var b = 0; b < bands; b++) {
+      var by = Math.floor(Math.random() * H), bh = 2 + Math.floor(Math.random() * 18), off = Math.floor(Math.random() * 60 - 30);
+      x.drawImage(cv, 0, by, W, bh, off, by, W, bh);
+    }
+    // a rolling bar, like a television losing vertical hold
+    var roll = (t / 6) % (H + 40) - 20;
+    x.fillStyle = "rgba(255,255,255,0.06)"; x.fillRect(0, roll, W, 14);
+    // snow
+    if (Math.random() < 0.15) for (var k = 0; k < 400; k++) { x.fillStyle = Math.random() < 0.5 ? "#fff" : "#888"; x.fillRect(Math.random() * W, Math.random() * H, 1, 1); }
+    // whole-screen colour flash
+    if (Math.random() < 0.02) { x.fillStyle = Math.random() < 0.5 ? "rgba(255,0,0,0.35)" : "rgba(0,255,255,0.25)"; x.fillRect(0, 0, W, H); }
+    box.className = Math.random() < 0.3 ? "shake" : "";
+    crashRun = requestAnimationFrame(frame);
+  }
+  crashRun = requestAnimationFrame(frame);
+
+  function eject() {
+    box.hidden = true; box.className = "";
+    cancelAnimationFrame(crashRun);
+    removeEventListener("resize", size);
+    document.removeEventListener("keydown", onKey);
+    box.onclick = null;
+    if (document.fullscreenElement) document.exitFullscreen().catch(function () {});
+    try { ac.close(); } catch (e) {}
+  }
+  function onKey(e) { if (e.key === "Escape") eject(); }
+  document.addEventListener("keydown", onKey);
+  document.addEventListener("fullscreenchange", function fc() { if (!document.fullscreenElement && !box.hidden) { document.removeEventListener("fullscreenchange", fc); eject(); } });
+  setTimeout(function () { box.onclick = eject; }, 400);
+}
+</script>
 
 <script>finish();</script>
 </body>
