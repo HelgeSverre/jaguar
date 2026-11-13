@@ -14,7 +14,7 @@ var PAGES = [
   ["tests.html", "TESTS", "317,500 TESTS"],
   ["download.html", "GET", "GET IT!!"],
   ["links.html", "LINKS", "COOL LINKS"],
-  ["guestbook.html", "GUESTBOOK", "GUESTBOOK"]
+  ["badges.html", "BADGES", "BADGE WALL"]
 ];
 
 var REPO = "https://github.com/HelgeSverre/jaguar";
@@ -29,7 +29,7 @@ function begin(here) {
   h += '<img src="img/bar.gif" width="860" height="6" alt="" style="margin-top:8px">';
   h += '<marquee scrollamount="5" class="lime" style="margin:4px 0">';
   h += '*** WELCOME TO THE VJAG HOME PAGE *** 68000 + GPU + DSP + OBJECT PROCESSOR + BLITTER *** 317,500 OF 317,500 68000 TEST VECTORS PASS *** ';
-  h += 'NO ROMS ON THIS SITE, BRING YOUR OWN *** WRITE JAGUAR GAMES IN V WITH JAGKIT AND JAGGAME *** THIS PAGE IS BEST VIEWED IN 326x240 ON A CRT *** SIGN THE GUESTBOOK!!! ***';
+  h += 'NO ROMS ON THIS SITE, BRING YOUR OWN *** WRITE JAGUAR GAMES IN V WITH JAGKIT AND JAGGAME *** THIS PAGE IS BEST VIEWED IN 326x240 ON A CRT *** GRAB A BADGE FROM THE BADGE WALL ***';
   h += '</marquee>';
   h += '</td></tr><tr>';
   h += '<td class="nav" width="170" align="center"><br>';
@@ -226,7 +226,7 @@ function stopTrack() {
   if (np) np.innerHTML = "rendered by the<br>emulated DSP";
 }
 
-// sparkle cursor trail. turn it off with the button on the guestbook page.
+// sparkle cursor trail. turn it off with the button on the badge wall.
 (function () {
   var on = true;
   try { on = localStorage.getItem("vjag-sparkles") !== "off"; } catch (e) {}

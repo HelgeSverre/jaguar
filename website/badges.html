@@ -1,0 +1,144 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>VJAG :: BADGE WALL :: TAKE ONE TAKE ALL</title>
+<link rel="stylesheet" href="style.css">
+<script src="site.js"></script>
+<style>
+#wall { position: relative; height: 1100px; overflow: hidden; border: 4px inset #600000; background: #000 url("img/stars.png"); }
+#wall img, #flyers img { position: absolute; image-rendering: pixelated; cursor: pointer; }
+#wall img:hover { z-index: 999 !important; filter: drop-shadow(0 0 8px #ffd700); }
+.spin { animation: bspin 3s linear infinite; }
+.wobble { animation: bwobble 0.6s ease-in-out infinite alternate; }
+.hop { animation: bhop 0.8s ease-in-out infinite alternate; }
+.drift { animation: bdrift 4s ease-in-out infinite alternate; }
+.throb { animation: bthrob 0.5s steps(2) infinite; }
+@keyframes bspin { to { rotate: 360deg; } }
+@keyframes bwobble { from { rotate: -14deg; } to { rotate: 14deg; } }
+@keyframes bhop { from { translate: 0 0; } to { translate: 0 -18px; } }
+@keyframes bdrift { from { translate: -30px 0; } to { translate: 30px 10px; } }
+@keyframes bthrob { 50% { scale: 1.35; } }
+#flyers { position: fixed; inset: 0; pointer-events: none; z-index: 1400; }
+#flyers img { pointer-events: auto; }
+.grid-mode #wall { height: auto; padding: 10px; text-align: center; }
+.grid-mode #wall img { position: static; margin: 4px; animation: none; transform: none !important; }
+</style>
+</head>
+<body>
+<script>begin("BADGES");</script>
+
+<center>
+<div class="wordart"><script>wavy("THE BADGE WALL");</script></div>
+<p class="pixel">50 BUTTONS. 88 BY 31 PIXELS EACH.<br>PUT THEM ON YOUR HOME PAGE. PUT THEM ON YOUR FRIDGE.</p>
+<p>
+<button onclick="scatter()">SHUFFLE!!!</button>
+<button onclick="screensaver()" id="ssbtn">SCREENSAVER MODE</button>
+<button onclick="calm()" id="calmbtn">CALM DOWN (GRID)</button>
+<button onclick="toggleSparkles()" id="sparkbtn">CURSOR SPARKLES OFF</button>
+</p>
+<p class="small">Click a badge to get the code for it.</p>
+</center>
+
+<div id="embed" class="box gold" hidden>
+<table width="100%"><tr>
+<td width="100" align="center"><img id="embedimg" src="" width="88" height="31" alt="" class="pix"></td>
+<td><textarea id="embedcode" rows="3" cols="60" readonly style="width:100%"></textarea>
+<span class="tiny">Save the GIF (right click, Save Image As...) and paste the code into your page. Hotlinking is rude.</span></td>
+</tr></table>
+</div>
+
+<div id="wall"></div>
+<div id="flyers"></div>
+
+<script>
+var BADGES = [
+  ["vjag", "VJAG jaguar emulator"], ["powered", "POWERED BY VJAG"], ["vjagtest", "vjag_test"], ["jagkit", "JAGKIT"],
+  ["jaggame", "JAGGAME"], ["ghostgrid", "GHOSTGRID"], ["maw", "MAW"], ["wirewing", "WIREWING"], ["hero", "JAGUAR HERO"],
+  ["omega", "OMEGA OVERDRIVE"], ["roboplay", "ROBOPLAY"], ["vectors", "317,500 68000 tests pass"], ["directboot", "DIRECT BOOT"],
+  ["noroms", "NO ROMS"], ["cry", "CRY COLOUR"], ["tom", "TOM"], ["jerry", "JERRY"], ["m68k", "MC68000"], ["blitter", "BLITTER"],
+  ["objproc", "OBJECT PROCESSOR"], ["gpu", "GPU"], ["dsp", "DSP"], ["eeprom", "EEPROM"], ["pressfile", "press file"],
+  ["ntscpal", "NTSC + PAL"], ["vlang", "V 0.5.2"], ["sdl3", "SDL3"], ["just", "just run"], ["mit", "MIT"], ["64bit", "64 BIT"],
+  ["dothemath", "DO THE MATH"], ["ilovejag", "I LOVE MY JAGUAR"], ["jagcd", "JAGUAR CD"], ["homebrew", "HOMEBREW"],
+  ["hardware", "REAL HARDWARE?"], ["tempest", "TEMPEST 2000 fan club"], ["avp", "ALIEN VS PREDATOR fan"], ["ironsoldier", "IRON SOLDIER"],
+  ["cybermorph", "CYBERMORPH"], ["keypad", "keypad"], ["controller", "17 BUTTONS"], ["oddmachine", "THE ODD MACHINE"],
+  ["y1993", "EST. 1993"], ["scanlines", "SCANLINES ON"], ["webring", "JAG WEBRING"], ["construction", "UNDER CONSTRUCTION"],
+  ["getvjag", "GET VJAG"], ["crosscheck", "CROSSCHECK"], ["bigpemu", "BIGPEMU"], ["cartridge", "CART EDITION"]
+];
+var MOVES = ["", "", "spin", "wobble", "wobble", "hop", "drift", "drift", "throb"];
+var wall = document.getElementById("wall"), imgs = [];
+
+BADGES.forEach(function (b) {
+  var im = document.createElement("img");
+  im.src = "img/wall/" + b[0] + ".gif";
+  im.width = 88; im.height = 31; im.alt = b[1]; im.title = b[1];
+  im.onclick = function () { showEmbed(b); };
+  wall.appendChild(im);
+  imgs.push(im);
+});
+
+function scatter() {
+  var w = wall.clientWidth, h = wall.clientHeight;
+  imgs.forEach(function (im) {
+    var s = Math.random() < 0.15 ? 2 + Math.random() : 1 + Math.random() * 0.8;
+    im.style.left = Math.random() * (w - 88 * s) + "px";
+    im.style.top = Math.random() * (h - 31 * s) + "px";
+    im.style.transform = "rotate(" + (Math.random() * 60 - 30).toFixed(1) + "deg) scale(" + s.toFixed(2) + ")";
+    im.style.zIndex = String(Math.floor(Math.random() * 100));
+    im.className = MOVES[Math.floor(Math.random() * MOVES.length)];
+    im.style.animationDelay = (Math.random() * -3).toFixed(2) + "s";
+  });
+}
+
+function showEmbed(b) {
+  document.getElementById("embed").hidden = false;
+  document.getElementById("embedimg").src = "img/wall/" + b[0] + ".gif";
+  document.getElementById("embedcode").value = '<a href="https://github.com/HelgeSverre/jaguar"><img src="' + b[0] + '.gif" width="88" height="31" alt="' + b[1] + '" border="0"></a>';
+  document.getElementById("embed").scrollIntoView({ block: "nearest" });
+}
+
+// screensaver: every badge bounces around the whole window, corner hits optional
+var saver = null;
+function screensaver() {
+  var fly = document.getElementById("flyers"), btn = document.getElementById("ssbtn");
+  if (saver) { cancelAnimationFrame(saver); saver = null; fly.innerHTML = ""; btn.textContent = "SCREENSAVER MODE"; return; }
+  btn.textContent = "MAKE IT STOP";
+  var bits = BADGES.map(function (b) {
+    var im = document.createElement("img");
+    im.src = "img/wall/" + b[0] + ".gif"; im.width = 88; im.height = 31; im.alt = b[1];
+    im.onclick = function () { showEmbed(b); };
+    fly.appendChild(im);
+    var a = Math.random() * Math.PI * 2, v = 1.5 + Math.random() * 3.5;
+    return { el: im, x: Math.random() * (innerWidth - 88), y: Math.random() * (innerHeight - 31), vx: Math.cos(a) * v, vy: Math.sin(a) * v };
+  });
+  function step() {
+    bits.forEach(function (p) {
+      p.x += p.vx; p.y += p.vy;
+      if (p.x < 0 || p.x > innerWidth - 88) { p.vx = -p.vx; p.x = Math.max(0, Math.min(innerWidth - 88, p.x)); }
+      if (p.y < 0 || p.y > innerHeight - 31) { p.vy = -p.vy; p.y = Math.max(0, Math.min(innerHeight - 31, p.y)); }
+      p.el.style.transform = "translate(" + p.x + "px," + p.y + "px)";
+    });
+    saver = requestAnimationFrame(step);
+  }
+  step();
+}
+
+function calm() {
+  var on = document.body.classList.toggle("grid-mode");
+  document.getElementById("calmbtn").textContent = on ? "NO. MORE CHAOS." : "CALM DOWN (GRID)";
+  if (!on) scatter();
+}
+
+function sparklesOn() { try { return localStorage.getItem("vjag-sparkles") !== "off"; } catch (e) { return true; } }
+function toggleSparkles() {
+  try { localStorage.setItem("vjag-sparkles", sparklesOn() ? "off" : "on"); } catch (e) {}
+  location.reload();
+}
+document.getElementById("sparkbtn").textContent = sparklesOn() ? "CURSOR SPARKLES OFF" : "CURSOR SPARKLES ON";
+scatter();
+addEventListener("resize", function () { if (!document.body.classList.contains("grid-mode")) scatter(); });
+</script>
+
+<script>finish();</script>
+</body>
+</html>
