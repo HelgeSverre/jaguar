@@ -1083,6 +1083,7 @@ fn test_the_interpreter_does_what_the_machine_did_while_guards_chase_and_search(
 			for i in 0 .. 4 {
 				assert gstate(b, i) == gstate(it, i), 'frame ${n}: guard ${i}: machine ${state_names[gstate(b,
 					i)]}, interpreter ${state_names[gstate(it, i)]}'
+
 				visited[gstate(b, i)] = true
 				for field in ['x', 'y', 'face', 'wp', 'mleft', 'look', 'stuck', 'cone_n'] {
 					assert b.field('guards', i, field) == it.field('guards', i, field), 'frame ${n}: guard ${i} ${field}: machine ${b.field('guards',
