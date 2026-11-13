@@ -24,6 +24,8 @@ pub fn (p &Program) check() ! {
 }
 
 fn (p &Program) lower() !&Lowered {
+	// The state machines write their own functions once every state is known.
+	unsafe { p.finish_machines() }
 	mut k := Checker{
 		p:    p
 		vars: p.vars.clone()

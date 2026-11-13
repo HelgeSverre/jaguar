@@ -43,6 +43,8 @@ enum BlockKind {
 struct Block {
 	kind BlockKind
 	loop LoopKind
+	// only: for a loop, a condition the body runs under (`for_where`)
+	only []Expr
 mut:
 	exprs    []Expr
 	bodies   [][]Stmt
@@ -57,6 +59,10 @@ mut:
 	prog   &Program
 	func   int
 	blocks []Block
+	// machine is the state machine this body belongs to (a state or an
+	// `on_enter`), or -1; `self` is the index of the record it works on.
+	machine int  = -1
+	self    Expr = invalid('not in a state')
 }
 
 fn (mut c Code) problem(message string) {
@@ -188,6 +194,19 @@ pub fn (mut c Code) for_(v Expr, from Val, to Val) {
 	}
 }
 
+// for_where opens a `for_` loop whose body only runs for the values of `v`
+// for which `cond` is true. The one `end` closes both; `break_` and
+// `continue_` work as in any loop.
+fn (mut c Code) for_where(v Expr, from Val, to Val, cond Expr) {
+	c.blocks << Block{
+		kind:   .loop
+		loop:   .for_
+		only:   [cond]
+		exprs:  [v, lit(from), lit(to)]
+		bodies: [[]Stmt{}]
+	}
+}
+
 // repeat opens a loop that runs `count` times; the count is evaluated once,
 // and a negative one runs no times.
 pub fn (mut c Code) repeat(count Val) {
@@ -216,11 +235,23 @@ pub fn (mut c Code) end() {
 			})
 		}
 		.loop {
+			mut bodies := b.bodies.clone()
+			if b.only.len > 0 {
+				bodies = [
+					[
+						Stmt{
+							kind:   .if_
+							exprs:  b.only
+							bodies: [b.bodies[0]]
+						},
+					],
+				]
+			}
 			c.add(Stmt{
 				kind:   .loop
 				loop:   b.loop
 				exprs:  b.exprs
-				bodies: b.bodies
+				bodies: bodies
 			})
 		}
 		.body {}

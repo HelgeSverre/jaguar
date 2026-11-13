@@ -129,6 +129,7 @@ mut:
 	natives  map[int]NativeFn
 	problems []string
 	names    map[string]bool
+	machines []&Machine
 }
 
 // new_program starts an empty program.
