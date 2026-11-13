@@ -171,6 +171,8 @@ function playerBar() {
       var buf = bar._buf; bar._analyser.getByteTimeDomainData(buf);
       for (var i = 0; i < buf.length; i++) { var v = Math.abs(buf[i] - 128); if (v > lvl) lvl = v; }
       lvl = Math.min(1, lvl / 90);
+    } else if (bgm && !bgm.paused) {
+      lvl = 0.35 + 0.35 * Math.abs(Math.sin(performance.now() / 333)); // a guess at the beat
     }
     for (var k = 0; k < eyes.length; k++) eyes[k].style.opacity = String(0.15 + lvl * 0.85);
     if (!bar.hidden) requestAnimationFrame(bar._glow);
@@ -179,6 +181,9 @@ function playerBar() {
 }
 
 function hookEyes(bar, audio) {
+  // opened as a local file, the browser hands Web Audio nothing but zeros and the
+  // track goes silent, so the eyes only listen when the page comes over http(s)
+  if (!/^https?:$/.test(location.protocol)) return;
   try {
     if (!bar._ctx) {
       bar._ctx = new (window.AudioContext || window.webkitAudioContext)();
