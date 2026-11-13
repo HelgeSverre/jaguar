@@ -52,6 +52,7 @@ mut:
 	load_room    Func
 	load_step    Func
 	set_tile     Func
+	set_cell     Func
 	follow       Func
 	col_solid    Func
 	row_solid    Func
@@ -109,6 +110,8 @@ fn (mut g Game) use_map() {
 	g.tv.load_room = g.p.func('rt_load_room', [Param{'room', .u16}], .void)
 	g.tv.load_step = g.p.func('rt_load_step', [], .void)
 	g.tv.set_tile = g.p.func('rt_set_tile', [xy, yy, Param{'tile', .u8}], .void)
+	g.tv.set_cell = g.p.func('rt_set_cell', [Param{'cell', .u16},
+		Param{'tile', .u8}], .void)
 	g.tv.follow = g.p.func('rt_follow', [xy, yy], .void)
 	g.tv.col_solid = g.p.func('rt_col_solid', [Param{'col', .i32},
 		Param{'r0', .i32}, Param{'r1', .i32}], .bool)
@@ -150,6 +153,14 @@ pub fn (mut g Game) load_room_number(mut c Code, number Val) {
 pub fn (mut g Game) set_tile(mut c Code, column Val, row Val, tile Val) {
 	g.use_map()
 	c.call(g.tv.set_tile, column, row, tile)
+}
+
+// set_cell is `set_tile` for a cell number: the tile at `cell` (row *
+// room width + column) of the loaded room becomes `tile`, drawn this frame
+// like `set_tile`. A cell outside the room is ignored.
+pub fn (mut g Game) set_cell(mut c Code, cell Val, tile Val) {
+	g.use_map()
+	c.call(g.tv.set_cell, cell, tile)
 }
 
 // tile_at is the tile number at a world position in pixels, as a `u8`
@@ -315,25 +326,22 @@ fn (mut g Game) define_map() {
 	c.end() // not waiting
 	c.end() // loading
 
-	// set_tile.
+	// set_tile and set_cell are machine code too: a game that lights a cone
+	// changes a dozen tiles at once.
 	c = g.p.define(tv.set_tile)
-	sx := tv.set_tile.arg('x')
-	sy := tv.set_tile.arg('y')
-	cell := c.local_u16('cell')
-
-	c.if_(sx.lt(0).either(sy.lt(0)).either(sx.ge(room_w)).either(sy.ge(room_h)))
-	c.ret_void()
-	c.end() // outside the room
-
-	c.set(cell, sy.mul(room_w).add(sx).as_(.u16))
-	c.set(grid.at(cell), tv.set_tile.arg('tile'))
-
-	c.if_(tv.queued.lt(tile_queue_size))
-	c.set(tv.queue.at(tv.queued), cell)
-	c.inc(tv.queued)
-	c.else_()
-	c.inc(tv.lost)
-	c.end() // room in the queue
+	set_tile := tv.set_tile
+	c.native(fn [set_tile] (mut m jagkit.M68k) {
+		emit_set_tile(mut m, set_tile, true)
+	}, fn [set_tile] (mut it Interpreter) ! {
+		run_set_tile(mut it, set_tile, true)!
+	})
+	c = g.p.define(tv.set_cell)
+	set_cell := tv.set_cell
+	c.native(fn [set_cell] (mut m jagkit.M68k) {
+		emit_set_tile(mut m, set_cell, false)
+	}, fn [set_cell] (mut it Interpreter) ! {
+		run_set_tile(mut it, set_cell, false)!
+	})
 
 	g.define_follow(tv.follow)
 	g.define_slide()

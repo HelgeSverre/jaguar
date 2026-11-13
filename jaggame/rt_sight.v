@@ -85,6 +85,12 @@ pub fn direction_of(dx int, dy int) int {
 // cone_inside is the V version of the first two tests of `can_see`: whether
 // a target at (dx, dy) from the eye is in range and in the cone.
 pub fn cone_inside(dx int, dy int, facing int, range int, half_angle int) bool {
+	return cone_inside_in(sine_table(), dx, dy, facing, range, half_angle)
+}
+
+// cone_inside_in is `cone_inside` with the table of sines given, for the
+// callers that ask many times.
+fn cone_inside_in(sine []int, dx int, dy int, facing int, range int, half_angle int) bool {
 	if range > 255 {
 		return false
 	}
@@ -100,7 +106,6 @@ pub fn cone_inside(dx int, dy int, facing int, range int, half_angle int) bool {
 	if dist2 == 0 {
 		return true
 	}
-	sine := sine_table()
 	dot := dx * sine[(facing + 64) & 255] + dy * sine[facing & 255]
 	if dot < 0 {
 		return false
@@ -188,6 +193,16 @@ pub fn (mut g Game) can_see(from_x Val, from_y Val, facing Val, to_x Val, to_y V
 pub fn (mut g Game) can_see_crouched(from_x Val, from_y Val, facing Val, to_x Val, to_y Val, range Val, half_angle Val) Expr {
 	g.use_sight()
 	return g.sight.can_see.call(from_x, from_y, facing, to_x, to_y, range, half_angle, true)
+}
+
+// line_clear is true when no wall is on the line from one world position
+// to another (the last argument says whether a cover block counts as a wall:
+// true for a crouching target). It is the third test of `can_see` on its own:
+// the line is looked at every 8 pixels, the places at the two ends are not
+// looked at, and a line longer than 255 pixels along an axis is blocked.
+pub fn (mut g Game) line_clear(from_x Val, from_y Val, to_x Val, to_y Val, crouched Val) Expr {
+	g.use_sight()
+	return g.sight.line_clear.call(from_x, from_y, to_x, to_y, crouched)
 }
 
 // direction is the angle of the vector (dx, dy), a `u8` expression: the
@@ -520,4 +535,97 @@ fn run_line_clear(mut it Interpreter, f Func) ! {
 		}
 	}
 	it.result = 1
+}
+
+// sight_blocks is whether a tile blocks sight for a standing or a crouching
+// target, by its flags.
+fn sight_blocks(flags int, crouched bool) bool {
+	return flags & flag_solid != 0 && (crouched || flags & flag_cover == 0)
+}
+
+// walk_clear is `rt_line_clear` in V over a map that is known when the game
+// is built: whether no tile that `blocks` says blocks is on the line from
+// (x0, y0) to (x1, y1), the world pixels, looked at every 8th pixel. It does
+// the same arithmetic as the machine code and the interpreter's version.
+fn walk_clear(x0 int, y0 int, x1 int, y1 int, width int, height int, blocks fn (col int, row int) bool) bool {
+	dx := x1 - x0
+	dy := y1 - y0
+	adx := if dx < 0 { -dx } else { dx }
+	ady := if dy < 0 { -dy } else { dy }
+	if adx > sight_limit || ady > sight_limit {
+		return false
+	}
+	longest := if adx > ady { adx } else { ady }
+	steps := (longest + sight_step - 1) / 8
+	if steps < 2 {
+		return true
+	}
+	mut ix := (adx * 128) / steps
+	mut iy := (ady * 128) / steps
+	if dx < 0 {
+		ix = -ix
+	}
+	if dy < 0 {
+		iy = -iy
+	}
+	mut x := x0 * 65536
+	mut y := y0 * 65536
+	for _ in 1 .. steps {
+		x += ix * 512
+		y += iy * 512
+		col := ((x >> 16) & 0xffff) >> 4
+		row := ((y >> 16) & 0xffff) >> 4
+		if col >= width || row >= height || blocks(col, row) {
+			return false
+		}
+	}
+	return true
+}
+
+// view_cells is what a guard standing in the middle of tile (tile_x, tile_y)
+// of a room, facing `facing` (an angle) sees, as the tiles it is on top of or
+// that `can_see` from the middle of the tile to the middle of that tile says
+// are in view: inside `range` pixels and the cone of `half_angle`, and
+// no wall on the line. Tiles that are themselves walls are not in the list
+// (a cover block counts as a wall; `crouched` makes cover hide what is
+// behind it, as `can_see_crouched` does). The guard's own tile is first.
+//
+// It is worked out when the game is built, so that showing a cone costs a
+// table look-up and not a walk for every tile: the game keeps the tables
+// (one list for each tile and facing it can have) and changes the floor's
+// colour on the tiles of the list. `can_see` in the program gives the same
+// answer for every tile of the list and for none outside it (a test checks
+// both).
+pub fn (mut g Game) view_cells(room Room, tile_x int, tile_y int, facing int, range int, half_angle int, crouched bool) []Point {
+	g.parse_rooms()
+	if room.index < 0 || room.index >= g.rooms.len {
+		return []Point{}
+	}
+	r := g.rooms[room.index]
+	flags := g.flag_table()
+	tiles := r.tiles.clone()
+	width := r.width
+	height := r.height
+	blocks := fn [tiles, flags, width, crouched] (col int, row int) bool {
+		return sight_blocks(flags[tiles[row * width + col]], crouched)
+	}
+	from_x := tile_x * tile_size + tile_size / 2
+	from_y := tile_y * tile_size + tile_size / 2
+	mut seen := []Point{}
+	for c in cone_cells(facing, range, half_angle) {
+		x := tile_x + c.x
+		y := tile_y + c.y
+		if x < 0 || y < 0 || x >= width || y >= height {
+			continue
+		}
+		if blocks(x, y) || sight_blocks(flags[tiles[y * width + x]], true) {
+			continue
+		}
+		if (c.x != 0 || c.y != 0)
+			&& !walk_clear(from_x, from_y, x * tile_size + tile_size / 2, y * tile_size + tile_size / 2, width, height, blocks) {
+			continue
+		}
+		seen << Point{x, y}
+	}
+	return seen
 }

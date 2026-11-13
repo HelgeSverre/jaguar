@@ -146,3 +146,86 @@ fn run_line_solid(mut it Interpreter, f Func, vertical bool) ! {
 		}
 	}
 }
+
+// emit_set_tile writes the machine code of `set_tile` (the parameters x, y
+// and tile of function `f`) and, with `by_place` false, of `set_cell` (cell
+// and tile): the map gets the tile and the cell is put in the queue of
+// cells to draw, or counted as lost when the queue is full. A place outside
+// the room is ignored.
+fn emit_set_tile(mut m jagkit.M68k, f Func, by_place bool) {
+	done := m.unique('rt.set_done')
+	full := m.unique('rt.set_full')
+	if by_place {
+		m.move(.l, lbl('${f.name}.x'), d0)
+		m.move(.l, lbl('${f.name}.y'), d1)
+		m.move(.w, lbl('rt_room_w'), d2)
+		m.ext(.l, d2)
+		m.move(.w, lbl('rt_room_h'), d3)
+		m.ext(.l, d3)
+		m.tst(.l, d0)
+		m.b(.mi, done)
+		m.cmp(.l, d2, d0)
+		m.b(.ge, done)
+		m.tst(.l, d1)
+		m.b(.mi, done)
+		m.cmp(.l, d3, d1)
+		m.b(.ge, done)
+		m.mulu(d2, d1)
+		m.add(.l, d0, d1)
+	} else {
+		m.moveq(0, d1)
+		m.move(.w, lbl('${f.name}.cell'), d1)
+		m.moveq(0, d2)
+		m.move(.w, lbl('rt_load_cells'), d2)
+		m.cmp(.l, d2, d1)
+		m.b(.cc, done)
+	}
+	m.moveq(0, d4)
+	m.move(.b, lbl('${f.name}.tile'), d4)
+	m.lea(lbl('rt_map'), jagkit.a0)
+	m.move(.b, d4, idx(0, jagkit.a0, d1))
+	m.moveq(0, d4)
+	m.move(.b, lbl('rt_tile_count'), d4)
+	m.cmp(.l, imm(tile_queue_size), d4)
+	m.b(.cc, full)
+	m.move(.l, d4, d5)
+	m.lsl(.l, imm(1), d5)
+	m.lea(lbl('rt_tile_queue'), jagkit.a1)
+	m.move(.w, d1, idx(0, jagkit.a1, d5))
+	m.add(.l, imm(1), d4)
+	m.move(.b, d4, lbl('rt_tile_count'))
+	m.bra(done)
+	m.label(full)
+	m.move(.w, lbl('rt_tile_lost'), d4)
+	m.add(.l, imm(1), d4)
+	m.move(.w, d4, lbl('rt_tile_lost'))
+	m.label(done)
+}
+
+// run_set_tile is what the interpreter does for `set_tile` and `set_cell`.
+fn run_set_tile(mut it Interpreter, f Func, by_place bool) ! {
+	w := it.get_label('rt_room_w', 0)!
+	h := it.get_label('rt_room_h', 0)!
+	mut cell := i64(0)
+	if by_place {
+		x := it.get_label('${f.name}.x', 0)!
+		y := it.get_label('${f.name}.y', 0)!
+		if x < 0 || y < 0 || x >= w || y >= h {
+			return
+		}
+		cell = y * w + x
+	} else {
+		cell = it.get_label('${f.name}.cell', 0)!
+		if cell >= it.get_label('rt_load_cells', 0)! {
+			return
+		}
+	}
+	it.put_label('rt_map', int(cell), it.get_label('${f.name}.tile', 0)!)!
+	count := it.get_label('rt_tile_count', 0)!
+	if count < tile_queue_size {
+		it.put_label('rt_tile_queue', int(count), cell)!
+		it.put_label('rt_tile_count', 0, count + 1)!
+	} else {
+		it.put_label('rt_tile_lost', 0, it.get_label('rt_tile_lost', 0)! + 1)!
+	}
+}

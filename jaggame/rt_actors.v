@@ -135,7 +135,11 @@ fn (mut a Actors) define_spawn() {
 		if f.name == 'live' {
 			continue
 		}
-		c.set(a.field(i, f.name), 0)
+		if f.typ == .bool {
+			c.set(a.field(i, f.name), false)
+		} else {
+			c.set(a.field(i, f.name), 0)
+		}
 	}
 	c.set(a.x(i), a.spawn_f.arg('x'))
 	c.set(a.y(i), a.spawn_f.arg('y'))

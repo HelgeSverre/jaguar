@@ -477,3 +477,133 @@ fn test_what_a_look_costs() {
 	println('can_see: ${each} cycles a call over 120 pixels (15 places looked at)')
 	assert each < 6000
 }
+
+fn test_the_cells_a_cone_lights_are_the_cells_can_see_says_yes_to() {
+	mut rng := rand.new_default(seed_: [u32(21), 22])
+	mut lit := 0
+	mut asked := 0
+	for room_number in 0 .. 6 {
+		w := 16 + rng.intn(10) or { 0 }
+		h := 12 + rng.intn(6) or { 0 }
+		text := random_room(mut rng, w, h, 10 + room_number * 3)
+		rows := text.trim('\n').split('\n')
+		dir := sight_dir('cells${room_number}')
+		mut g := sight_game(dir, text)
+		mut it := g.interpreter(.ntsc)!
+		for _ in 0 .. 40 {
+			g.step(mut it, 0)!
+		}
+		for _ in 0 .. 12 {
+			tx := 1 + rng.intn(w - 2) or { 1 }
+			ty := 1 + rng.intn(h - 2) or { 1 }
+			if rows[ty][tx] != `.` {
+				continue
+			}
+			facing := (rng.intn(4) or { 0 }) * 64
+			for crouched in [false, true] {
+				cells := g.view_cells(Room{0, 'arena'}, tx, ty, facing, 80, 24, crouched)
+				for y in 0 .. h {
+					for x in 0 .. w {
+						if rows[y][x] != `.` {
+							continue
+						}
+						set_query(mut it, Query{tx * 16 + 8, ty * 16 + 8, x * 16 + 8, y * 16 + 8, facing, 80, 24})!
+						g.step(mut it, 0)!
+						says := it.value(if crouched { 'see_low' } else { 'see' })! == 1
+						in_list := Point{x, y} in cells
+						assert says == in_list, 'tile ${x},${y} seen from ${tx},${ty} facing ${facing} crouched ${crouched}: can_see says ${says}, the list says ${in_list}'
+						asked++
+						if in_list {
+							lit++
+						}
+					}
+				}
+			}
+		}
+	}
+	println('cells: ${asked} tiles asked, ${lit} lit, can_see and the lists agree')
+	assert lit > 100
+}
+
+// set_game changes a tile by cell number or by place when the test says so.
+fn set_game(dir string) &Game {
+	mut g := new_game(Config{ sprites: 1, layers: 1 })
+	g.tileset(sight_tiles(dir))
+	g.legend_tile(`.`, 0, 0)
+	g.legend_tile(`#`, 1, flag_solid)
+	g.legend_tile(`c`, 2, flag_solid | flag_cover)
+	g.room('arena', '
+##########
+#........#
+#........#
+##########
+')
+	cell := g.p.u16('cell')
+	col := g.p.i16('col')
+	row := g.p.i16('row')
+	tile := g.p.u8('tile')
+	mode := g.p.u8('mode')
+	mut c := g.define_init()
+	g.load_room(mut c, Room{0, 'arena'})
+	c = g.define_update()
+	c.if_(g.loading.invert())
+	c.if_(mode.eq(1))
+	g.set_cell(mut c, cell, tile)
+	c.else_if(mode.eq(2))
+	g.set_tile(mut c, col, row, tile)
+	c.end()
+	c.set(mode, 0)
+	c.end()
+	return g
+}
+
+fn test_set_cell_and_set_tile_change_the_map_queue_and_count_what_does_not_fit() {
+	dir := sight_dir('setcell')
+	mut g := set_game(dir)
+	img := g.build()!
+	mut h := set_game(dir)
+	mut it := h.interpreter(.ntsc)!
+	mut p := emulated.boot(img.bytes, false)!
+	for _ in 0 .. 40 {
+		h.step(mut it, 0)!
+	}
+	p.frames(40)
+	mut steps := 0
+	// 70 changes in 70 frames are fine; then 70 in one frame, where only 64 fit.
+	for k in 0 .. 70 {
+		mode := 1 + k % 2
+		it.set_value('cell', 11 + k % 6)!
+		it.set_value('col', 1 + k % 6)!
+		it.set_value('row', 2)!
+		it.set_value('tile', 2 + k % 3)!
+		it.set_value('mode', mode)!
+		write_sight_word(mut p, img.symbols['cell'], 11 + k % 6)
+		write_sight_word(mut p, img.symbols['col'], 1 + k % 6)
+		write_sight_word(mut p, img.symbols['row'], 2)
+		p.m.ram[img.symbols['tile']] = u8(2 + k % 3)
+		p.m.ram[img.symbols['mode']] = u8(mode)
+		h.step(mut it, 0)!
+		p.frames(1)
+		p.settle()
+		steps++
+	}
+	for k in 0 .. 40 {
+		assert img.element(p.m.ram, 'rt_map', k)! == it.element('rt_map', k)!, 'cell ${k}'
+	}
+	for k in [11, 13, 15, 22, 24, 26] {
+		assert it.element('rt_map', k)! >= 2, 'cell ${k} was set'
+	}
+	assert img.value(p.m.ram, 'rt_tile_lost')! == 0 && it.value('rt_tile_lost')! == 0
+	// Outside the room nothing happens: cell 40 of a 10 by 4 room, and column 12.
+	it.set_value('cell', 40)!
+	it.set_value('tile', 3)!
+	it.set_value('mode', 1)!
+	h.step(mut it, 0)!
+	it.set_value('col', 12)!
+	it.set_value('mode', 2)!
+	h.step(mut it, 0)!
+	for k in 0 .. 40 {
+		assert it.element('rt_map', k)! < 5
+	}
+	assert steps == 70
+}
