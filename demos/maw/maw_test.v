@@ -164,3 +164,13 @@ fn test_a_pal_machine_keeps_the_tempo() {
 	assert p.word('frame') - started == 250, 'the 68000 must never miss a frame'
 	assert (p.word('step') - step + song_steps) % song_steps == 50
 }
+
+// Found by running the game in a second emulator: a processor that reads
+// a long from an address that is not a multiple of four gets the long
+// before it on some of them.
+fn test_what_the_gpu_reads_as_longs_is_long_aligned() {
+	built := build() or { panic(err) }
+	assert built.symbols['tunnel_table'] % 4 == 0
+	assert built.symbols['palettes'] % 2 == 0
+	assert buffer_a % 4 == 0 && buffer_b % 4 == 0
+}

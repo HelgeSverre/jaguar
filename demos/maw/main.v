@@ -90,6 +90,9 @@ fn build() !Built {
 	m.bytes(gpu_code)
 	m.label('dsp_program')
 	m.bytes(dsp_code)
+	// The GPU reads the table a long at a time, and a long it reads has to
+	// start on a multiple of four.
+	m.align(4)
 	m.label('tunnel_table')
 	m.bytes(jagkit.big_endian32(tunnel_table()))
 	m.label('palettes')

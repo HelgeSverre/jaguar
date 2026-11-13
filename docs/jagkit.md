@@ -396,6 +396,7 @@ The destination is always the second operand.
 | `cmp a, b` computes `b − a` | afterwards `cs` means b < a unsigned, `mi` means b < a signed |
 | `addqt`/`subqt` leave the flags alone | use them in a delay slot after a flag-setting instruction |
 | `mult`/`imult` use the low 16 bits of both operands | 16×16→32 |
+| `load`/`store` need an address that is a multiple of 4 | the GPU ignores the two low bits of the address and reads the long before it. Put `m.align(4)` before any table the GPU or DSP reads as longs. MAW had this wrong, and it showed only when run in a second emulator |
 | `load_r14`/`store_r14` take offsets 4..128 in steps of 4 | point `r14` at a block of variables and reach 32 of them in one word each |
 
 There is no call instruction. A subroutine is a `jump` to a register holding its address, with the return address loaded into another register beforehand; WIREWING's `project`, `ray` and `line` work this way.
