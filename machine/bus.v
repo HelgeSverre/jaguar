@@ -215,6 +215,10 @@ fn (mut m Machine) io_read16(a u32) u16 {
 		joybuts {
 			return m.jerry.pads.read_buttons()
 		}
+		eeprom_clock {
+			m.eeprom.strobe()
+			return 0xffff
+		}
 		eeprom_select {
 			m.eeprom.select()
 			return 0xffff
@@ -361,6 +365,15 @@ fn (mut m Machine) io_write8(a u32, value u8) {
 			m.dsp.write_ram8(offset - dsp_ram, value)
 			return
 		}
+	}
+	if a >= jerry_base && a & 0xffff >= eeprom_clock && a & 0xffff <= eeprom_clock + 1 {
+		// The EEPROM's data line is the low byte of its word, and reading the
+		// word to merge would strobe the clock: write the byte on its own, and
+		// ignore the high byte as Virtual Jaguar does.
+		if a & 1 == 1 {
+			m.io_write16(a & 0xff_fffe, value)
+		}
+		return
 	}
 	word_addr := a & 0xff_fffe
 	old := m.io_read16(word_addr)

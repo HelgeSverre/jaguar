@@ -33,6 +33,9 @@ pub fn (mut g Game) build() !Image {
 	if g.sounds {
 		g.emit_sound_copy(mut m, voices)
 	}
+	if g.save_info.len > 0 {
+		g.emit_save_routines(mut m)
+	}
 	g.emit_tile_routines(mut m)
 	g.emit_build_list(mut m)
 	low := g.p.emit_lowered(mut m)!

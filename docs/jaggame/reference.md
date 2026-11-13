@@ -410,6 +410,27 @@ Every public name in `jaggame`, with the comment from its source. This file is g
 | `fn (mut g Game) music_is(name string) Expr` | music_is is true while the named track is playing. Declare the track first. |
 | `fn (mut g Game) music_rows() Expr` | music_rows is the number of rows the sequencer has played since the game started (a `u16` expression): a clock that runs at the track's tempo. |
 
+## The runtime: save data
+
+`jaggame/rt_save.v`
+
+| Declaration | |
+|---|---|
+| `struct Save` | Save is a handle on the game's saved record. |
+| `fn (mut g Game) save(version int, fields []string) Save` | save declares the game's record: `fields` are the names of 16-bit values, up to 16, kept in `Save.field(name)`; `version` (0..255) goes into the record, and a record of another version is not read: change it when the fields change. A game has one record. The variables start at 0. |
+| `fn (s Save) field(name string) Expr` | field is the variable of a field of the record (a `u16`). |
+| `fn (s Save) busy() Expr` | busy is true while a `load` or a `store` is going on (a `bool`). |
+| `fn (s Save) load(mut c Code)` | load starts reading the record. When `busy` is false again, `loaded` says whether there was a good record, and if there was, the fields hold it. |
+| `fn (s Save) store(mut c Code)` | store starts writing the fields as the record. When `busy` is false again, `failed` says whether the chip took it. A store that is asked for while another operation is going on is ignored. |
+
+## The runtime: cartridge images
+
+`jaggame/rt_cartridge.v`
+
+| Declaration | |
+|---|---|
+| `fn (img &Image) cartridge() ![]u8` | cartridge builds the cartridge image of a game image: the length is the next power of two of at least 128 KB. |
+
 ## The runtime: building a game
 
 `jaggame/rt_build.v`

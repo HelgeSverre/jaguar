@@ -32,6 +32,9 @@ fn (mut g Game) define_runtime() {
 	if g.sounds {
 		g.define_sound()
 	}
+	if g.save_info.len > 0 {
+		g.define_save()
+	}
 
 	init := g.p.func('rt_init', [], .void)
 	mut c := g.p.define(init)
@@ -46,6 +49,12 @@ fn (mut g Game) define_runtime() {
 	c.else_()
 	c.set(g.fps, 60)
 	c.end()
+	if g.save_info.len > 0 {
+		// the interpreter's chip starts erased
+		c.for_(i, 0, eeprom_words_total)
+		c.set(g.save_info[0].eeprom.at(i), 0xffff)
+		c.end() // each word
+	}
 	c.call(g.init_func)
 	if g.scene_set && g.scene_ref.has_start() {
 		c.call(g.scene_ref.gos[g.scene_ref.first])
@@ -74,6 +83,9 @@ fn (mut g Game) define_runtime() {
 	c.call(g.update_func)
 	if g.scene_set {
 		c.call(g.scene_ref.tick)
+	}
+	if g.save_info.len > 0 {
+		c.call(g.save_info[0].tick)
 	}
 	if g.seqs.len > 0 {
 		animate := g.p.func('rt_animate', [], .void)

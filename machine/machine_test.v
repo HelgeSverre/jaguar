@@ -186,3 +186,81 @@ fn test_power_of_two_cartridge_mirrors_through_its_window() {
 	assert m.read16(0x80_2000) == 0x4e71, 'undecoded address lines repeat the ROM'
 	assert m.read16(0xa0_0000) == 0x4e71
 }
+
+// The EEPROM as a driver reaches it through the bus: chip select by a read
+// of $F15000, bits by word writes to $F14800 (the data in bit 0), data out
+// by a read of $F14800 (the strobe) and a read of bit 0 of $F14000.
+fn eeprom_select_pulse(mut m Machine) {
+	m.read16(0xf1_5000)
+}
+
+fn eeprom_send(mut m Machine, value u32, count int) {
+	for bit := count - 1; bit >= 0; bit-- {
+		m.write16(0xf1_4800, u16((value >> u32(bit)) & 1))
+	}
+}
+
+fn eeprom_write(mut m Machine, address u32, value u16) {
+	eeprom_select_pulse(mut m)
+	eeprom_send(mut m, 0x130, 9) // EWEN
+	eeprom_select_pulse(mut m)
+	eeprom_send(mut m, 0x140 | address, 9) // WRITE
+	eeprom_send(mut m, value, 16)
+	eeprom_select_pulse(mut m)
+	assert m.read16(0xf1_4000) & 1 == 1, 'ready'
+}
+
+fn eeprom_read(mut m Machine, address u32) u16 {
+	eeprom_select_pulse(mut m)
+	eeprom_send(mut m, 0x180 | address, 9) // READ
+	mut value := u16(0)
+	for _ in 0 .. 16 {
+		m.read16(0xf1_4800) // the strobe
+		value = (value << 1) | (m.read16(0xf1_4000) & 1)
+	}
+	return value
+}
+
+fn test_the_eeprom_is_written_and_read_the_way_the_standard_driver_does() {
+	mut m := boot(words([u16(0x60fe)]))
+	assert eeprom_read(mut m, 3) == 0xffff, 'erased'
+	eeprom_write(mut m, 3, 0x1a2b)
+	assert eeprom_read(mut m, 3) == 0x1a2b
+	assert eeprom_read(mut m, 4) == 0xffff, 'the neighbour is untouched'
+	// Joystick polls between the bits of a read do not disturb it.
+	eeprom_select_pulse(mut m)
+	eeprom_send(mut m, 0x183, 9)
+	mut value := u16(0)
+	for _ in 0 .. 16 {
+		m.read16(0xf1_4800)
+		m.read16(0xf1_4000)
+		value = (value << 1) | (m.read16(0xf1_4000) & 1)
+	}
+	assert value == 0x1a2b
+}
+
+fn test_the_eeprom_data_line_takes_a_byte_write_without_a_strobe() {
+	mut m := boot(words([u16(0x60fe)]))
+	eeprom_write(mut m, 7, 0x5555)
+	eeprom_select_pulse(mut m)
+	// the command bits as byte writes to the low byte of the clock word
+	for bit := 8; bit >= 0; bit-- {
+		m.write8(0xf1_4801, u8(((0x187 >> u32(bit)) & 1)))
+	}
+	mut value := u16(0)
+	for _ in 0 .. 16 {
+		m.read16(0xf1_4800)
+		value = (value << 1) | (m.read16(0xf1_4000) & 1)
+	}
+	assert value == 0x5555
+	// a write of the high byte is ignored, and does not clock
+	eeprom_select_pulse(mut m)
+	eeprom_send(mut m, 0x187, 9)
+	m.write8(0xf1_4800, 1)
+	mut again := u16(0)
+	for _ in 0 .. 16 {
+		m.read16(0xf1_4800)
+		again = (again << 1) | (m.read16(0xf1_4000) & 1)
+	}
+	assert again == 0x5555
+}

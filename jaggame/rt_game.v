@@ -82,6 +82,7 @@ mut:
 	snd             &SoundVars = unsafe { nil } // the sound's variables and functions, once `sounds`
 	sfxs            []SfxInfo
 	tracks          []TrackInfo
+	save_info       []SaveInfo // the game's record, if it has one
 	init_func       Func
 	update_func     Func
 	// The tile layer: see assets_map.v and rt_tiles.v.

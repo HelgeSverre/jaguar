@@ -108,3 +108,42 @@ fn test_image_round_trip_and_size_check() {
 	}
 	assert false, 'a short image must be rejected'
 }
+
+// read_by_strobes issues READ and clocks the data out the Atari-standard
+// way: a strobe (a read of the clock address), then a sample of the output.
+fn read_by_strobes(mut e Eeprom, address u32) u16 {
+	command(mut e, 2, address)
+	mut value := u16(0)
+	for _ in 0 .. 16 {
+		e.strobe()
+		value = (value << 1) | e.data_out()
+	}
+	return value
+}
+
+fn test_a_read_can_be_clocked_by_strobes_and_sampling_does_not_advance_it() {
+	mut e := new_eeprom()
+	command(mut e, 0, 0x30) // EWEN
+	write_word(mut e, 9, 0x8f01)
+	assert read_by_strobes(mut e, 9) == 0x8f01
+	// Sampling the output again and again does not move it on.
+	command(mut e, 2, 9)
+	e.strobe()
+	first := e.data_out()
+	for _ in 0 .. 20 {
+		assert e.data_out() == first
+	}
+	// A strobe outside a READ does nothing.
+	e.select()
+	e.strobe()
+	assert e.data_out() == first
+}
+
+fn test_a_board_without_the_chip_stores_nothing_and_reads_ones() {
+	mut e := new_eeprom()
+	e.present = false
+	command(mut e, 0, 0x30) // EWEN
+	write_word(mut e, 5, 0x1234)
+	assert read_by_strobes(mut e, 5) == 0xffff
+	assert !e.dirty
+}

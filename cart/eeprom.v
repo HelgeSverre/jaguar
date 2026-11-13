@@ -19,6 +19,10 @@ pub mut:
 	words         [eeprom_words]u16
 	dirty         bool // contents differ from the last persisted image
 	write_enabled bool
+	// present is false for a cartridge board without the chip: nothing is
+	// stored and the data line stays high, as an unconnected line with its
+	// pull-up reads. Tests use it; a real image always has the chip.
+	present bool = true
 mut:
 	phase    Phase
 	shift    u32
@@ -45,6 +49,9 @@ pub fn (mut e Eeprom) select() {
 
 // data_out returns the level of the serial data output.
 pub fn (e &Eeprom) data_out() u8 {
+	if !e.present {
+		return 1
+	}
 	return e.data_out
 }
 
@@ -67,15 +74,7 @@ pub fn (mut e Eeprom) clock(data_in bool) {
 			}
 		}
 		.read_out {
-			e.data_out = u8((e.shift >> 15) & 1)
-			e.shift <<= 1
-			e.bits++
-			if e.bits == 16 {
-				// Sequential read: the next word follows without a new command.
-				e.address = (e.address + 1) % eeprom_words
-				e.shift = e.words[e.address]
-				e.bits = 0
-			}
+			e.shift_out()
 		}
 		.write_in, .write_all_in {
 			e.shift = (e.shift << 1) | bit
@@ -84,6 +83,30 @@ pub fn (mut e Eeprom) clock(data_in bool) {
 				e.finish_write(u16(e.shift))
 			}
 		}
+	}
+}
+
+// strobe is a read of the clock address. The Atari-standard driver clocks the
+// data out by reading it (`tst.w $F14800`) and samples the output at
+// $F14000 after each strobe, as Virtual Jaguar does; it moves the next bit of
+// a READ onto the output and is ignored in any other state. Writing the clock
+// address does the same during a READ, for drivers that clock that way.
+pub fn (mut e Eeprom) strobe() {
+	if e.phase == .read_out {
+		e.shift_out()
+	}
+}
+
+// shift_out puts the next bit of the word being read on the output.
+fn (mut e Eeprom) shift_out() {
+	e.data_out = u8((e.shift >> 15) & 1)
+	e.shift <<= 1
+	e.bits++
+	if e.bits == 16 {
+		// Sequential read: the next word follows without a new command.
+		e.address = (e.address + 1) % eeprom_words
+		e.shift = e.words[e.address]
+		e.bits = 0
 	}
 }
 
@@ -148,7 +171,7 @@ fn (mut e Eeprom) complete() {
 
 // store writes one word if writes are enabled.
 fn (mut e Eeprom) store(address u32, value u16) {
-	if !e.write_enabled {
+	if !e.write_enabled || !e.present {
 		return
 	}
 	if e.words[address] != value {
