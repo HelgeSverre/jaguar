@@ -112,7 +112,7 @@ fn (g &Game) emit_start(mut m jagkit.M68k, layout Layout, dsp_longs int, dsp_sta
 }
 
 // emit_handler writes the frame interrupt and the small routines it uses.
-fn (g &Game) emit_handler(mut m jagkit.M68k, voices u32) {
+fn (g &Game) emit_handler(mut m jagkit.M68k) {
 	m.label('rt.frame_interrupt')
 	m.push(all_registers)
 	// Acknowledge the interrupt and let the next one through.
@@ -131,8 +131,7 @@ fn (g &Game) emit_handler(mut m jagkit.M68k, voices u32) {
 	m.bsr('rt.render_text')
 	m.bsr('rt.sync_colours')
 	if g.sounds {
-		m.move(.l, lbl('rt_beep_step'), abs(voices + u32(jagkit.voice_lead_step)))
-		m.move(.l, lbl('rt_beep_volume'), abs(voices + u32(jagkit.voice_lead_volume)))
+		m.bsr('rt.send_voices')
 	}
 	m.bsr('rt.build_list')
 	m.bsr('rt.swap_lists')

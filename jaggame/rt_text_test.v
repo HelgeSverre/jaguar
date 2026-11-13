@@ -3,7 +3,7 @@ module jaggame
 import jagkit
 import jaggame.emulated
 
-// Text layers, the beep, missed frames and the mistakes a game can make.
+// Text layers, missed frames and the mistakes a game can make.
 
 fn white(px u32) bool {
 	return (px >> 16) & 0xff > 150 && (px >> 8) & 0xff > 150 && px & 0xff > 150
@@ -192,43 +192,6 @@ fn test_every_layer_has_its_own_colour() {
 	assert pic2.bounds(0, 0, pic2.width, 30, fn (px u32) bool {
 		return (px >> 8) & 0xff > 150 && (px >> 16) & 0xff < 100
 	}).count == top.count, 'a layer changes colour when its variable does'
-}
-
-fn test_the_beep_is_heard_and_fades() {
-	mut g := new_game(Config{ sprites: 1, layers: 1 })
-	g.art_cry('box', 8, 8, 1, []u16{len: 64, init: 1})
-	mut c := g.define_update()
-	c.if_(g.pressed(.a))
-	g.beep(mut c, 81, 9000)
-	c.end()
-	img := g.build() or { panic(err) }
-	mut p := emulated.boot(img.bytes, false) or { panic(err) }
-	p.frames(30)
-	assert p.loudest() < 200
-	p.hold(.a, 5)
-	assert p.loudest() > 2000
-	p.frames(120)
-	p.loudest()
-	p.frames(10)
-	assert p.loudest() < 200, 'it fades out'
-	assert img.value(p.m.ram, 'rt_beep_step')! == i64(jagkit.note_step(81))
-}
-
-fn test_the_beep_is_the_same_in_the_interpreter() {
-	mut g := new_game(Config{ sprites: 1, layers: 1 })
-	g.art_cry('box', 8, 8, 1, []u16{len: 64, init: 1})
-	mut c := g.define_update()
-	c.if_(g.pressed(.a))
-	g.beep(mut c, 81, 9000)
-	c.end()
-	mut it := g.interpreter(.pal)!
-	g.step(mut it, button_mask(.a))!
-	assert it.value('rt_beep_step')! == i64(jagkit.note_step(81))
-	mut volume := 9000 - 9000 / 8
-	assert it.value('rt_beep_volume')! == volume
-	g.step(mut it, 0)!
-	volume -= volume / 8
-	assert it.value('rt_beep_volume')! == volume
 }
 
 fn test_a_normal_game_misses_no_frames_and_a_slow_one_does() {

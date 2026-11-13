@@ -665,7 +665,7 @@ c.set(moon.x, ball_sprite.x.add(24))
 c.set(moon.y, ball_sprite.y.sub(6))
 
 c.if_(game.pressed(.fire))
-game.beep(mut c, beep_note, beep_volume)
+game.play(mut c, 'beep')
 c.end()
 
 c.if_(beat.fired)

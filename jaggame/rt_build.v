@@ -14,7 +14,7 @@ pub fn (mut g Game) build() !Image {
 	g.check_art()
 	layout := g.layout()
 
-	mut dsp := jagkit.synth()
+	mut dsp := game_synth()
 	mut dsp_code := []u8{}
 	if g.sounds {
 		dsp_code = dsp.assemble()!
@@ -27,9 +27,12 @@ pub fn (mut g Game) build() !Image {
 	mut m := jagkit.new_m68k(load_address)
 	g.emit_start(mut m, layout, dsp_code.len / 4,
 		if g.sounds { dsp.address_of('start') } else { 0 })
-	g.emit_handler(mut m, voices)
+	g.emit_handler(mut m)
 	g.emit_read_pad(mut m)
 	g.emit_text_routines(mut m, layout)
+	if g.sounds {
+		g.emit_sound_copy(mut m, voices)
+	}
 	g.emit_tile_routines(mut m)
 	g.emit_build_list(mut m)
 	low := g.p.emit_lowered(mut m)!

@@ -349,7 +349,7 @@ Every public name in `jaggame`, with the comment from its source. This file is g
 | `fn (g &Game) held(b Button) Expr` | held is true while a button is down, as a `bool` expression. |
 | `fn (g &Game) pressed(b Button) Expr` | pressed is true for the one frame in which a button went down. |
 
-## The runtime: timers and the beep
+## The runtime: timers
 
 `jaggame/rt_time.v`
 
@@ -360,7 +360,55 @@ Every public name in `jaggame`, with the comment from its source. This file is g
 | `fn (t Timer) start(mut c Code, frames Val)` | start counts `frames` down to 0 (use `seconds` for the number). When it gets there the timer stops and `fired` is true for one frame. Starting a running timer starts it over. |
 | `fn (t Timer) stopwatch(mut c Code)` | stopwatch counts the frames since now in `elapsed`, until it is stopped. |
 | `fn (t Timer) stop(mut c Code)` | stop stops the timer; `left` and `elapsed` keep their values. |
-| `fn (mut g Game) beep(mut c Code, note Val, volume Val)` | beep plays a short note on the sound chip's sawtooth voice and lets it fade out in about 20 frames. `note` is a MIDI note number 0..127 (69 is the A at 440 Hz) and `volume` a few thousand.  This is provisional: proper sound, with several voices, effects and music, comes in a later slice, and this call will then change or go. |
+
+## The runtime: scenes
+
+`jaggame/rt_scenes.v`
+
+| Declaration | |
+|---|---|
+| `struct Scenes` | Scenes is the handle on the game's scenes, made by `Game.scenes`. |
+| `fn (mut g Game) scenes() &Scenes` | scenes starts the game's scenes, or returns them if they were started. |
+| `fn (mut s Scenes) scene(name string) &Code` | scene declares a scene and returns the block to write its update in: it runs once a frame while the scene is the current one. Inside it, `time_in_state()` is the frames the scene has been going. |
+| `fn (mut s Scenes) on_enter(name string) &Code` | on_enter declares the block that runs when the scene begins, before its first frame (and before its setup, if it has one). |
+| `fn (mut s Scenes) on_leave(name string) &Code` | on_leave declares the block that runs when the scene ends, before the next scene's `on_enter`. |
+| `fn (mut s Scenes) setup(name string, steps int) &Code` | setup declares a scene's setup: a block that runs once a frame for `steps` frames after the scene begins, with `step` (0, 1, ...) saying which. The scene's update starts when the last step is done. A step that has to wait for something calls `wait`, which makes the same step run again next frame. |
+| `fn (mut s Scenes) start(name string)` | start says which scene the game begins in, after its `init` has run. |
+| `fn (mut s Scenes) go(mut c Code, name string)` | go leaves the current scene for another one: its `on_leave` runs, then `on_enter` of the new one, at once; the new scene's update (or its setup) begins next frame. The statements after it in the block still run, so follow it with `ret_void()` to stop. |
+| `fn (s &Scenes) wait(mut c Code)` | wait makes the setup step that is running run again next frame instead of moving on. |
+| `fn (s &Scenes) current() Expr` | current is the number of the current scene, in the order they were declared (a `u8` expression). |
+| `fn (s &Scenes) time() Expr` | time is the frames the current scene has been going, counting from 0 in its first frame (a `u16` expression); it does not count while a setup runs. |
+| `fn (mut s Scenes) in_scene(name string) Expr` | in_scene is true while the named scene is the current one. Declare the scene first. |
+| `fn (s &Scenes) settled() Expr` | settled is true when no setup is running: the update of the current scene is the thing that runs. |
+
+## The runtime: menus
+
+`jaggame/rt_menu.v`
+
+| Declaration | |
+|---|---|
+| `struct Menu` | Menu is a handle on a menu: its variables, all valid for the frame in which `update` ran. |
+| `fn (mut g Game) menu(name string, layer TextLayer, col int, row int, items []string) Menu` | menu declares a menu of `items` on a text layer, with the cursor in column `col` and the first item in row `row`; the items are written two columns to the right. An item is a string constant, as `print` takes. |
+| `fn (m Menu) open(mut c Code)` | open writes the items on the layer, puts the cursor on the first and forgets the last choice. Call it when the scene that shows the menu begins. |
+| `fn (m Menu) update(mut c Code)` | update reads the pad for one frame: it moves the cursor (with repeat while a direction is held: the delay before it starts and the pace after are in seconds, so they are the same on both television standards), and sets `chosen`, `backed` and `moved`. |
+
+## The runtime: sound and music
+
+`jaggame/rt_sound.v`
+
+| Declaration | |
+|---|---|
+| `struct Sfx` | Sfx is a sound effect: a sequence of pitches on one voice. |
+| `struct SfxStep` | SfxStep is one pitch of an effect and how long it lasts. |
+| `struct Pattern` | Pattern is 16 rows of music: four channels written as text. |
+| `struct Track` | Track is a piece of music: patterns, the order they are played in (a pattern may come again) and how fast it goes. |
+| `fn (mut g Game) sfx(name string, sfx Sfx)` | sfx declares a sound effect with a name, to start with `play`. |
+| `fn (mut g Game) track(name string, track Track)` | track declares a piece of music with a name, to start with `music_play`. |
+| `fn (mut g Game) play(mut c Code, name string)` | play starts a sound effect. It takes the effect voice it belongs on if that is free or playing something of lower or equal priority; otherwise nothing happens. |
+| `fn (mut g Game) music_play(mut c Code, name string)` | music_play starts a track, unless it is the one playing: calling it every frame is fine. Another track that was playing is cut off at once. |
+| `fn (mut g Game) music_stop(mut c Code)` | music_stop stops the music; the notes that sound fade out. |
+| `fn (mut g Game) music_is(name string) Expr` | music_is is true while the named track is playing. Declare the track first. |
+| `fn (mut g Game) music_rows() Expr` | music_rows is the number of rows the sequencer has played since the game started (a `u16` expression): a clock that runs at the track's tempo. |
 
 ## The runtime: building a game
 
@@ -413,5 +461,6 @@ Every public name in `jaggame`, with the comment from its source. This file is g
 | `struct Box` | Box is the smallest rectangle around some pixels, and how many there are. |
 | `fn (pic &Picture) bounds(x0 int, y0 int, x1 int, y1 int, wanted fn (pixel u32) bool) Box` | bounds finds the pixels of a picture that `wanted` accepts, inside a rectangle (right and bottom are not included). |
 | `fn (mut p Player) loudest() int` | loudest drains the sound made so far and returns the peak sample. |
+| `fn (mut p Player) audio() []i16` | audio drains the sound made since the last call and returns it as stereo samples, left then right for each frame of sound. |
 | `struct Object` | Object is one object of a display list as the object processor reads it. |
 | `fn (p &Player) list_objects(base u32) []Object` | list_objects follows a display list from its first slot, after the 32-byte header at `base`, through its links and branches, and returns the bitmap objects it finds, as they stand in memory now. |

@@ -16,8 +16,6 @@ import jaggame
 
 const ball_size = 32
 const speed = 2 // pixels a frame
-const beep_note = 81 // the A above concert pitch
-const beep_volume = 9000
 
 fn main() {
 	output := if os.args.len > 1 { os.args[1] } else { 'demos/hello2.jag' }
@@ -120,6 +118,12 @@ fn describe() &jaggame.Game {
 	game.art_cry('arrow', 32, 16, 1, arrow())
 	game.sequence('spin', [jaggame.Step{0, 0.1}, jaggame.Step{1, 0.1},
 		jaggame.Step{2, 0.1}, jaggame.Step{3, 0.1}])
+	// A short A that fades out: the A above concert pitch, 880 Hz.
+	game.sfx('beep', jaggame.Sfx{
+		volume: 3000
+		decay:  3
+		steps:  [jaggame.SfxStep{880, 0.4}]
+	})
 
 	title := game.text_layer('title', jaggame.TextConfig{
 		columns: 40
@@ -191,7 +195,7 @@ fn describe() &jaggame.Game {
 	c.set(moon.y, ball_sprite.y.sub(6))
 
 	c.if_(game.pressed(.fire))
-	game.beep(mut c, beep_note, beep_volume)
+	game.play(mut c, 'beep')
 	c.end()
 
 	c.if_(beat.fired)

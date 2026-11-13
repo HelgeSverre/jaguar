@@ -78,10 +78,10 @@ mut:
 	seqs            []SeqInfo
 	texts           []TextInfo
 	timers          []TimerInfo
-	sounds          bool // a beep is used
-	beep_step       Expr
-	beep_volume     Expr
-	notes           Expr
+	sounds          bool // an effect or a track is declared: the synthesizer is in the image
+	snd             &SoundVars = unsafe { nil } // the sound's variables and functions, once `sounds`
+	sfxs            []SfxInfo
+	tracks          []TrackInfo
 	init_func       Func
 	update_func     Func
 	// The tile layer: see assets_map.v and rt_tiles.v.
@@ -135,9 +135,6 @@ pub fn new_game(config Config) &Game {
 		p:             p
 		record:        record
 		pal:           p.u8('rt_pal')
-		beep_step:     invalid('no beep was declared')
-		beep_volume:   invalid('no beep was declared')
-		notes:         invalid('no beep was declared')
 		init_func:     p.func('rt_user_init', [], .void)
 		update_func:   p.func('rt_user_update', [], .void)
 	}

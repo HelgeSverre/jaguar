@@ -1,7 +1,5 @@
 module jaggame
 
-import jagkit
-
 // Timers count frames for the game. A timer is four variables,
 // `<name>_left`, `<name>_elapsed`, `<name>_running` and `<name>_fired`,
 // that the runtime updates once a frame, before the game's `update`.
@@ -86,28 +84,4 @@ fn (mut g Game) define_timers(f Func) {
 		c.end() // had frames to go
 		c.end() // running
 	}
-}
-
-// beep plays a short note on the sound chip's sawtooth voice and lets it
-// fade out in about 20 frames. `note` is a MIDI note number 0..127 (69 is
-// the A at 440 Hz) and `volume` a few thousand.
-//
-// This is provisional: proper sound, with several voices, effects and music,
-// comes in a later slice, and this call will then change or go.
-pub fn (mut g Game) beep(mut c Code, note Val, volume Val) {
-	g.use_sound()
-	c.set(g.beep_step, g.notes.at(lit(note).as_(.u8).and(127)))
-	c.set(g.beep_volume, volume)
-}
-
-// use_sound declares what a beep needs, once.
-fn (mut g Game) use_sound() {
-	if g.sounds {
-		return
-	}
-	g.sounds = true
-	steps := []i64{len: 128, init: i64(jagkit.note_step(index))}
-	g.notes = g.p.table_u32('rt_note_steps', steps)
-	g.beep_step = g.p.u32('rt_beep_step')
-	g.beep_volume = g.p.u32('rt_beep_volume')
 }

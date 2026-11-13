@@ -29,6 +29,9 @@ fn (mut g Game) define_runtime() {
 	if g.scene_set {
 		g.scene_ref.finish()
 	}
+	if g.sounds {
+		g.define_sound()
+	}
 
 	init := g.p.func('rt_init', [], .void)
 	mut c := g.p.define(init)
@@ -81,7 +84,7 @@ fn (mut g Game) define_runtime() {
 		c.call(g.tv.load_step)
 	}
 	if g.sounds {
-		c.set(g.beep_volume, g.beep_volume.sub(g.beep_volume.shr(3)))
+		c.call(g.snd.tick)
 	}
 }
 

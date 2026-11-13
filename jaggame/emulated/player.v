@@ -174,6 +174,21 @@ pub fn (mut p Player) loudest() int {
 	return peak
 }
 
+// audio drains the sound made since the last call and returns it as stereo
+// samples, left then right for each frame of sound.
+pub fn (mut p Player) audio() []i16 {
+	mut all := []i16{}
+	mut chunk := []i16{len: 8192}
+	for {
+		count := p.m.drain_audio(mut chunk)
+		all << chunk[..count * 2]
+		if count < chunk.len / 2 {
+			break
+		}
+	}
+	return all
+}
+
 // Object is one object of a display list as the object processor reads it.
 pub struct Object {
 pub:
