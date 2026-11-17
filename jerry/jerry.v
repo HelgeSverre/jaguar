@@ -50,7 +50,9 @@ pub mut:
 	int_enable   u32
 	host_irq     bool // an enabled source fired: the machine forwards it to TOM
 	dsp_irqs     u32  // interrupt lines for the machine to forward to the DSP
-	timers_dirty bool // a timer or the serial clock was reprogrammed
+	timer1_dirty bool // only this timer was reprogrammed
+	timer2_dirty bool
+	serial_dirty bool
 	sclk         u32
 	smode        u32
 	left         i16 // transmit latches
@@ -78,7 +80,9 @@ pub fn (mut j Jerry) reset() {
 	j.int_enable = 0
 	j.host_irq = false
 	j.dsp_irqs = 0
-	j.timers_dirty = true
+	j.timer1_dirty = true
+	j.timer2_dirty = true
+	j.serial_dirty = true
 	j.sclk = 0
 	j.smode = 0
 	j.left = 0
@@ -124,8 +128,11 @@ pub fn (mut j Jerry) write16(offset u32, value u16) {
 			j.int_enable = value & 0x3f
 			j.int_pending &= ~(u32(value >> 8) & 0x3f)
 		}
-		reg_jpit1, reg_jpit2, reg_jpit3, reg_jpit4 {
-			j.timers_dirty = true
+		reg_jpit1, reg_jpit2 {
+			j.timer1_dirty = true
+		}
+		reg_jpit3, reg_jpit4 {
+			j.timer2_dirty = true
 		}
 		else {}
 	}
@@ -175,11 +182,11 @@ pub fn (mut j Jerry) write_i2s(offset u32, value u32) {
 		}
 		i2s_sclk {
 			j.sclk = value & 0xff
-			j.timers_dirty = true
+			j.serial_dirty = true
 		}
 		i2s_smode {
 			j.smode = value
-			j.timers_dirty = true
+			j.serial_dirty = true
 		}
 		else {}
 	}

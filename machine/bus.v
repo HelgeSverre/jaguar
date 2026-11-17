@@ -199,6 +199,9 @@ fn (mut m Machine) io_read16(a u32) u16 {
 			if offset == tom_hc {
 				m.tom.hc = m.horizontal_count()
 			}
+			if offset == 0x50 || offset == 0x52 {
+				return m.tom_timer_counter(offset == 0x52)
+			}
 			return m.tom.read16(offset)
 		}
 		return 0xffff

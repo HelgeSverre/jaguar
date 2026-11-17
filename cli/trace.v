@@ -73,7 +73,10 @@ fn (e Executed) text(processor Processor) string {
 //
 // This is a diagnostic: it runs the scheduler one master tick at a time, so
 // it is slow and its interleaving is finer than a normal run.
-fn trace(path string, options ImageOptions, t TraceOptions) ! {
+fn trace(path string, options ImageOptions, t TraceOptions) !string {
+	if t.tail < 1 || t.frames < 0 {
+		return error('trace: tail must be positive and frames must not be negative')
+	}
 	mut session := open_session(path, options)!
 	mut m := session.machine
 	mut ring := []Executed{len: t.tail}
@@ -100,7 +103,10 @@ fn trace(path string, options ImageOptions, t TraceOptions) ! {
 		for i in u32(0) .. 5 {
 			entry.words[i] = (u16(m.peek8(pc_before + i * 2)) << 8) | m.peek8(pc_before + i * 2 + 1)
 		}
-		m.advance(m.tick + 1, false)
+		if m.advance(m.tick + 1, false) == .cpu_halted {
+			reason = '68000 halted'
+			break
+		}
 		pc, count := program_counter(m, t.processor)
 		if count == last_count {
 			continue
@@ -157,4 +163,5 @@ fn trace(path string, options ImageOptions, t TraceOptions) ! {
 	}
 
 	print(debug.processors(m))
+	return reason
 }

@@ -57,11 +57,11 @@ fn test_interrupt_control_latches_and_clears() {
 fn test_timer_periods_and_reprogramming() {
 	mut j := new()
 	j.reset()
-	j.timers_dirty = false
+	j.timer1_dirty = false
 	assert j.timer_period(1) == 0, 'a timer with both registers zero is stopped'
 	j.write16(reg_jpit1, 9)
 	j.write16(reg_jpit2, 99)
-	assert j.timers_dirty, 'the machine must reschedule'
+	assert j.timer1_dirty, 'the machine must reschedule'
 	assert j.timer_period(1) == 1000
 	assert j.timer_period(2) == 0
 	j.timer_expired(1)

@@ -158,7 +158,38 @@ pub fn (mut m Machine) load_direct(plan loader.LoadPlan) {
 			}
 		}
 	}
+	m.install_upload_monitor(plan)
 	m.direct_boot()
+}
+
+// Uploaded demos such as Ladybug and DEMO1C intentionally finish with ILLEGAL:
+// the development monitor parks the 68000 while the object processor displays
+// the completed scene. Supply that missing host environment for direct uploads,
+// leaving the CPU's real exception handling intact. Without it the zero vector
+// sends the CPU into RAM and eventually corrupts the display through stray writes.
+// Virtual Jaguar documents the same upload convention in src/core/jaguar.c
+// (issues #800 and #818). Never replace an image's own vectors, code or BSS.
+fn (mut m Machine) install_upload_monitor(plan loader.LoadPlan) {
+	if plan.kind == .cartridge {
+		return
+	}
+	for segment in plan.segments {
+		if monitor_overlap(segment.addr, u64(segment.data.len)) {
+			return
+		}
+	}
+	for fill in plan.zero_fill {
+		if monitor_overlap(fill.addr, u64(fill.len)) {
+			return
+		}
+	}
+	m.write32(0x10, 0x1000) // vector 4: ILLEGAL
+	m.write16(0x1000, 0x60fe) // BRA.S self; devices keep running
+}
+
+fn monitor_overlap(addr u32, len u64) bool {
+	end := u64(addr) + len
+	return (addr < 0x14 && end > 0x10) || (addr < 0x1002 && end > 0x1000)
 }
 
 // map_cartridge copies image bytes into the cartridge window.

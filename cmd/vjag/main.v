@@ -154,6 +154,9 @@ fn (mut app App) run() {
 	mut window_guest := u64(0)
 	for app.running {
 		app.handle_events()
+		if !app.running {
+			break
+		}
 		if app.session.loaded() && !app.paused {
 			mut m := app.session.machine
 			cli.apply_presses(mut m, app.presses, app.guest_frame)
@@ -176,7 +179,11 @@ fn (mut app App) run() {
 		}
 		app.frames++
 		if app.exit_after > 0 && app.frames >= app.exit_after {
-			app.running = false
+			app.running = !app.flush_save()
+			if app.running {
+				app.exit_after = 0
+				app.paused = true
+			}
 			if app.capture != '' {
 				app.video.capture_next_frame(app.capture)
 			}
@@ -323,12 +330,22 @@ fn printable(text string) string {
 	return out.bytestr()
 }
 
+const save_failure_notice = 'Save failed. Progress kept in memory; retry when storage is available.'
+
 // flush_save persists the cartridge EEPROM of the running image, if any. A
 // replay keeps the player's save as it was.
-fn (mut app App) flush_save() {
+fn (mut app App) flush_save() bool {
 	if app.session.loaded() && !app.replay {
-		cli.flush_save(mut app.session) or { eprintln('vjag: save not written: ${err.msg()}') }
+		cli.flush_save(mut app.session) or {
+			eprintln('vjag: save not written: ${err.msg()}')
+			app.notice = save_failure_notice
+			return false
+		}
 	}
+	if app.notice == save_failure_notice {
+		app.notice = ''
+	}
+	return true
 }
 
 // handle_events applies every pending host event. A key tapped faster than
@@ -351,7 +368,7 @@ fn (mut app App) handle_events() {
 				return
 			}
 			.quit {
-				app.running = false
+				app.running = !app.flush_save()
 			}
 			.button {
 				// A replay is in step only with the pad it was recorded with.
@@ -390,7 +407,7 @@ fn (mut app App) handle_events() {
 fn (mut app App) command(command sdl.Command, pressed bool) {
 	match command {
 		.quit {
-			app.running = false
+			app.running = !app.flush_save()
 		}
 		.pause {
 			app.paused = !app.paused
@@ -445,7 +462,9 @@ fn (mut app App) load(path string) {
 		app.notice = '${os.file_name(path)}: ${err.msg()}'
 		return
 	}
-	app.flush_save()
+	if !app.flush_save() {
+		return
+	}
 	if !app.replay {
 		cli.load_save(mut session) or { eprintln('vjag: save not loaded: ${err.msg()}') }
 	}
@@ -460,6 +479,9 @@ fn (mut app App) load(path string) {
 }
 
 fn (app &App) overlay_lines() []string {
+	if app.notice != '' {
+		return [app.notice]
+	}
 	if !app.overlay || !app.session.loaded() {
 		return []
 	}

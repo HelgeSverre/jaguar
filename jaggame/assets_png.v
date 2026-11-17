@@ -147,6 +147,7 @@ pub fn (mut g Game) png_pal(name string, path string, cell_w int, cell_h int) Ar
 	before := g.palette.len
 	mut known := map[int]u16{}
 	mut missing := map[u16]string{}
+	mut overflow := false
 	mut pixels := []u8{cap: img.width * img.height}
 	cells_across := img.width / cell_w
 	cells_down := img.height / cell_h
@@ -170,6 +171,7 @@ pub fn (mut g Game) png_pal(name string, path string, cell_w int, cell_h int) Ar
 							continue
 						}
 						if g.palette.len >= 256 {
+							overflow = true
 							pixels << 0
 							continue
 						}
@@ -181,6 +183,9 @@ pub fn (mut g Game) png_pal(name string, path string, cell_w int, cell_h int) Ar
 				}
 			}
 		}
+	}
+	if overflow {
+		g.problem('art `${name}`: ${path}: the palette is full (256 entries including transparency); reduce the colours or use png_cry')
 	}
 	if missing.len > 0 {
 		mut shown := []string{}

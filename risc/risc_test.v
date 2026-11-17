@@ -146,6 +146,63 @@ fn test_register_banks_and_cross_bank_moves() {
 	assert c.regs[32 + 3] == 7
 }
 
+fn test_flags_store_leaves_the_next_instruction_in_the_old_bank() {
+	for variant in [Variant.gpu, .dsp] {
+		mut c := if variant == .gpu { new_gpu() } else { new_dsp() }
+		mut bus := &TestBus{}
+		mut program := movei(c.ctrl_base, 10)
+		program << movei(flag_regpage, 11)
+		program << ins(.store, 10, 11)
+		// Music Demo sets the interrupt stack here, before bank 1 takes over.
+		program << movei(c.ram_base + 12, 31)
+		program << ins(.moveq, 9, 1)
+		program << stop(c)
+		load_and_run(mut c, mut bus, program)
+		assert c.regs[31] == c.ram_base + 12
+		assert c.regs[63] == 0
+		assert c.regs[33] == 9
+	}
+}
+
+fn test_flags_bank_delay_survives_slices_and_defers_interrupt_entry() {
+	mut c := new_dsp()
+	mut bus := &TestBus{}
+	c.pc = c.ram_base + 0x100
+	c.running = true
+	c.regs[10] = c.ctrl_base
+	c.regs[11] = flag_regpage | (1 << 4)
+	mut program := [ins(.store, 10, 11)]
+	program << movei(c.ram_base + 0x800, 31)
+	program << ins(.nop, 0, 0)
+	for i, w in program {
+		c.write_ram8(u32(0x100 + i * 2), u8(w >> 8))
+		c.write_ram8(u32(0x101 + i * 2), u8(w))
+	}
+	c.run(mut bus, 1)
+	assert c.bank == 0 && c.bank_delay == 1
+	c.raise_irq(0)
+	c.run(mut bus, 1)
+	assert c.regs[31] == c.ram_base + 0x800
+	assert c.bank == 32 && c.bank_delay == 0
+	c.run(mut bus, 1)
+	assert c.flags_ctl & flag_imask != 0
+	assert c.regs[31] == c.ram_base + 0x7fc
+	assert c.ram32(c.regs[31]) == c.ram_base + 0x106
+}
+
+fn test_flags_in_branch_delay_slot_selects_new_bank_before_target() {
+	mut c := new_dsp()
+	mut bus := &TestBus{}
+	c.regs[10] = c.ctrl_base
+	c.regs[11] = flag_regpage
+	c.regs[12] = c.ram_base + 4
+	mut program := [ins(.jump, 12, 0), ins(.store, 10, 11), ins(.moveq, 7, 5)]
+	program << stop(c)
+	load_and_run(mut c, mut bus, program)
+	assert c.regs[5] == 0
+	assert c.regs[37] == 7
+}
+
 fn test_external_and_local_memory() {
 	mut c := new_gpu()
 	mut bus := &TestBus{}
@@ -327,4 +384,66 @@ fn test_external_longs_align_to_the_width_of_each_bus() {
 			assert bus.read32(0x4012) == 0x3344_5566
 		}
 	}
+}
+
+fn test_divide_unsigned_high_bit_and_hardware_remainder() {
+	mut c := new_gpu()
+	for dividend in [u32(0), 1, 0x7fff_ffff, 0x8000_0000, 0xffff_ffff] {
+		for divisor in [u32(1), 3, 0x7fff_ffff, 0x8000_0000, 0x8000_0001, 0xffff_ffff] {
+			for fixed in [u32(0), 1] {
+				c.div_ctrl = fixed
+				c.regs[1] = dividend
+				c.divide(1, divisor)
+				numerator := u64(dividend) << (16 * fixed)
+				if numerator / divisor <= 0xffff_ffff {
+					assert c.regs[1] == u32(numerator / divisor), 'dividend=${dividend:x} divisor=${divisor:x} fixed=${fixed}'
+					remainder := u32(numerator % divisor)
+					// The hardware leaves the non-restored remainder, not always %.
+					assert c.remain == remainder || c.remain == remainder - divisor
+				}
+			}
+		}
+	}
+	c.div_ctrl = 0
+	c.regs[1] = 123
+	c.divide(1, 0)
+	assert c.regs[1] == 0xffff_ffff
+	assert c.remain == 123
+}
+
+fn test_mmult_uses_secondary_bank_and_advances_local_matrix_pointer() {
+	for variant in [Variant.gpu, .dsp] {
+		for bank in [u32(0), 32] {
+			mut c := if variant == .gpu { new_gpu() } else { new_dsp() }
+			mut bus := &TestBus{}
+			c.bank = bank
+			c.regs[0] = 0x7777_7777
+			c.regs[1] = 0x7777_7777
+			c.regs[32] = (u32(2) << 16) | 1
+			c.regs[33] = 3
+			c.mtxc = 3
+			c.mtxa = c.ram_base + 0xffc
+			for i, value in [u32(10), 20, 30, 40, 50, 60] {
+				c.set_ram32(c.ram_base + ((0xffc + u32(i) * 4) & 0xfff), value)
+			}
+			assert c.matrix_multiply(mut bus, 0) == 140
+			assert c.mtxa == c.ram_base + 8
+			assert c.matrix_multiply(mut bus, 0) == 320
+			assert c.mtxa == c.ram_base + 20
+		}
+	}
+}
+
+fn test_mmult_column_stride_and_register_wrap() {
+	mut c := new_gpu()
+	mut bus := &TestBus{}
+	c.mtxc = 0x13
+	c.mtxa = c.ram_base + 0xff8
+	c.regs[63] = (u32(2) << 16) | 1
+	c.regs[32] = 3
+	for i, value in [u32(10), 20, 30] {
+		c.set_ram32(c.ram_base + ((0xff8 + u32(i) * 12) & 0xfff), value)
+	}
+	assert c.matrix_multiply(mut bus, 31) == 140
+	assert c.mtxa == c.ram_base + 28
 }

@@ -101,6 +101,7 @@ fn test_branch_objects_select_by_line() {
 fn test_stop_object_interrupt_and_looping_list_terminates() {
 	mut bus := hwtypes.new_ram_bus(0x10_0000)
 	mut t := ready(mut bus)
+	t.write16(reg_int1, 4, mut bus)
 	stop_object(mut bus, list, true)
 	t.compose(mut bus, 0)
 	assert t.int_pending & (1 << u32(Irq.object)) != 0
@@ -167,10 +168,11 @@ fn test_interrupt_latch_enable_and_acknowledge() {
 	mut bus := hwtypes.new_ram_bus(0x10_0000)
 	mut t := ready(mut bus)
 	t.raise(.object)
-	assert t.read16(reg_int1) == 0x0004, 'a disabled source still latches'
+	assert t.read16(reg_int1) == 0, 'disabled sources are gated before the pending latch'
 	assert !t.irq_asserted()
 	t.write16(reg_int1, 0x0005, mut bus)
 	assert !t.irq_asserted(), 'enabling a stale latch does not interrupt'
+	t.raise(.object)
 	t.raise(.video)
 	assert t.irq_asserted()
 	t.acknowledge()
@@ -178,6 +180,18 @@ fn test_interrupt_latch_enable_and_acknowledge() {
 	assert t.read16(reg_int1) == 0x0005, 'latches wait for the handler'
 	t.write16(reg_int1, 0x0501, mut bus)
 	assert t.read16(reg_int1) == 0
+}
+
+fn test_disabled_stop_object_does_not_trap_an_interrupt_poll_loop() {
+	mut bus := hwtypes.new_ram_bus(0x10_0000)
+	mut t := ready(mut bus)
+	stop_object(mut bus, list, true)
+	t.write16(reg_int1, 1, mut bus) // Music Demo enables video, but not OP interrupts
+	t.raise(.video)
+	t.compose(mut bus, 0)
+	t.write16(reg_int1, 0x0101, mut bus)
+	assert t.read16(reg_int1) == 0, 'the video handler must be able to finish polling INT1'
+	assert t.objects > 0
 }
 
 fn test_frame_completes_after_all_half_lines() {

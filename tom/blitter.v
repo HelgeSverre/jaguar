@@ -29,6 +29,7 @@ const b_srcd = u32(0x40)
 const b_dstd = u32(0x48)
 const b_dstz = u32(0x50)
 const b_srcz1 = u32(0x58)
+const b_srcz2 = u32(0x60)
 const b_patd = u32(0x68)
 const b_iinc = u32(0x70)
 const b_zinc = u32(0x74)
@@ -91,9 +92,18 @@ fn (mut b Blitter) reset() {
 	}
 }
 
-// read32 reads a blitter register; only the status register reads back.
+// read32 exposes status and the three readable address-generator values.
 pub fn (b &Blitter) read32(offset u32) u32 {
-	return if offset & 0xfc == b_cmd { status_idle } else { u32(0) }
+	// Intentionally use the silicon's WRONG pointer-read addresses, not
+	// A1_PIXEL/A2_PIXEL: JTRM rev.8 erratum 10 (p.135), confirmed by the
+	// A1posrd/A2posrd decoders in TOM BLITGPU.NET lines 130-135.
+	return match offset & 0xfc {
+		b_cmd { status_idle }
+		b_a1_flags { b.regs[b_a1_pixel >> 2] }
+		b_a2_mask { b.regs[b_a2_pixel >> 2] }
+		b_a1_fpixel { b.regs[b_a1_fpixel >> 2] }
+		else { u32(0) }
+	}
 }
 
 // write32 writes a whole register and runs the blit when it is the command.
@@ -105,15 +115,53 @@ pub fn (mut b Blitter) write32(offset u32, value u32, mut bus hwtypes.Bus) {
 	}
 	if reg >= b_i3 && reg < b_z3 {
 		b.intensity[(reg - b_i3) >> 2] = value & 0x00ff_ffff
+		b.store_aliases(true, false)
 		return
 	}
 	if reg >= b_z3 {
 		b.depth[(reg - b_z3) >> 2] = value
+		b.store_aliases(false, true)
 		return
 	}
 	b.regs[reg >> 2] = value
+	if reg >= b_srcd && reg < b_iinc {
+		b.load_aliases()
+	}
 	if reg == b_cmd {
 		b.execute(mut bus)
+	}
+}
+
+// JTRM rev.8 pp.76-77: I3..I0 and Z3..Z0 are alternate views of the
+// pattern/source registers, not independent storage. Music Demo supplies
+// GOURD's integer intensity through PATD; separate copies make its text black.
+fn (mut b Blitter) load_aliases() {
+	for lane in 0 .. 4 {
+		word := u32(lane >> 1)
+		shift := u32(lane & 1) * 16
+		b.intensity[lane] = (((b.regs[(b_patd >> 2) + word] >> shift) & 0xff) << 16) | ((b.regs[
+			(b_srcd >> 2) + word] >> shift) & 0xffff)
+		b.depth[lane] = (((b.regs[(b_srcz1 >> 2) + word] >> shift) & 0xffff) << 16) | ((b.regs[
+			(b_srcz2 >> 2) + word] >> shift) & 0xffff)
+	}
+}
+
+fn (mut b Blitter) store_aliases(intensity bool, depth bool) {
+	for lane in 0 .. 4 {
+		word := u32(lane >> 1)
+		shift := u32(lane & 1) * 16
+		if intensity {
+			pi := (b_patd >> 2) + word
+			si := (b_srcd >> 2) + word
+			b.regs[pi] = (b.regs[pi] & ~(u32(0xff) << shift)) | (((b.intensity[lane] >> 16) & 0xff) << shift)
+			b.regs[si] = (b.regs[si] & ~(u32(0xffff) << shift)) | ((b.intensity[lane] & 0xffff) << shift)
+		}
+		if depth {
+			zi := (b_srcz1 >> 2) + word
+			fi := (b_srcz2 >> 2) + word
+			b.regs[zi] = (b.regs[zi] & ~(u32(0xffff) << shift)) | ((b.depth[lane] >> 16) << shift)
+			b.regs[fi] = (b.regs[fi] & ~(u32(0xffff) << shift)) | ((b.depth[lane] & 0xffff) << shift)
+		}
 	}
 }
 
@@ -298,14 +346,14 @@ fn (mut w Window) end_line() {
 // generator's position. Phrase mode takes the pixel's own slot, most
 // significant first; pixel mode takes the low bits of the first long.
 @[inline]
-fn register_pixel(high u32, low u32, w &Window) u32 {
+fn register_pixel(low u32, high u32, w &Window) u32 {
 	bits := u32(1) << w.psize
 	if bits == 32 {
-		return if w.phrase_mode && (w.x >> 16) & 1 != 0 { low } else { high }
+		return if w.phrase_mode && (w.x >> 16) & 1 == 0 { high } else { low }
 	}
 	mask := (u32(1) << bits) - 1
 	if !w.phrase_mode {
-		return high & mask
+		return low & mask
 	}
 	per_phrase := u32(64) >> w.psize
 	slot := (w.x >> 16) & (per_phrase - 1)
@@ -378,9 +426,36 @@ fn (mut b Blitter) execute(mut bus hwtypes.Bus) {
 	patd_high := b.regs[b_patd >> 2]
 	patd_low := b.regs[(b_patd >> 2) + 1]
 	mut budget := max_blit_pixels
+	// Plain source copies need no comparator, shading, Z or logical data
+	// path. The optional bus operation accepts RAM only, so bypassing the
+	// destination read cannot suppress a device read side effect.
+	copy_bits := cmd_srcen | cmd_dsten | cmd_upda1 | cmd_upda1f | cmd_upda2 | cmd_dsta2 | (u32(0xc) << 21)
+	plain_copy := cmd & ~copy_bits == 0 && cmd & cmd_srcen != 0 && lfunc == 0xc && a1.psize == 4
+		&& a2.psize == 4 && a1.xadd == 0x10000 && a2.xadd == 0x10000 && a1.yadd == 0 && a2.yadd == 0
+		&& !a1.mask_enabled && !a2.mask_enabled
 
 	for _ in 0 .. outer {
-		for _ in 0 .. inner {
+		if plain_copy && inner > 0 && u64(inner) <= budget && (a1.x >> 16) + inner <= 0x10000
+			&& (a2.x >> 16) + inner <= 0x10000 {
+			if mut bus is hwtypes.BlitCopyBus {
+				dst := if dst_is_a2 { &a2 } else { &a1 }
+				src := if dst_is_a2 { &a1 } else { &a2 }
+				sphrase, sslot := src.phrase_and_slot()
+				dphrase, dslot := dst.phrase_and_slot()
+				if bus.blit_copy16(sphrase + sslot * 2, dphrase + dslot * 2, inner, src.pitch,
+					dst.pitch)
+				{
+					b.pixels += inner
+					budget -= inner
+					a1.x += inner * a1.xadd
+					a2.x += inner * a2.xadd
+					a1.end_line()
+					a2.end_line()
+					continue
+				}
+			}
+		}
+		for column in 0 .. inner {
 			if budget == 0 {
 				return
 			}
@@ -388,9 +463,8 @@ fn (mut b Blitter) execute(mut bus hwtypes.Bus) {
 			b.pixels++
 			mut dst := if dst_is_a2 { &a2 } else { &a1 }
 			mut src := if dst_is_a2 { &a1 } else { &a2 }
-			// In phrase mode each of the four pixels of a phrase has its own
-			// intensity and depth register; pixel mode uses the first.
-			lane := if dst.phrase_mode { (dst.x >> 16) & 3 } else { u32(0) }
+			// I3/Z3 hold the rightmost pixel; pixel mode uses I3/Z3.
+			lane := if dst.phrase_mode { 3 - ((dst.x >> 16) & 3) } else { u32(0) }
 
 			srcdata := if cmd & cmd_srcen != 0 {
 				src.read_pixel(mut bus)
@@ -464,19 +538,37 @@ fn (mut b Blitter) execute(mut bus hwtypes.Bus) {
 				}
 			}
 
-			if cmd & cmd_gourd != 0 {
-				b.intensity[lane] = saturate_intensity(b.intensity[lane] + iinc,
-					cmd & cmd_topben != 0)
-			}
-			if cmd & cmd_gourz != 0 {
-				b.depth[lane] += zinc
-			}
+			old_phrase := dst.x >> 18
 			a1.advance()
 			a2.advance()
+			// JTRM rev.8 pp.81-82: all four interpolators advance on each
+			// phrase write, including a partially masked first/last phrase.
+			// I-War starts strips inside a phrase and needs the other lanes
+			// advanced before the next phrase's colour and depth tests.
+			if !dst.phrase_mode || column + 1 == inner || dst.x >> 18 != old_phrase {
+				lanes := if dst.phrase_mode { 4 } else { 1 }
+				for k in 0 .. lanes {
+					if cmd & cmd_gourd != 0 {
+						b.intensity[k] = saturate_intensity(b.intensity[k] + iinc,
+							cmd & cmd_topben != 0)
+					}
+					if cmd & cmd_gourz != 0 {
+						z := i64(b.depth[k]) + i64(i32(zinc))
+						b.depth[k] = u32(if z < 0 {
+							i64(0)
+						} else if z > 0xffff_ffff {
+							i64(0xffff_ffff)
+						} else {
+							z
+						})
+					}
+				}
+			}
 		}
 		a1.end_line()
 		a2.end_line()
 	}
+	b.store_aliases(cmd & cmd_gourd != 0, cmd & cmd_gourz != 0)
 	// The generators' final positions read back through the pixel registers.
 	b.regs[b_a1_pixel >> 2] = (a1.y & 0xffff_0000) | (a1.x >> 16)
 	b.regs[b_a1_fpixel >> 2] = ((a1.y & 0xffff) << 16) | (a1.x & 0xffff)
@@ -512,8 +604,17 @@ fn logic_function(lfunc u32, src u32, dst u32) u32 {
 // of a CRY pixel are added separately and saturate unless disabled.
 fn add_pixels(src u32, dst u32, cmd u32) u32 {
 	mut luma := (src & 0xff) + (dst & 0xff)
-	if luma > 0xff && cmd & cmd_topben == 0 {
-		luma = 0xff
+	if cmd & cmd_topben == 0 {
+		// ADDDSEL adds a signed source offset (JTRM rev.8 p.74).
+		// Hover Strike uses FD (-3) to fade the destination luminance.
+		sum := int(dst & 0xff) + int(i8(src & 0xff))
+		luma = u32(if sum < 0 {
+			0
+		} else if sum > 255 {
+			255
+		} else {
+			sum
+		})
 	}
 	mut low := (src & 0x0f00) + (dst & 0x0f00)
 	if low > 0x0f00 && cmd & cmd_topnen == 0 {

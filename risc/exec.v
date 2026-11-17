@@ -97,6 +97,15 @@ pub fn (mut c Risc) run(mut bus hwtypes.Bus, budget u32) u32 {
 			c.pc = c.branch_target
 			c.branch_pending = false
 		}
+		if c.bank_delay > 0 {
+			c.bank_delay--
+			// A taken branch refills the pipeline before its target executes.
+			if c.bank_delay == 0 || in_delay_slot {
+				c.bank_delay = 0
+				c.select_bank()
+				c.irq_dirty = true
+			}
+		}
 		c.instructions++
 	}
 	return used
@@ -573,39 +582,48 @@ fn normalisation_integer(value u32) u32 {
 // Bit 0 of DIVCTRL selects 16.16 fixed-point operands.
 fn (mut c Risc) divide(rn u32, divisor u32) {
 	mut quotient := c.regs[rn]
-	mut remainder := u32(0)
+	// DIVIDE.NET uses a 33rd sign bit, separate from the 32-bit value.
+	// Using bit 31 as the sign fails for unsigned divisors above $80000000.
+	mut remainder := u64(0)
 	if c.div_ctrl & 1 != 0 {
 		remainder = quotient >> 16
 		quotient <<= 16
 	}
 	for _ in 0 .. 32 {
-		negative := remainder & 0x8000_0000 != 0
+		negative := remainder & 0x1_0000_0000 != 0
 		remainder = (remainder << 1) | (quotient >> 31)
 		if negative {
 			remainder += divisor
 		} else {
 			remainder -= divisor
 		}
-		quotient = (quotient << 1) | ((~remainder) >> 31)
+		remainder &= 0x1_ffff_ffff
+		quotient = (quotient << 1) | u32(((~remainder) >> 32) & 1)
 	}
 	c.regs[rn] = quotient
-	c.remain = remainder
+	// Intentionally retain the hardware's non-restored remainder and
+	// divide-by-zero result; do not replace this path with host / and %.
+	c.remain = u32(remainder)
 }
 
 // matrix_multiply implements MMULT: the dot product of a row of 16-bit values
-// held in the alternate register bank with a row or column of the matrix in
+// held in the secondary register bank with a row or column of the matrix in
 // local RAM.
 fn (mut c Risc) matrix_multiply(mut bus hwtypes.Bus, first_reg u32) u32 {
 	count := c.mtxc & 0x0f
 	stride := if c.mtxc & 0x10 != 0 { count << 2 } else { u32(4) }
-	alternate := c.bank ^ 32
-	mut addr := c.mtxa
+	// JTRM rev.8 p.42 specifies bank 1, even when bank 1 is active.
+	alternate := u32(32)
+	mut addr := c.ram_base | (c.mtxa & 0xffc)
 	mut sum := i64(0)
 	for i in 0 .. count {
 		reg := c.regs[alternate + ((first_reg + (i >> 1)) & 31)]
 		half := if i & 1 != 0 { reg >> 16 } else { reg }
 		sum += signed_product(half, c.load32(mut bus, addr))
-		addr += stride
+		// TOM and JERRY SYSTOLIC.NET: MACOUNT is the live ten-bit
+		// longword counter. It wraps in the bottom 4 KiB of local RAM.
+		addr = c.ram_base | ((addr + stride) & 0xffc)
 	}
+	c.mtxa = addr
 	return u32(sum)
 }

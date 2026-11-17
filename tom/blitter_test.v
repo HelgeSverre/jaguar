@@ -218,3 +218,97 @@ fn test_y_add_flag_needs_a_stationary_x() {
 		assert bus.read16(target_base + (y * 64 + 5) * 2) == 0x0101
 	}
 }
+
+fn test_gouraud_partial_phrase_advances_all_four_lanes() {
+	mut bus := hwtypes.new_ram_bus(0x10_0000)
+	mut b := Blitter{}
+	// Start at the last pixel of a phrase, then write one pixel of the next.
+	// Each phrase write advances ALL lanes, even when most lanes are masked.
+	b.set(mut bus, b_a1_base, target_base)
+	b.set(mut bus, b_a1_flags, flags_16bpp_w64)
+	b.set(mut bus, b_a1_pixel, 3)
+	b.set(mut bus, b_i3, 10 << 16)
+	b.set(mut bus, b_i3 + 4, 20 << 16)
+	b.set(mut bus, b_i3 + 8, 30 << 16)
+	b.set(mut bus, b_i3 + 12, 40 << 16)
+	b.set(mut bus, b_iinc, 10 << 16)
+	b.set(mut bus, b_count, (1 << 16) | 2)
+	b.set(mut bus, b_cmd, cmd_gourd)
+	assert bus.read16(target_base + 6) == 10
+	assert bus.read16(target_base + 8) == 50
+	assert b.intensity == [u32(30 << 16), 40 << 16, 50 << 16, 60 << 16]!
+}
+
+fn test_gouraud_depth_saturates_at_both_ends() {
+	for negative in [false, true] {
+		mut bus := hwtypes.new_ram_bus(0x10_0000)
+		mut b := Blitter{}
+		b.set(mut bus, b_a1_base, target_base)
+		b.set(mut bus, b_a1_flags, flags_16bpp_w64 | xadd_pix)
+		b.set(mut bus, b_z3, if negative { u32(1) } else { u32(0xffff_fffe) })
+		b.set(mut bus, b_zinc, if negative { u32(-2) } else { u32(2) })
+		b.set(mut bus, b_count, (1 << 16) | 1)
+		b.set(mut bus, b_cmd, cmd_gourz)
+		assert b.depth[0] == if negative {
+			u32(0)
+		} else {
+			u32(0xffff_ffff)
+		}
+	}
+}
+
+fn test_adddsel_signed_luminance_offset() {
+	// Hover Strike fades with a source byte of FD (-3), not +253.
+	assert add_pixels(0x00fd, 0x00ff, 0) == 0x00fc
+	assert add_pixels(0x00fd, 0x0002, 0) == 0
+	assert add_pixels(0x0003, 0x00fe, 0) == 0x00ff
+	assert add_pixels(0x00fd, 0x0002, cmd_topben) & 0xff == 0xff
+}
+
+fn test_pattern_and_intensity_are_aliases_in_both_directions() {
+	mut bus := hwtypes.new_ram_bus(0x10_0000)
+	mut b := Blitter{}
+	b.set(mut bus, b_a1_base, target_base)
+	b.set(mut bus, b_a1_flags, flags_16bpp_w64 | xadd_pix)
+	b.set(mut bus, b_patd, 0x293f_293f)
+	b.set(mut bus, b_count, (1 << 16) | 1)
+	b.set(mut bus, b_cmd, cmd_gourd)
+	assert bus.read16(target_base) == 0x293f, 'Music Demo supplies intensity through PATD'
+	b.set(mut bus, b_i3, 0x00aa_1234)
+	b.set(mut bus, b_count, (1 << 16) | 1)
+	b.set(mut bus, b_cmd, cmd_patdsel)
+	assert bus.read16(target_base + 2) == 0x29aa, 'I3 updates PATD while preserving chroma'
+	b.set(mut bus, b_count, (1 << 16) | 1)
+	b.set(mut bus, b_cmd, 0xc << 21)
+	assert bus.read16(target_base + 4) == 0x1234, 'I3 fractional bits alias SRCD'
+}
+
+fn test_phrase_registers_put_the_high_long_at_the_higher_address() {
+	mut bus := hwtypes.new_ram_bus(0x10_0000)
+	mut b := Blitter{}
+	b.set(mut bus, b_a1_base, target_base)
+	b.set(mut bus, b_a1_flags, flags_16bpp_w64)
+	b.set(mut bus, b_patd, 0x3333_4444)
+	b.set(mut bus, b_patd + 4, 0x1111_2222)
+	b.set(mut bus, b_count, (1 << 16) | 4)
+	b.set(mut bus, b_cmd, cmd_patdsel)
+	for i, pixel in [u16(0x1111), 0x2222, 0x3333, 0x4444] {
+		assert bus.read16(target_base + u32(i) * 2) == pixel
+	}
+}
+
+fn test_blitter_pointer_reads_use_silicon_errata_addresses() {
+	mut bus := hwtypes.new_ram_bus(0x10_0000)
+	mut b := Blitter{}
+	b.set(mut bus, b_a1_base, target_base)
+	b.set(mut bus, b_a1_flags, flags_16bpp_w64 | xadd_pix)
+	b.set(mut bus, b_a1_pixel, (2 << 16) | 3)
+	b.set(mut bus, b_a1_fpixel, 0x1234_5678)
+	b.set(mut bus, b_a2_flags, flags_16bpp_w64 | xadd_pix)
+	b.set(mut bus, b_a2_pixel, (4 << 16) | 5)
+	b.set(mut bus, b_count, (1 << 16) | 2)
+	b.set(mut bus, b_cmd, cmd_patdsel)
+	assert b.read32(b_a1_flags) == (2 << 16) | 5
+	assert b.read32(b_a2_mask) == (4 << 16) | 7
+	assert b.read32(b_a1_fpixel) == 0x1234_5678
+}

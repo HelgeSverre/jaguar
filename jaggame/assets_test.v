@@ -128,6 +128,22 @@ fn test_too_many_colours_name_the_files_that_made_them() {
 	assert text.contains('the pictures added them: ${path} ('), text
 }
 
+fn test_an_automatic_palette_overflow_is_rejected_without_a_text_layer() {
+	dir := workdir('palette_overflow')
+	defer { os.rmdir_all(dir) or {} }
+	mut pic := new_canvas(32, 32)
+	for i in 0 .. 1024 {
+		pic.fill(i % 32, i / 32, 1, 1, (i % 16) * 17, ((i / 16) % 8) * 36, (i / 128) * 36)
+	}
+	path := os.join_path(dir, 'opaque.png')
+	pic.save(path)!
+	mut g := new_game(Config{ sprites: 1, layers: 1 })
+	g.png_pal('overflow', path, 32, 32)
+	text := problems_of(mut g)
+	assert text.contains('palette is full'), text
+	assert text.contains(path), text
+}
+
 fn test_every_asset_mistake_names_the_file_and_the_problem() {
 	dir := workdir('mistakes')
 	mut pic := new_canvas(40, 20)

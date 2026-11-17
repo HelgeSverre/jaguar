@@ -154,14 +154,17 @@ pub fn (mut t Tom) reset() {
 	t.blitter.reset()
 }
 
-// raise latches an interrupt source of INT1. The latch is set whether or
-// not the source is enabled, so software can poll it; the 68000 is only
-// interrupted when the source is enabled at the moment it fires.
+// raise latches an enabled interrupt source of INT1. The enable gate is
+// intentionally BEFORE the pending latch: see Vip/Gip/Oip/Tip/Dip -> I[0-4]
+// in Atari's original netlists_org/tom/MISC.NET, lines 64-83:
+// https://github.com/Torlus/JagNetlists/blob/e13d5120cdf3f0e5b3d9e865b331a3a4f692cd38/netlists_org/tom/MISC.NET
+// ScatoLOGIC Music Demo polls INT1 until zero with OP interrupts disabled;
+// latching disabled STOP-object events traps its video handler forever.
 @[inline]
 pub fn (mut t Tom) raise(irq Irq) {
 	bit := u32(1) << u32(irq)
-	t.int_pending |= bit
 	if t.int_enable & bit != 0 {
+		t.int_pending |= bit
 		t.irq_request = true
 	}
 }

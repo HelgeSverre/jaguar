@@ -51,6 +51,7 @@ pub:
 pub mut:
 	regs           [64]u32 // bank 0 in 0..31, bank 1 in 32..63
 	bank           u32     // index of the active bank's r0: 0 or 32
+	bank_delay     u32     // instructions until a processor-issued FLAGS store retires
 	pc             u32
 	zf             u32 // each 0 or 1
 	cf             u32
@@ -105,6 +106,7 @@ pub fn (mut c Risc) reset() {
 		c.regs[i] = 0
 	}
 	c.bank = 0
+	c.bank_delay = 0
 	c.pc = c.ram_base
 	c.zf = 0
 	c.cf = 0
@@ -153,6 +155,7 @@ fn (c &Risc) interrupt_enable_mask() u32 {
 // set_flags implements a guest write to FLAGS: condition codes, interrupt
 // enables, latch clears, the register page and the interrupt mask.
 fn (mut c Risc) set_flags(value u32) {
+	c.bank_delay = 0 // host writes are outside the executing processor's pipeline
 	c.zf = value & 1
 	c.cf = (value >> 1) & 1
 	c.nf = (value >> 2) & 1
@@ -349,7 +352,16 @@ fn (mut c Risc) store32(mut bus hwtypes.Bus, addr u32, value u32) {
 	if c.owns_ram(addr) {
 		c.set_ram32(addr, value)
 	} else if c.owns_ctrl(addr) {
+		old_bank := c.bank
 		c.write_ctrl32(addr - c.ctrl_base, value)
+		if (addr - c.ctrl_base) & 0x3c == reg_flags {
+			// Intentionally model the silicon's FLAGS pipeline delay (Atari
+			// Technical Reference rev.8 pp.59/109). Music Demo's STORE FLAGS;
+			// MOVEI stack,r31 must write the OLD bank's interrupt stack.
+			// An immediate switch leaves r31 zero and its first IRQ runs away.
+			c.bank = old_bank
+			c.bank_delay = 2 // this STORE, then the instruction already in flight
+		}
 	} else {
 		bus.write32(addr & c.external_long_mask(), value)
 	}
@@ -377,7 +389,7 @@ fn (mut c Risc) fetch16(mut bus hwtypes.Bus) u32 {
 // It does nothing while a service routine is active (IMASK) or while a taken
 // jump still owes its delay slot.
 fn (mut c Risc) service_interrupts(mut bus hwtypes.Bus) {
-	if c.branch_pending {
+	if c.branch_pending || c.bank_delay > 0 {
 		return
 	}
 	c.irq_dirty = false

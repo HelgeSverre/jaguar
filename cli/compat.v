@@ -64,7 +64,9 @@ fn press_script(mut m machine.Machine, frame int) {
 // program can live: RAM above the vector table or the cartridge image.
 fn plausible_program_counter(m &machine.Machine) bool {
 	pc := m.cpu.pc & 0xff_ffff
-	in_ram := pc >= 0x400 && pc < machine.ram_size
+	// The populated 2 MiB bank repeats at $200000. Upload utilities can
+	// return through that alias; it is executable RAM, not a crashed CPU.
+	in_ram := pc < 2 * machine.ram_size && (pc & (machine.ram_size - 1)) >= 0x400
 	in_cartridge := pc >= machine.cart_base && pc < machine.cart_base + machine.cart_window
 		&& m.rom.len > 0
 	return pc & 1 == 0 && (in_ram || in_cartridge)

@@ -7,6 +7,26 @@ const no_event = u64(0xffff_ffff_ffff_ffff)
 // cpu_clock_divider: the 68000 runs at half the master clock.
 const cpu_clock_divider = u64(2)
 
+// TOM's PIT reads expose the live down-counters, despite JTRM rev.8
+// labelling the registers write-only. IODEC.NET Pit0r/Pit1r and MISC.NET
+// Dtp/Dt wire the counters onto the read bus. Hover Strike samples both
+// at $807846/$807856 to measure elapsed time; returning reload values
+// gives it a zero interval and leaves its terrain absent.
+// This follows the functional scheduler's slice clock, without changing
+// the timer's deadline or adding read side effects.
+fn (m &Machine) tom_timer_counter(divider bool) u16 {
+	prescaler := u64(m.tom.regs[0x50 >> 1])
+	if prescaler == 0 || m.next_pit == no_event {
+		return 0
+	}
+	remaining := if m.next_pit > m.tick { m.next_pit - m.tick - 1 } else { u64(0) }
+	return if divider {
+		u16(remaining / (prescaler + 1))
+	} else {
+		u16(remaining % (prescaler + 1))
+	}
+}
+
 // StopReason says why `advance` returned.
 pub enum StopReason {
 	deadline
@@ -137,10 +157,19 @@ fn (mut m Machine) sync() {
 		m.tom.pit_dirty = false
 		m.next_pit = schedule(m.tick, m.tom.pit_period())
 	}
-	if m.jerry.timers_dirty {
-		m.jerry.timers_dirty = false
+	// JPIT1/2, JPIT3/4 and SCLK/SMODE control separate counters. A write
+	// reloads only its own clock (Atari Technical Reference rev. 8,
+	// pp. 85-86, 91), otherwise frequent PIT writes can starve serial audio.
+	if m.jerry.timer1_dirty {
+		m.jerry.timer1_dirty = false
 		m.next_timer1 = schedule(m.tick, m.jerry.timer_period(1))
+	}
+	if m.jerry.timer2_dirty {
+		m.jerry.timer2_dirty = false
 		m.next_timer2 = schedule(m.tick, m.jerry.timer_period(2))
+	}
+	if m.jerry.serial_dirty {
+		m.jerry.serial_dirty = false
 		m.next_sample = schedule(m.tick, m.jerry.sample_period())
 	}
 	if m.dsp.host_irq {
