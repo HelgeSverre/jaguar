@@ -23,6 +23,7 @@ pub:
 	info    hwtypes.FrameInfo
 	message []string // centred lines for a window with no picture
 	overlay []string // status lines over the top-left of the picture
+	panel   []string // controls or keypad, fitted to the available picture area
 	readout string   // text on the shell's status strip
 	glow    f32      // 0..1, how brightly the shell's eyes burn
 }
@@ -214,6 +215,41 @@ fn (mut v Video) draw_content(scene Scene, area C.SDL_FRect) ! {
 		}
 		C.SDL_SetRenderScale(v.renderer, 1, 1)
 	}
+	v.draw_panel(scene.panel, area)
+}
+
+// draw_panel fits controls text to the game area, including the smaller shell.
+fn (mut v Video) draw_panel(lines []string, area C.SDL_FRect) {
+	if lines.len == 0 { return }
+	mut longest := 1
+	for line in lines {
+		if line.len > longest { longest = line.len }
+	}
+	mut scale := f32(2)
+	fit_x := (area.w - 16) / f32(longest * 8)
+	fit_y := (area.h - 16) / f32(lines.len * 12)
+	if fit_x < scale { scale = fit_x }
+	if fit_y < scale { scale = fit_y }
+	if scale < 0.25 { scale = 0.25 }
+	C.SDL_SetRenderDrawColor(v.renderer, 12, 18, 28, 245)
+	background := C.SDL_FRect{
+		x: area.x
+		y: area.y
+		w: area.w
+		h: f32(lines.len * 12) * scale + 16
+	}
+	C.SDL_RenderFillRect(v.renderer, &background)
+	C.SDL_SetRenderScale(v.renderer, scale, scale)
+	for i, line in lines {
+		if i == 0 || line.starts_with('>') {
+			C.SDL_SetRenderDrawColor(v.renderer, 130, 220, 255, 255)
+		} else {
+			C.SDL_SetRenderDrawColor(v.renderer, 235, 240, 245, 255)
+		}
+		C.SDL_RenderDebugText(v.renderer, (area.x + 8) / scale, (area.y + 8) / scale + f32(i * 12),
+			line.str)
+	}
+	C.SDL_SetRenderScale(v.renderer, 1, 1)
 }
 
 // upload copies a guest frame into the streaming texture, replacing the

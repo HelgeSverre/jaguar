@@ -83,7 +83,7 @@ fn test_face_buttons_read_c_b_a_from_left_to_right() {
 	assert decode_key(int(C.SDL_SCANCODE_Z), true)?.button == jerry.Button.c
 	assert decode_key(int(C.SDL_SCANCODE_X), true)?.button == jerry.Button.b
 	assert decode_key(int(C.SDL_SCANCODE_C), true)?.button == jerry.Button.a
-	assert decode_gamepad_button(u8(C.SDL_GAMEPAD_BUTTON_SOUTH))? == jerry.Button.b
+	assert default_profile().targets(control_bit('south')!) == u32(1) << u32(jerry.Button.b)
 }
 
 fn test_unbound_keys_and_command_releases_are_ignored() {

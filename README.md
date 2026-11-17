@@ -61,6 +61,21 @@ brew install vlang sdl3 just
 just run path/to/game.j64
 ```
 
+For an Xbox 360 wireless receiver or other legacy USB controllers on macOS,
+build SDL with direct USB support once:
+
+```sh
+brew install cmake pkgconf libusb
+just setup-sdl-usb
+just run path/to/game.j64
+```
+
+The setup installs a checksum-pinned SDL in `~/.local/lib/vjag/`, leaving the
+system SDL alone. Subsequent `just` builds, tests and installs use it without
+an environment-variable workaround. The libusb Homebrew dependency must remain
+installed. PS4/PS5 and other controllers recognised by system SDL do not need
+this optional setup.
+
 `just` on its own lists every recipe. The ones you will use:
 
 ```sh
@@ -93,11 +108,11 @@ Not your thing? `H` swaps it for an ordinary resizable window and back, and reme
 
 | Jaguar | Keyboard | Gamepad |
 | --- | --- | --- |
-| D-pad | Arrow keys | D-pad |
+| D-pad | Arrow keys | D-pad or left stick |
 | C, B, A | Z, X, C | West, South, East |
 | Pause | Enter | Start |
 | Option | Tab | Back or North |
-| Keypad 0-9 | 0-9 | |
+| Keypad 0-9 | 0-9 | Hold left trigger for keypad |
 | Keypad `*` and `#` | Q and W | Left and right shoulder |
 
 | Emulator | Key |
@@ -112,8 +127,22 @@ Not your thing? `H` swaps it for an ordinary resizable window and back, and reme
 | Shell smaller / larger | `,` / `.` |
 | Fast-forward (hold) | Space |
 | Quit | Esc |
+| Controller settings | K |
 
 These keys sit in the same place on every keyboard layout. The older ones still work where your keyboard has them: `-` and `=` for the keypad, F5, F11, F1, F12 and F2, `[` and `]`, and `` ` ``.
+
+Pair Bluetooth controllers in your operating system, then start vjag. USB and
+Bluetooth controllers recognised by SDL use the same controls, including PS4,
+PS5 and generic pads. PS3 support depends on the host's pairing and driver
+support; physical Sony-controller compatibility has not yet been verified here.
+
+Press **K** for controller settings, player assignment, live input diagnostics
+and remapping. Settings support global and per-game profiles. Hold **L2 / left
+trigger** to show the Jaguar keypad, select with the d-pad or right stick, and
+hold **Cross / South** to press the selected key. Release the trigger to close
+the keypad. This shortcut is rebindable for pads without triggers. See
+[controller setup and bindings](docs/controllers.md) for details and generic
+controller mapping files.
 
 ### Images it understands
 

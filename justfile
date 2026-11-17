@@ -15,19 +15,24 @@ default:
 [group('build')]
 build:
     @mkdir -p bin
-    v -o bin/vjag-debug cmd/vjag/
+    sh scripts/with-sdl.sh v -o bin/vjag-debug cmd/vjag/
     v -o bin/vjag_test-debug cmd/vjag_test/
 
 # Optimized build of the desktop app and the headless runner.
 [group('build')]
 release:
     @mkdir -p bin
-    v -prod -o bin/vjag cmd/vjag/
+    sh scripts/with-sdl.sh v -prod -o bin/vjag cmd/vjag/
     v -prod -o bin/vjag_test cmd/vjag_test/
 
 [group('build')]
 clean:
     rm -rf bin out
+
+# Optional SDL build for legacy USB gamepads (requires cmake, pkgconf, libusb).
+[group('build')]
+setup-sdl-usb:
+    sh scripts/setup-sdl-usb.sh
 
 # Run the optimized desktop app, e.g. `just run path/to/image.jag`.
 [group('run')]
@@ -71,12 +76,12 @@ headless *args: release
 # Unit tests; optionally limit to one module, e.g. `just test m68k`.
 [group('check')]
 test module=".":
-    v test {{ module }}
+    sh scripts/with-sdl.sh v test {{ module }}
 
 # Same tests under the optimized compiler; output must match `test`.
 [group('check')]
 test-prod module=".":
-    v -prod test {{ module }}
+    sh scripts/with-sdl.sh v -prod test {{ module }}
 
 [group('check')]
 fmt:

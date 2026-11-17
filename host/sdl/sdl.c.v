@@ -54,9 +54,23 @@ pub:
 
 pub struct C.SDL_GamepadButtonEvent {
 pub:
+	type   u32
 	which  u32
 	button u8
 	down   bool
+}
+
+pub struct C.SDL_GamepadAxisEvent {
+pub:
+	type  u32
+	which u32
+	axis  u8
+	value i16
+}
+
+pub struct C.SDL_WindowEvent {
+pub:
+	type u32
 }
 
 pub struct C.SDL_MouseMotionEvent {
@@ -75,6 +89,7 @@ pub:
 
 pub struct C.SDL_GamepadDeviceEvent {
 pub:
+	type  u32
 	which u32
 }
 
@@ -91,6 +106,8 @@ pub:
 	motion  C.SDL_MouseMotionEvent
 	button  C.SDL_MouseButtonEvent
 	gbutton C.SDL_GamepadButtonEvent
+	gaxis   C.SDL_GamepadAxisEvent
+	window  C.SDL_WindowEvent
 	gdevice C.SDL_GamepadDeviceEvent
 	drop    C.SDL_DropEvent
 }
@@ -151,8 +168,69 @@ fn C.SDL_SetAudioStreamFrequencyRatio(stream voidptr, ratio f32) bool
 
 fn C.SDL_OpenGamepad(id u32) voidptr
 fn C.SDL_CloseGamepad(gamepad voidptr)
+fn C.SDL_GetGamepads(count &int) &u32
+fn C.SDL_GetJoysticks(count &int) &u32
+fn C.SDL_IsGamepad(id u32) bool
+fn C.SDL_GetGamepadButton(gamepad voidptr, button int) bool
+fn C.SDL_GetGamepadAxis(gamepad voidptr, axis int) i16
+fn C.SDL_GetGamepadName(gamepad voidptr) &char
+fn C.SDL_GetJoystickNameForID(id u32) &char
+fn C.SDL_GetGamepadSerial(gamepad voidptr) &char
+fn C.SDL_GetGamepadVendor(gamepad voidptr) u16
+fn C.SDL_GetGamepadProduct(gamepad voidptr) u16
+fn C.SDL_GetGamepadMapping(gamepad voidptr) &char
+fn C.SDL_GetGamepadConnectionState(gamepad voidptr) int
+fn C.SDL_GetGamepadPowerInfo(gamepad voidptr, percent &int) int
+fn C.SDL_GetGamepadButtonLabel(gamepad voidptr, button int) int
+fn C.SDL_GamepadHasButton(gamepad voidptr, button int) bool
+fn C.SDL_GamepadHasAxis(gamepad voidptr, axis int) bool
+fn C.SDL_AddGamepadMappingsFromFile(path &char) int
+fn C.SDL_GetVersion() int
+fn C.SDL_free(memory voidptr)
+
+pub struct C.SDL_GUID {
+pub:
+	data [16]u8
+}
+
+fn C.SDL_GetJoystickGUIDForID(id u32) C.SDL_GUID
+fn C.SDL_GUIDToString(guid C.SDL_GUID, text &char, size int)
+fn C.SDL_GetPlatform() &char
+
+fn joystick_guid(id u32) string {
+	mut buffer := [33]u8{}
+	C.SDL_GUIDToString(C.SDL_GetJoystickGUIDForID(id), &char(&buffer[0]), 33)
+	return unsafe { cstring_to_vstring(&char(&buffer[0])) }
+}
+
+fn c_text(value &char) string {
+	if value == unsafe { nil } { return '' }
+	return unsafe { cstring_to_vstring(value) }
+}
 
 // last_error returns SDL's description of the most recent failure.
 fn last_error() string {
 	return unsafe { cstring_to_vstring(C.SDL_GetError()) }
 }
+
+// Virtual devices exercise SDL's mapping and event path in regression tests.
+pub struct C.SDL_VirtualJoystickDesc {
+pub:
+	version     u32
+	type        u16
+	vendor_id   u16
+	product_id  u16
+	naxes       u16
+	nbuttons    u16
+	button_mask u32
+	axis_mask   u32
+	name        &char
+}
+
+fn C.SDL_AttachVirtualJoystick(desc &C.SDL_VirtualJoystickDesc) u32
+fn C.SDL_DetachVirtualJoystick(id u32) bool
+fn C.SDL_OpenJoystick(id u32) voidptr
+fn C.SDL_CloseJoystick(joystick voidptr)
+fn C.SDL_SetJoystickVirtualButton(joystick voidptr, button int, down bool) bool
+fn C.SDL_SetJoystickVirtualAxis(joystick voidptr, axis int, value i16) bool
+fn C.SDL_UpdateJoysticks()

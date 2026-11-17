@@ -10,6 +10,7 @@ pub enum EventKind {
 	command // a frontend command key was pressed
 	drop_file
 	focus_lost
+	sync_pad // authoritative live state after a lifecycle change
 }
 
 // Command is a frontend action bound to a key.
@@ -31,26 +32,42 @@ pub enum Command {
 // Event is one decoded host event.
 pub struct Event {
 pub:
-	kind    EventKind
-	port    int
-	button  jerry.Button
-	pressed bool
-	command Command
-	path    string
+	kind      EventKind
+	port      int
+	button    jerry.Button
+	pressed   bool
+	immediate bool // lifecycle releases bypass the frontend's short-tap delay
+	command   Command
+	path      string
+	buttons   u32
 }
 
-// Input tracks attached gamepads; the first two map to ports 0 and 1. With
-// a shell attached, clicks on its controls become commands and key presses.
+// Input owns host state; only aggregate guest transitions leave this module.
 pub struct Input {
 mut:
-	gamepads [2]voidptr
-	ids      [2]u32
+	pads           [2]PadState
+	keys           map[int]jerry.Button
+	mouse          u32
+	combined       [2]u32
+	pending        []Event
+	focused        bool = true
+	config         ControllerConfig
+	game           string
+	menu           bool
+	menu_port      int
+	menu_row       int
+	game_scope     bool
+	capturing      bool
+	capture_mask   u64
+	capture_append bool
+	notice         string
 pub mut:
 	shell &Shell = unsafe { nil }
 }
 
-// poll returns the next pending event, or an event of kind `.none`.
+// poll returns the next aggregate input transition or frontend event.
 pub fn (mut input Input) poll() Event {
+	if input.pending.len > 0 { return input.pop() }
 	event := C.SDL_Event{}
 	for C.SDL_PollEvent(&event) {
 		kind := unsafe { event.type }
@@ -61,43 +78,65 @@ pub fn (mut input Input) poll() Event {
 				}
 			}
 			u32(C.SDL_EVENT_WINDOW_FOCUS_LOST) {
-				return Event{
+				input.focused = false
+				input.capturing = false
+				input.reset_live()
+				input.pending << Event{
 					kind: .focus_lost
+				}
+			}
+			u32(C.SDL_EVENT_WINDOW_FOCUS_GAINED) {
+				input.focused = true
+				for port in 0 .. 2 {
+					input.sample_and_rearm(port)
 				}
 			}
 			u32(C.SDL_EVENT_KEY_DOWN), u32(C.SDL_EVENT_KEY_UP) {
 				key := unsafe { event.key }
-				if key.repeat {
+				if key.repeat || !input.focused {
 					continue
 				}
-				if decoded := decode_key(key.scancode, key.down) {
-					return decoded
+				if key.scancode == int(C.SDL_SCANCODE_K) {
+					if key.down { input.toggle_controls() }
+				} else if input.menu {
+					if key.down { input.menu_key(key.scancode) }
+				} else if decoded := decode_key(key.scancode, key.down) {
+					input.keyboard(key.scancode, decoded)
 				}
 			}
 			u32(C.SDL_EVENT_GAMEPAD_ADDED) {
 				input.attach(unsafe { event.gdevice.which })
 			}
 			u32(C.SDL_EVENT_GAMEPAD_REMOVED) {
-				if input.detach(unsafe { event.gdevice.which }) {
-					// An unplugged pad releases everything it held.
-					return Event{
-						kind: .focus_lost
-					}
+				input.detach(unsafe { event.gdevice.which })
+			}
+			u32(C.SDL_EVENT_GAMEPAD_REMAPPED) {
+				port := input.port_of(unsafe { event.gdevice.which })
+				if port >= 0 {
+					input.sample_and_rearm(port)
+					input.reconcile(true)
+					input.sync_port(port)
+				}
+			}
+			u32(C.SDL_EVENT_GAMEPAD_AXIS_MOTION) {
+				axis := unsafe { event.gaxis }
+				port := input.port_of(axis.which)
+				if port >= 0 {
+					input.pads[port].axis(int(axis.axis), axis.value)
+					input.pad_changed(port)
 				}
 			}
 			u32(C.SDL_EVENT_GAMEPAD_BUTTON_DOWN), u32(C.SDL_EVENT_GAMEPAD_BUTTON_UP) {
 				pad := unsafe { event.gbutton }
 				port := input.port_of(pad.which)
-				if port < 0 {
-					continue
-				}
-				if button := decode_gamepad_button(pad.button) {
-					return Event{
-						kind:    .button
-						port:    port
-						button:  button
-						pressed: pad.down
+				if port >= 0 && int(pad.button) < control_names.len {
+					bit := u64(1) << pad.button
+					if pad.down {
+						input.pads[port].raw |= bit
+					} else {
+						input.pads[port].raw &= ~bit
 					}
+					input.pad_changed(port)
 				}
 			}
 			u32(C.SDL_EVENT_MOUSE_MOTION) {
@@ -107,17 +146,25 @@ pub fn (mut input Input) poll() Event {
 				}
 			}
 			u32(C.SDL_EVENT_WINDOW_MOUSE_LEAVE) {
-				if input.shell != unsafe { nil } {
-					input.shell.hover = Control{}
-				}
+				if input.shell != unsafe { nil } { input.shell.hover = Control{} }
 			}
 			u32(C.SDL_EVENT_MOUSE_BUTTON_DOWN), u32(C.SDL_EVENT_MOUSE_BUTTON_UP) {
 				click := unsafe { event.button }
-				if input.shell == unsafe { nil } || click.button != 1 {
+				if input.shell == unsafe { nil } || click.button != 1 || input.menu
+					|| !input.focused {
 					continue
 				}
 				if decoded := input.shell.click(click.x, click.y, click.down) {
-					return decoded
+					if decoded.kind == .button {
+						input.mouse = if decoded.pressed {
+							u32(1) << u32(decoded.button)
+						} else {
+							u32(0)
+						}
+						input.reconcile(false)
+					} else {
+						input.pending << decoded
+					}
 				}
 			}
 			u32(C.SDL_EVENT_DROP_FILE) {
@@ -128,48 +175,16 @@ pub fn (mut input Input) poll() Event {
 			}
 			else {}
 		}
+
+		if input.pending.len > 0 { return input.pop() }
 	}
 	return Event{}
 }
 
-// close releases every attached gamepad.
-pub fn (mut input Input) close() {
-	for port in 0 .. 2 {
-		if input.gamepads[port] != unsafe { nil } {
-			C.SDL_CloseGamepad(input.gamepads[port])
-			input.gamepads[port] = unsafe { nil }
-		}
-	}
-}
-
-fn (mut input Input) attach(id u32) {
-	for port in 0 .. 2 {
-		if input.gamepads[port] == unsafe { nil } {
-			input.gamepads[port] = C.SDL_OpenGamepad(id)
-			input.ids[port] = id
-			return
-		}
-	}
-}
-
-fn (mut input Input) detach(id u32) bool {
-	for port in 0 .. 2 {
-		if input.gamepads[port] != unsafe { nil } && input.ids[port] == id {
-			C.SDL_CloseGamepad(input.gamepads[port])
-			input.gamepads[port] = unsafe { nil }
-			return true
-		}
-	}
-	return false
-}
-
-fn (input &Input) port_of(id u32) int {
-	for port in 0 .. 2 {
-		if input.gamepads[port] != unsafe { nil } && input.ids[port] == id {
-			return port
-		}
-	}
-	return -1
+fn (mut input Input) pop() Event {
+	event := input.pending[0]
+	input.pending.delete(0)
+	return event
 }
 
 // click presses or releases the shell control under the pointer. A button
@@ -274,25 +289,5 @@ fn decode_command(scancode int, down bool) ?Event {
 		kind:    .command
 		command: command
 		pressed: down
-	}
-}
-
-// decode_gamepad_button maps the standard gamepad layout to the Jaguar pad:
-// the three face buttons read C, B, A from left to right.
-fn decode_gamepad_button(button u8) ?jerry.Button {
-	return match int(button) {
-		int(C.SDL_GAMEPAD_BUTTON_DPAD_UP) { jerry.Button.up }
-		int(C.SDL_GAMEPAD_BUTTON_DPAD_DOWN) { jerry.Button.down }
-		int(C.SDL_GAMEPAD_BUTTON_DPAD_LEFT) { jerry.Button.left }
-		int(C.SDL_GAMEPAD_BUTTON_DPAD_RIGHT) { jerry.Button.right }
-		int(C.SDL_GAMEPAD_BUTTON_WEST) { jerry.Button.c }
-		int(C.SDL_GAMEPAD_BUTTON_SOUTH) { jerry.Button.b }
-		int(C.SDL_GAMEPAD_BUTTON_EAST) { jerry.Button.a }
-		int(C.SDL_GAMEPAD_BUTTON_NORTH) { jerry.Button.option }
-		int(C.SDL_GAMEPAD_BUTTON_START) { jerry.Button.pause }
-		int(C.SDL_GAMEPAD_BUTTON_BACK) { jerry.Button.option }
-		int(C.SDL_GAMEPAD_BUTTON_LEFT_SHOULDER) { jerry.Button.star }
-		int(C.SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER) { jerry.Button.hash }
-		else { return none }
 	}
 }

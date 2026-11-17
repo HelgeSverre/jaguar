@@ -22,7 +22,7 @@ keys: arrows = d-pad   Z X C = C B A   Enter = Pause   Tab = Option
       0-9 = keypad   Q or - = *   W or = is #
       P pause   R or F5 reset   F or F11 fullscreen   M mute   Esc quit
       I or F1 status overlay   S or F12 screenshot   Space or ` fast-forward (hold)
-      H or F2 console shell on/off   , . or [ ] shell size'
+      H or F2 console shell on/off   , . or [ ] shell size   K controls'
 
 fn main() {
 	args := os.args[1..]
@@ -137,6 +137,8 @@ fn play(args []string) ! {
 		replay:     replay
 	}
 	app.open_window()!
+	app.input.configure(os.join_path(os.dir(settings_path()), 'controllers.toml'),
+		app.session.plan.normalized_hash)
 	app.run()
 	app.flush_save()
 	app.input.close()
@@ -157,7 +159,7 @@ fn (mut app App) run() {
 		if !app.running {
 			break
 		}
-		if app.session.loaded() && !app.paused {
+		if app.session.loaded() && !app.paused && !app.input.controls_open() {
 			mut m := app.session.machine
 			cli.apply_presses(mut m, app.presses, app.guest_frame)
 			app.guest_frame++
@@ -279,6 +281,7 @@ fn (app &App) scene() sdl.Scene {
 		}
 		return sdl.Scene{
 			message: message
+			panel:   app.input.control_lines()
 			readout: app.readout()
 			glow:    app.glow
 		}
@@ -286,6 +289,7 @@ fn (app &App) scene() sdl.Scene {
 	pixels, info := app.session.machine.frame()
 	return sdl.Scene{
 		pixels:  pixels
+		panel:   app.input.control_lines()
 		info:    info
 		overlay: app.overlay_lines()
 		readout: app.readout()
@@ -352,9 +356,10 @@ fn (mut app App) flush_save() bool {
 // one frame delivers its press and release together; the release then waits
 // for the next frame so the guest still sees the button down once.
 fn (mut app App) handle_events() {
+	controls_before := app.input.controls_open()
 	for port in 0 .. 2 {
 		for button in 0 .. 32 {
-			if app.deferred[port] & (u32(1) << button) != 0 {
+			if app.session.loaded() && app.deferred[port] & (u32(1) << button) != 0 {
 				app.session.machine.set_button(port, unsafe { jerry.Button(button) }, false)
 			}
 		}
@@ -365,6 +370,10 @@ fn (mut app App) handle_events() {
 		event := app.input.poll()
 		match event.kind {
 			.none {
+				if controls_before != app.input.controls_open() {
+					app.fast = false
+					app.audio.clear()
+				}
 				return
 			}
 			.quit {
@@ -379,13 +388,29 @@ fn (mut app App) handle_events() {
 				if event.pressed {
 					app.fresh[event.port] |= bit
 					app.deferred[event.port] &= ~bit
+				} else if event.immediate {
+					app.fresh[event.port] &= ~bit
+					app.deferred[event.port] &= ~bit
 				} else if app.fresh[event.port] & bit != 0 {
 					app.deferred[event.port] |= bit
 					continue
 				}
 				app.session.machine.set_button(event.port, event.button, event.pressed)
 			}
+			.sync_pad {
+				if !app.session.loaded() || app.replay {
+					continue
+				}
+				app.fresh[event.port] = 0
+				app.deferred[event.port] = 0
+				app.session.machine.jerry.pads.buttons[event.port] = event.buttons
+				mut m := app.session.machine
+				cli.hold_presses(mut m, app.presses, app.guest_frame - 1)
+			}
 			.focus_lost {
+				app.fresh = [2]u32{}
+				app.deferred = [2]u32{}
+				app.fast = false
 				// Keys let go of while the window was away are released; the
 				// script's buttons stay held.
 				if app.session.loaded() {
@@ -469,6 +494,7 @@ fn (mut app App) load(path string) {
 		cli.load_save(mut session) or { eprintln('vjag: save not loaded: ${err.msg()}') }
 	}
 	app.session = session
+	app.input.set_game(session.plan.normalized_hash)
 	app.guest_frame = 0
 	app.notice = ''
 	app.paused = false
